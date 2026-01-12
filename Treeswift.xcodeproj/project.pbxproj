@@ -1,0 +1,573 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CE7341FF2E9986CF00832192 /* Configuration in Frameworks */ = {isa = PBXBuildFile; productRef = CE7341FE2E9986CF00832192 /* Configuration */; };
+		CE7342012E9986CF00832192 /* Extensions in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342002E9986CF00832192 /* Extensions */; };
+		CE7342032E9986CF00832192 /* Indexer in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342022E9986CF00832192 /* Indexer */; };
+		CE7342052E9986CF00832192 /* Logger in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342042E9986CF00832192 /* Logger */; };
+		CE7342072E9986CF00832192 /* PeripheryKit in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342062E9986CF00832192 /* PeripheryKit */; };
+		CE7342092E9986CF00832192 /* ProjectDrivers in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342082E9986CF00832192 /* ProjectDrivers */; };
+		CE73420B2E9986CF00832192 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = CE73420A2E9986CF00832192 /* Shared */; };
+		CE73420D2E9986CF00832192 /* SourceGraph in Frameworks */ = {isa = PBXBuildFile; productRef = CE73420C2E9986CF00832192 /* SourceGraph */; };
+		CE73420F2E9986CF00832192 /* SyntaxAnalysis in Frameworks */ = {isa = PBXBuildFile; productRef = CE73420E2E9986CF00832192 /* SyntaxAnalysis */; };
+		CE7342112E9986CF00832192 /* XcodeSupport in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342102E9986CF00832192 /* XcodeSupport */; };
+		CE73423C2E99895400832192 /* Configuration in Frameworks */ = {isa = PBXBuildFile; productRef = CE73423B2E99895400832192 /* Configuration */; };
+		CE73423E2E99895400832192 /* Extensions in Frameworks */ = {isa = PBXBuildFile; productRef = CE73423D2E99895400832192 /* Extensions */; };
+		CE7342402E99895400832192 /* FrontendLib in Frameworks */ = {isa = PBXBuildFile; productRef = CE73423F2E99895400832192 /* FrontendLib */; };
+		CE7342422E99895400832192 /* Indexer in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342412E99895400832192 /* Indexer */; };
+		CE7342442E99895400832192 /* Logger in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342432E99895400832192 /* Logger */; };
+		CE7342462E99895400832192 /* PeripheryKit in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342452E99895400832192 /* PeripheryKit */; };
+		CE7342482E99895400832192 /* ProjectDrivers in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342472E99895400832192 /* ProjectDrivers */; };
+		CE73424A2E99895400832192 /* Shared in Frameworks */ = {isa = PBXBuildFile; productRef = CE7342492E99895400832192 /* Shared */; };
+		CE73424C2E99895400832192 /* SourceGraph in Frameworks */ = {isa = PBXBuildFile; productRef = CE73424B2E99895400832192 /* SourceGraph */; };
+		CE73424E2E99895400832192 /* SyntaxAnalysis in Frameworks */ = {isa = PBXBuildFile; productRef = CE73424D2E99895400832192 /* SyntaxAnalysis */; };
+		CE7342502E99895400832192 /* XcodeSupport in Frameworks */ = {isa = PBXBuildFile; productRef = CE73424F2E99895400832192 /* XcodeSupport */; };
+		CE9DB8702E94455600C4E146 /* XcodeProj in Frameworks */ = {isa = PBXBuildFile; productRef = CE9DB86F2E94455600C4E146 /* XcodeProj */; };
+		CEBCFD152EE157CC00078FB3 /* AdaptiveGrid in Frameworks */ = {isa = PBXBuildFile; productRef = CEBCFD142EE157CC00078FB3 /* AdaptiveGrid */; };
+		CEFLOW0032E9A000000000003 /* Flow in Frameworks */ = {isa = PBXBuildFile; productRef = CEFLOW0022E9A000000000002 /* Flow */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		CE592FC92E8DA29200A1C9C9 /* Treeswift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Treeswift.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		CE592FCB2E8DA29200A1C9C9 /* Treeswift */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Treeswift;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CE592FC62E8DA29200A1C9C9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CEBCFD152EE157CC00078FB3 /* AdaptiveGrid in Frameworks */,
+				CE7342072E9986CF00832192 /* PeripheryKit in Frameworks */,
+				CE73424A2E99895400832192 /* Shared in Frameworks */,
+				CE7342502E99895400832192 /* XcodeSupport in Frameworks */,
+				CE73424C2E99895400832192 /* SourceGraph in Frameworks */,
+				CE73423E2E99895400832192 /* Extensions in Frameworks */,
+				CE7342052E9986CF00832192 /* Logger in Frameworks */,
+				CE7342112E9986CF00832192 /* XcodeSupport in Frameworks */,
+				CE7342012E9986CF00832192 /* Extensions in Frameworks */,
+				CE7342092E9986CF00832192 /* ProjectDrivers in Frameworks */,
+				CE7342442E99895400832192 /* Logger in Frameworks */,
+				CE7342462E99895400832192 /* PeripheryKit in Frameworks */,
+				CE73423C2E99895400832192 /* Configuration in Frameworks */,
+				CE73420D2E9986CF00832192 /* SourceGraph in Frameworks */,
+				CE7342482E99895400832192 /* ProjectDrivers in Frameworks */,
+				CE7342402E99895400832192 /* FrontendLib in Frameworks */,
+				CE7342422E99895400832192 /* Indexer in Frameworks */,
+				CE9DB8702E94455600C4E146 /* XcodeProj in Frameworks */,
+				CE73420B2E9986CF00832192 /* Shared in Frameworks */,
+				CE7342032E9986CF00832192 /* Indexer in Frameworks */,
+				CE7341FF2E9986CF00832192 /* Configuration in Frameworks */,
+				CE73424E2E99895400832192 /* SyntaxAnalysis in Frameworks */,
+				CE73420F2E9986CF00832192 /* SyntaxAnalysis in Frameworks */,
+				CEFLOW0032E9A000000000003 /* Flow in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CE592FC02E8DA29200A1C9C9 = {
+			isa = PBXGroup;
+			children = (
+				CE592FCB2E8DA29200A1C9C9 /* Treeswift */,
+				CE733CB82E9983E400832192 /* Frameworks */,
+				CE592FCA2E8DA29200A1C9C9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CE592FCA2E8DA29200A1C9C9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CE592FC92E8DA29200A1C9C9 /* Treeswift.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CE733CB82E9983E400832192 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CE592FC82E8DA29200A1C9C9 /* Treeswift */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CE592FD42E8DA29300A1C9C9 /* Build configuration list for PBXNativeTarget "Treeswift" */;
+			buildPhases = (
+				CE592FC52E8DA29200A1C9C9 /* Sources */,
+				CE592FC62E8DA29200A1C9C9 /* Frameworks */,
+				CE592FC72E8DA29200A1C9C9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CE592FCB2E8DA29200A1C9C9 /* Treeswift */,
+			);
+			name = Treeswift;
+			packageProductDependencies = (
+				CE9DB86F2E94455600C4E146 /* XcodeProj */,
+				CE7341FE2E9986CF00832192 /* Configuration */,
+				CE7342002E9986CF00832192 /* Extensions */,
+				CE7342022E9986CF00832192 /* Indexer */,
+				CE7342042E9986CF00832192 /* Logger */,
+				CE7342062E9986CF00832192 /* PeripheryKit */,
+				CE7342082E9986CF00832192 /* ProjectDrivers */,
+				CE73420A2E9986CF00832192 /* Shared */,
+				CE73420C2E9986CF00832192 /* SourceGraph */,
+				CE73420E2E9986CF00832192 /* SyntaxAnalysis */,
+				CE7342102E9986CF00832192 /* XcodeSupport */,
+				CE73423B2E99895400832192 /* Configuration */,
+				CE73423D2E99895400832192 /* Extensions */,
+				CE73423F2E99895400832192 /* FrontendLib */,
+				CE7342412E99895400832192 /* Indexer */,
+				CE7342432E99895400832192 /* Logger */,
+				CE7342452E99895400832192 /* PeripheryKit */,
+				CE7342472E99895400832192 /* ProjectDrivers */,
+				CE7342492E99895400832192 /* Shared */,
+				CE73424B2E99895400832192 /* SourceGraph */,
+				CE73424D2E99895400832192 /* SyntaxAnalysis */,
+				CE73424F2E99895400832192 /* XcodeSupport */,
+				CEFLOW0022E9A000000000002 /* Flow */,
+				CEBCFD142EE157CC00078FB3 /* AdaptiveGrid */,
+			);
+			productName = Treeswift;
+			productReference = CE592FC92E8DA29200A1C9C9 /* Treeswift.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CE592FC12E8DA29200A1C9C9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2610;
+				TargetAttributes = {
+					CE592FC82E8DA29200A1C9C9 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+				};
+			};
+			buildConfigurationList = CE592FC42E8DA29200A1C9C9 /* Build configuration list for PBXProject "Treeswift" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CE592FC02E8DA29200A1C9C9;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CE9DB86E2E94455600C4E146 /* XCRemoteSwiftPackageReference "xcodeproj" */,
+				CE73423A2E99895400832192 /* XCLocalSwiftPackageReference "PeripherySource/periphery" */,
+				CEFLOW0012E9A000000000001 /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */,
+				CEBCFD132EE157CC00078FB3 /* XCRemoteSwiftPackageReference "AdaptiveGrid" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CE592FCA2E8DA29200A1C9C9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CE592FC82E8DA29200A1C9C9 /* Treeswift */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CE592FC72E8DA29200A1C9C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CE592FC52E8DA29200A1C9C9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CE592FD22E8DA29300A1C9C9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 3SP7MRA6P9;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		CE592FD32E8DA29300A1C9C9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3SP7MRA6P9;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		CE592FD52E8DA29300A1C9C9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 11;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 3SP7MRA6P9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Treeswift;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.robotshed.Treeswift;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CE592FD62E8DA29300A1C9C9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 11;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 3SP7MRA6P9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Treeswift;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.robotshed.Treeswift;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CE592FC42E8DA29200A1C9C9 /* Build configuration list for PBXProject "Treeswift" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CE592FD22E8DA29300A1C9C9 /* Debug */,
+				CE592FD32E8DA29300A1C9C9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CE592FD42E8DA29300A1C9C9 /* Build configuration list for PBXNativeTarget "Treeswift" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CE592FD52E8DA29300A1C9C9 /* Debug */,
+				CE592FD62E8DA29300A1C9C9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CE73423A2E99895400832192 /* XCLocalSwiftPackageReference "PeripherySource/periphery" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PeripherySource/periphery;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CE9DB86E2E94455600C4E146 /* XCRemoteSwiftPackageReference "xcodeproj" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tuist/xcodeproj";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.6.0;
+			};
+		};
+		CEBCFD132EE157CC00078FB3 /* XCRemoteSwiftPackageReference "AdaptiveGrid" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/danwood/AdaptiveGrid.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		CEFLOW0012E9A000000000001 /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tevelee/SwiftUI-Flow";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.1.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CE7341FE2E9986CF00832192 /* Configuration */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Configuration;
+		};
+		CE7342002E9986CF00832192 /* Extensions */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Extensions;
+		};
+		CE7342022E9986CF00832192 /* Indexer */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Indexer;
+		};
+		CE7342042E9986CF00832192 /* Logger */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Logger;
+		};
+		CE7342062E9986CF00832192 /* PeripheryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeripheryKit;
+		};
+		CE7342082E9986CF00832192 /* ProjectDrivers */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProjectDrivers;
+		};
+		CE73420A2E9986CF00832192 /* Shared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shared;
+		};
+		CE73420C2E9986CF00832192 /* SourceGraph */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SourceGraph;
+		};
+		CE73420E2E9986CF00832192 /* SyntaxAnalysis */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SyntaxAnalysis;
+		};
+		CE7342102E9986CF00832192 /* XcodeSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XcodeSupport;
+		};
+		CE73423B2E99895400832192 /* Configuration */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Configuration;
+		};
+		CE73423D2E99895400832192 /* Extensions */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Extensions;
+		};
+		CE73423F2E99895400832192 /* FrontendLib */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FrontendLib;
+		};
+		CE7342412E99895400832192 /* Indexer */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Indexer;
+		};
+		CE7342432E99895400832192 /* Logger */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Logger;
+		};
+		CE7342452E99895400832192 /* PeripheryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PeripheryKit;
+		};
+		CE7342472E99895400832192 /* ProjectDrivers */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProjectDrivers;
+		};
+		CE7342492E99895400832192 /* Shared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Shared;
+		};
+		CE73424B2E99895400832192 /* SourceGraph */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SourceGraph;
+		};
+		CE73424D2E99895400832192 /* SyntaxAnalysis */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SyntaxAnalysis;
+		};
+		CE73424F2E99895400832192 /* XcodeSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XcodeSupport;
+		};
+		CE9DB86F2E94455600C4E146 /* XcodeProj */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CE9DB86E2E94455600C4E146 /* XCRemoteSwiftPackageReference "xcodeproj" */;
+			productName = XcodeProj;
+		};
+		CEBCFD142EE157CC00078FB3 /* AdaptiveGrid */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CEBCFD132EE157CC00078FB3 /* XCRemoteSwiftPackageReference "AdaptiveGrid" */;
+			productName = AdaptiveGrid;
+		};
+		CEFLOW0022E9A000000000002 /* Flow */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CEFLOW0012E9A000000000001 /* XCRemoteSwiftPackageReference "SwiftUI-Flow" */;
+			productName = Flow;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = CE592FC12E8DA29200A1C9C9 /* Project object */;
+}
