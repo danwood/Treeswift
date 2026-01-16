@@ -8,28 +8,26 @@
 import Foundation
 
 enum LaunchMode: Sendable {
-	case gui
+	case gui(scanConfiguration: String? = nil)
 	case list
-	case scan(configurationName: String)
 }
 
-@MainActor
 final class LaunchArgumentsHandler {
 	/**
 	 Parses command-line arguments to determine launch mode
 
 	 Recognizes:
 	 - No arguments or non-flag arguments: GUI mode
-	 - --list: List all configurations and exit
-	 - --scan <name>: Run scan for named configuration and exit
+	 - --list: List all configurations and exit (CLI mode)
+	 - --scan <name>: Launch GUI and start scan for named configuration
 
 	 Exits with code 1 for invalid arguments
 	 */
-	static func parseLaunchMode() -> LaunchMode {
+	nonisolated static func parseLaunchMode() -> LaunchMode {
 		let arguments = ProcessInfo.processInfo.arguments
 
 		// Skip first argument (executable path)
-		guard arguments.count > 1 else { return .gui }
+		guard arguments.count > 1 else { return .gui(scanConfiguration: nil) }
 
 		let firstArg = arguments[1]
 
@@ -43,7 +41,7 @@ final class LaunchArgumentsHandler {
 				fputs("Usage: Treeswift --scan <configuration_name>\n", stderr)
 				exit(1)
 			}
-			return .scan(configurationName: arguments[2])
+			return .gui(scanConfiguration: arguments[2])
 		}
 
 		// Unknown argument - print usage and exit
@@ -52,10 +50,10 @@ final class LaunchArgumentsHandler {
 			fputs("Usage:\n", stderr)
 			fputs("  Treeswift              # Launch GUI\n", stderr)
 			fputs("  Treeswift --list       # List all configurations\n", stderr)
-			fputs("  Treeswift --scan <name> # Run scan for configuration\n", stderr)
+			fputs("  Treeswift --scan <name> # Launch GUI and run scan for configuration\n", stderr)
 			exit(1)
 		}
 
-		return .gui
+		return .gui(scanConfiguration: nil)
 	}
 }

@@ -16,11 +16,35 @@ final class CLIScanRunner {
 	/**
 	 Lists all saved configurations to stdout
 
-	 Prints one configuration name per line
+	 Prints one configuration name per line. Only shows configurations with valid project paths,
+	 using the same display names as the GUI (derived from project path).
 	 */
 	func listConfigurations() {
 		for config in configManager.configurations {
-			print(config.name)
+			// Skip configurations without a project path (incomplete/new configurations)
+			guard let projectPath = config.project else { continue }
+
+			// Use the same display name logic as the GUI
+			let displayName = projectNameForConfig(config, projectPath: projectPath)
+			print(displayName)
+		}
+	}
+
+	/**
+	 Derives the display name for a configuration from its project path.
+
+	 Matches the logic in SidebarView.projectNameForConfig().
+	 */
+	private func projectNameForConfig(_ config: PeripheryConfiguration, projectPath: String) -> String {
+		let url = URL(fileURLWithPath: projectPath)
+
+		switch config.projectType {
+		case .xcode:
+			// For Xcode projects, show project name without extension
+			return url.deletingPathExtension().lastPathComponent
+		case .swiftPackage:
+			// For SPM projects, show folder name (not "Package.swift")
+			return url.deletingLastPathComponent().lastPathComponent
 		}
 	}
 
@@ -59,7 +83,17 @@ final class CLIScanRunner {
 	// MARK: - Private Helpers
 
 	private func findConfiguration(named name: String) -> PeripheryConfiguration? {
-		configManager.configurations.first(where: { $0.name == name })
+		// Try to find by display name (matching what --list shows)
+		for config in configManager.configurations {
+			guard let projectPath = config.project else { continue }
+			let displayName = projectNameForConfig(config, projectPath: projectPath)
+			if displayName == name {
+				return config
+			}
+		}
+
+		// Fallback: try to find by internal configuration name
+		return configManager.configurations.first(where: { $0.name == name })
 	}
 
 	private func waitForScanCompletion(scanState: ScanState) async throws {

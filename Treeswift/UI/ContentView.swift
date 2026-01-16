@@ -145,8 +145,15 @@ struct ContentView: View {
 		}
 		.environment(\.treeLayoutSettings, layoutSettings)
 		.onAppear {
+			// Handle initial configuration selection
 			if selectedConfigID.wrappedValue == nil, let firstConfig = configManager.configurations.first {
 				selectedConfigID.wrappedValue = firstConfig.id
+			}
+
+			// Check for --scan launch argument
+			let launchMode = LaunchArgumentsHandler.parseLaunchMode()
+			if case .gui(scanConfiguration: let configName?) = launchMode {
+				handleScanArgument(configName: configName)
 			}
 		}
 		.onChange(of: filesTabSelectedID) { _, newID in
@@ -155,6 +162,56 @@ struct ContentView: View {
 		.onChange(of: peripheryTabSelectedID) { _, newID in
 			updateInspectorState(forPeripherySelection: newID)
 		}
+	}
+
+	/**
+	 Handles the --scan launch argument by finding and selecting the configuration,
+	 then starting a scan.
+	 */
+	private func handleScanArgument(configName: String) {
+		// Use CLIScanRunner to find configuration by display name
+		let runner = CLIScanRunner()
+
+		// Find configuration matching the display name
+		var foundConfig: PeripheryConfiguration?
+		for config in configManager.configurations {
+			guard let projectPath = config.project else { continue }
+
+			// Use same display name logic as --list
+			let url = URL(fileURLWithPath: projectPath)
+			let displayName: String
+			switch config.projectType {
+			case .xcode:
+				displayName = url.deletingPathExtension().lastPathComponent
+			case .swiftPackage:
+				displayName = url.deletingLastPathComponent().lastPathComponent
+			}
+
+			if displayName == configName {
+				foundConfig = config
+				break
+			}
+		}
+
+		// Fallback: try internal configuration name
+		if foundConfig == nil {
+			foundConfig = configManager.configurations.first(where: { $0.name == configName })
+		}
+
+		guard let config = foundConfig else {
+			fputs("Error: Configuration not found: '\(configName)'\n", stderr)
+			fputs("Use --list to see available configurations\n", stderr)
+			return
+		}
+
+		// Select the configuration
+		selectedConfigID.wrappedValue = config.id
+
+		// Start the scan
+		let scanState = scanStateManager.getState(for: config.id)
+		scanState.startScan(configuration: config)
+
+		fputs("Started scan for configuration: \(configName)\n", stderr)
 	}
 
 	/*

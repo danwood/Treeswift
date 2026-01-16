@@ -12,35 +12,21 @@ import SwiftUI
 func runCLIMode() async {
 	let mode = LaunchArgumentsHandler.parseLaunchMode()
 
-	guard case .gui = mode else {
+	// Only handle true CLI-only modes (--list)
+	// GUI modes (including --scan) are handled by TreeswiftApp
+	if case .list = mode {
 		let runner = CLIScanRunner()
-
-		do {
-			switch mode {
-			case .list:
-				runner.listConfigurations()
-				exit(0)
-
-			case .scan(let configName):
-				try await runner.runScan(configurationName: configName)
-				exit(0)
-
-			case .gui:
-				break
-			}
-		} catch {
-			fputs("\(error)\n", stderr)
-			exit(1)
-		}
-		return
+		runner.listConfigurations()
+		exit(0)
 	}
 }
 
-// Check if CLI mode and handle before launching GUI
-let mode = ProcessInfo.processInfo.arguments.count > 1 && ProcessInfo.processInfo.arguments[1].hasPrefix("--")
+// Parse launch mode to determine how to proceed
+let launchMode = LaunchArgumentsHandler.parseLaunchMode()
 
-if mode {
-	// CLI mode - run async task and wait
+switch launchMode {
+case .list:
+	// CLI-only mode - run and exit
 	Task { @MainActor in
 		await runCLIMode()
 		// If we get here, something went wrong
@@ -48,7 +34,8 @@ if mode {
 	}
 	// Keep running until exit() is called
 	RunLoop.main.run()
-} else {
-	// GUI mode - launch SwiftUI app normally
+
+case .gui:
+	// GUI mode (with or without --scan parameter) - launch SwiftUI app
 	TreeswiftApp.main()
 }

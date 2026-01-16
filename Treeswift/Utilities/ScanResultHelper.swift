@@ -130,12 +130,14 @@ struct ScanResultHelper {
 
 	Searches for the text near the specified column and applies highlighting.
 	Returns the line as an AttributedString with the matched text highlighted.
+	Optionally makes the entire declaration portion bold when makeDeclarationBold is true.
 	*/
 	nonisolated static func highlightTextInLine(
 		line: String,
 		text: String,
 		nearColumn: Int,
-		backgroundColor: Color
+		backgroundColor: Color,
+		makeDeclarationBold: Bool = false
 	) -> AttributedString {
 		var result = AttributedString()
 
@@ -148,13 +150,49 @@ struct ScanResultHelper {
 			let matchedText = String(line[range])
 			let suffix = String(line[range.upperBound...])
 
-			result.append(AttributedString(prefix))
+			// For "@available… <declaration>" format, keep @available… regular, make declaration semibold
+			if makeDeclarationBold {
+				// Find where "… " ends (this is where declaration starts)
+				if let ellipsisRange = prefix.range(of: "… ") {
+					let beforeEllipsis = String(prefix[..<ellipsisRange.lowerBound])
+					let afterEllipsis = String(prefix[ellipsisRange.upperBound...])
+
+					// Regular weight prefix before "… " (this is the @available part)
+					var regularPart = AttributedString(beforeEllipsis + "… ")
+					regularPart.font = .system(.caption, design: .monospaced)
+					result.append(regularPart)
+
+					// Semibold part: from after "… " to end of line (this is the declaration)
+					var boldPart = AttributedString(afterEllipsis)
+					boldPart.font = .system(.caption, design: .monospaced).weight(.semibold)
+					result.append(boldPart)
+
+					var highlighted = AttributedString(matchedText)
+					highlighted.backgroundColor = backgroundColor
+					highlighted.font = .system(.caption, design: .monospaced).weight(.semibold)
+					result.append(highlighted)
+
+					var boldSuffix = AttributedString(suffix)
+					boldSuffix.font = .system(.caption, design: .monospaced).weight(.semibold)
+					result.append(boldSuffix)
+
+					return result
+				}
+			}
+
+			// Standard highlighting - apply semibold to entire line
+			var prefixAttr = AttributedString(prefix)
+			prefixAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+			result.append(prefixAttr)
 
 			var highlighted = AttributedString(matchedText)
 			highlighted.backgroundColor = backgroundColor
+			highlighted.font = .system(.caption, design: .monospaced).weight(.semibold)
 			result.append(highlighted)
 
-			result.append(AttributedString(suffix))
+			var suffixAttr = AttributedString(suffix)
+			suffixAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+			result.append(suffixAttr)
 
 			return result
 		}
@@ -166,14 +204,67 @@ struct ScanResultHelper {
 	nonisolated static func highlightSymbolInSourceLine(
 		line: String,
 		column: Int,
-		symbolName: String?
+		symbolName: String?,
+		makeDeclarationBold: Bool = false
 	) -> AttributedString {
+		// Special handling for @attribute… pattern - split into regular + semibold parts
+		if makeDeclarationBold, let ellipsisRange = line.range(of: "… ") {
+			var result = AttributedString()
+
+			// Regular weight part (before and including "… ") - use secondary color
+			let beforeEllipsis = String(line[..<ellipsisRange.upperBound])
+			var regularPart = AttributedString(beforeEllipsis)
+			regularPart.font = .system(.caption, design: .monospaced)
+			regularPart.foregroundColor = Color.secondary
+			result.append(regularPart)
+
+			// Semibold part (after "… ")
+			let afterEllipsis = String(line[ellipsisRange.upperBound...])
+
+			// Now highlight the symbol in the semibold part if needed
+			if let symbolName = symbolName, !symbolName.isEmpty,
+			   column > beforeEllipsis.count,
+			   let symbolRange = findSymbolInLine(line: afterEllipsis, symbolName: symbolName, nearColumn: column - beforeEllipsis.count) {
+				let prefix = String(afterEllipsis[..<symbolRange.lowerBound])
+				let matchedText = String(afterEllipsis[symbolRange])
+				let suffix = String(afterEllipsis[symbolRange.upperBound...])
+
+				let highlightColor = Color(nsColor: .selectedTextBackgroundColor).opacity(0.4)
+
+				var prefixAttr = AttributedString(prefix)
+				prefixAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+				result.append(prefixAttr)
+
+				var highlighted = AttributedString(matchedText)
+				highlighted.backgroundColor = highlightColor
+				highlighted.font = .system(.caption, design: .monospaced).weight(.semibold)
+				result.append(highlighted)
+
+				var suffixAttr = AttributedString(suffix)
+				suffixAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+				result.append(suffixAttr)
+			} else {
+				// No symbol to highlight, just make it semibold
+				var semiboldPart = AttributedString(afterEllipsis)
+				semiboldPart.font = .system(.caption, design: .monospaced).weight(.semibold)
+				result.append(semiboldPart)
+			}
+
+			return result
+		}
+
 		guard column > 0, column <= line.count else {
-			return AttributedString(line)
+			// Apply semibold to entire line by default
+			var result = AttributedString(line)
+			result.font = .system(.caption, design: .monospaced).weight(.semibold)
+			return result
 		}
 
 		guard let symbolName = symbolName, !symbolName.isEmpty else {
-			return AttributedString(line)
+			// Apply semibold to entire line by default
+			var result = AttributedString(line)
+			result.font = .system(.caption, design: .monospaced).weight(.semibold)
+			return result
 		}
 
 		let highlightColor = Color(nsColor: .selectedTextBackgroundColor).opacity(0.4)
@@ -183,7 +274,8 @@ struct ScanResultHelper {
 			line: line,
 			text: symbolName,
 			nearColumn: column,
-			backgroundColor: highlightColor
+			backgroundColor: highlightColor,
+			makeDeclarationBold: makeDeclarationBold
 		)
 		if exactMatch.characters.count > line.count {
 			// Highlighting was applied (attributed string has more content due to attributes)
@@ -197,11 +289,15 @@ struct ScanResultHelper {
 				line: line,
 				text: baseSymbol,
 				nearColumn: column,
-				backgroundColor: highlightColor
+				backgroundColor: highlightColor,
+				makeDeclarationBold: makeDeclarationBold
 			)
 		}
 
-		return AttributedString(line)
+		// Apply semibold to entire line by default
+		var result = AttributedString(line)
+		result.font = .system(.caption, design: .monospaced).weight(.semibold)
+		return result
 	}
 
 	/**

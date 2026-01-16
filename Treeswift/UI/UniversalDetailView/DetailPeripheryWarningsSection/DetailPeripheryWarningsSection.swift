@@ -85,7 +85,7 @@ struct DetailPeripheryWarningsSection: View {
 					.controlSize(.small)
 				}
 
-				Grid(alignment: .topLeading, horizontalSpacing: 4, verticalSpacing: 4) {
+				Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 4) {
 					ForEach(Array(fileWarnings.enumerated()), id: \.offset) { _, tuple in
 						PeripheryWarningRow(
 							result: tuple.result,
@@ -179,7 +179,82 @@ struct PeripheryWarningRow: View {
 
 			// If deletion starts before declaration line, check for @ modifiers
 			if startLine < location.line {
-				// Look for @ modifiers in the lines before the declaration
+				// First, check if the declaration line itself has a @ modifier
+				let declarationLineIndex = location.line - 1
+				if declarationLineIndex >= 0 && declarationLineIndex < lines.count {
+					let declarationFullLine = lines[declarationLineIndex]
+
+					// If declaration line has @ modifier, format with secondary styling
+					if let atIndex = declarationFullLine.firstIndex(of: "@") {
+						// Find where the @ modifier ends (at whitespace after closing paren or after modifier name)
+						var modifierEndIndex = atIndex
+
+						// Find end of modifier (skip past @Name or @Name(...))
+						var idx = declarationFullLine.index(after: atIndex)
+						var foundParen = false
+						while idx < declarationFullLine.endIndex {
+							let char = declarationFullLine[idx]
+							if char == "(" {
+								foundParen = true
+							} else if foundParen && char == ")" {
+								// Move past closing paren, but don't skip whitespace
+								idx = declarationFullLine.index(after: idx)
+								modifierEndIndex = idx
+								break
+							} else if !foundParen && char.isWhitespace {
+								// Found end of simple @Modifier (don't include the whitespace)
+								modifierEndIndex = idx
+								break
+							}
+							idx = declarationFullLine.index(after: idx)
+						}
+
+						// Split line into modifier and declaration parts
+						let modifierPart = String(declarationFullLine[atIndex..<modifierEndIndex])
+						let declarationPart = String(declarationFullLine[modifierEndIndex...])
+
+						// Build attributed string with secondary styling for modifier
+						var result = AttributedString()
+
+						// Modifier part - secondary color, regular weight
+						var modifierAttr = AttributedString(modifierPart)
+						modifierAttr.font = .system(.caption, design: .monospaced)
+						modifierAttr.foregroundColor = Color.secondary
+						result.append(modifierAttr)
+
+						// Declaration part - highlight symbol with semibold (don't trim, preserve spacing)
+						if let symbolName = declaration.name, !symbolName.isEmpty,
+						   let symbolRange = declarationPart.range(of: symbolName) {
+							let beforeSymbol = String(declarationPart[..<symbolRange.lowerBound])
+							let symbol = String(declarationPart[symbolRange])
+							let afterSymbol = String(declarationPart[symbolRange.upperBound...])
+
+							let highlightColor = Color(nsColor: .selectedTextBackgroundColor).opacity(0.4)
+
+							var beforeAttr = AttributedString(beforeSymbol)
+							beforeAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+							result.append(beforeAttr)
+
+							var symbolAttr = AttributedString(symbol)
+							symbolAttr.backgroundColor = highlightColor
+							symbolAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+							result.append(symbolAttr)
+
+							var afterAttr = AttributedString(afterSymbol)
+							afterAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+							result.append(afterAttr)
+						} else {
+							// No symbol highlighting, just make declaration part semibold
+							var declAttr = AttributedString(declarationPart)
+							declAttr.font = .system(.caption, design: .monospaced).weight(.semibold)
+							result.append(declAttr)
+						}
+
+						return result
+					}
+				}
+
+				// If no @ modifier on declaration line, look in lines before
 				for lineNum in startLine..<location.line {
 					let lineIndex = lineNum - 1
 					guard lineIndex >= 0 && lineIndex < lines.count else { continue }
@@ -197,7 +272,8 @@ struct PeripheryWarningRow: View {
 							return ScanResultHelper.highlightSymbolInSourceLine(
 								line: combinedText,
 								column: location.column + combinedText.count - trimmedDeclaration.count,
-								symbolName: declaration.name
+								symbolName: declaration.name,
+								makeDeclarationBold: true
 							)
 						}
 					}
@@ -1099,7 +1175,6 @@ struct PeripheryWarningRow: View {
 				Text(sourceLine)
 					.textSelection(.enabled)
 					.font(.system(.caption, design: .monospaced))
-					.foregroundStyle(.secondary)
 					.lineLimit(1)
 					.truncationMode(.tail)
 					.padding(2)
@@ -1125,31 +1200,26 @@ struct PeripheryWarningRow: View {
 		// Hide completely if action completed and not removing
 		if !isCompleted || isRemoving {
 			GridRow {
-				// Column 1: Clickable text + badge - opens in Xcode
-				Button("Open in Xcode", systemImage: "arrow.forward.circle") {
+				// Column 1: Line number + badge - opens in Xcode
+				HStack(spacing: 4) {
+					if !isCompleted {
+						Text("\(location.line)")
+							.font(.body)
+							.foregroundStyle(.secondary)
+							.monospacedDigit()
+					}
+					BadgeView(badge: badge)
+				}
+				.strikethrough(isIgnoring)
+				.opacity(isRemoving ? 0.5 : 1.0)
+				.onTapGesture {
 					openFileInEditor(
 						path: location.file.path.string,
 						line: location.line
 					)
 				}
-				.labelStyle(.iconOnly)
-				.overlay(
-					HStack {
-						if !isCompleted {
-							Text("\(location.line)")
-								.font(.body)
-								.foregroundStyle(.secondary)
-								.monospacedDigit()
-								.gridColumnAlignment(.trailing)
-						}
-						BadgeView(badge: badge)
-					}
-				)
-				.buttonStyle(.plain)
 				.help("Open in Xcode at line \(location.line)")
 				.gridColumnAlignment(.trailing)
-				.strikethrough(isIgnoring)
-				.opacity(isRemoving ? 0.5 : 1.0)
 
 				// Column 2: Warning text and source line
 				VStack(alignment: .leading, spacing: 0) {
@@ -1251,32 +1321,53 @@ private struct AssignmentLocationRow: View {
 	var body: some View {
 		DynamicStack(horizontalAlignment: .leading, spacing: 4) {
 			// File and line number (clickable)
-			Button("Open location", systemImage: "arrow.forward.circle") {
+			HStack(spacing: 4) {
+				Image(systemName: "arrow.forward.circle")
+					.foregroundStyle(.secondary)
+					.font(.caption)
+				let fileName = assignment.location.file.path.lastComponent ?? "unknown"
+				let lineNumber = assignment.location.line
+				Text(verbatim: "\(fileName):\(lineNumber)")
+					.font(.caption)
+					.foregroundStyle(.blue)
+			}
+			.onTapGesture {
 				openFileInEditor(
 					path: assignment.location.file.path.string,
 					line: assignment.location.line
 				)
 			}
-			.labelStyle(.iconOnly)
-			.overlay(
-				HStack(spacing: 4) {
-					let fileName = assignment.location.file.path.lastComponent ?? "unknown"
-					let lineNumber = assignment.location.line
-					Text(verbatim: "\(fileName):\(lineNumber)")
-						.font(.caption)
-						.foregroundStyle(.blue)
-				}
-			)
-			.buttonStyle(.plain)
+			.help("Open in Xcode")
 
 			// Show containing function/method if available
 			if let parent = assignment.parent,
 			   let parentName = parent.name {
-				Text("in \(parent.kind.displayName) '\(parentName)'")
+				// Truncate long initializer signatures
+				let displayName = truncateInitializer(parentName, maxLength: 60)
+				Text("in \(parent.kind.displayName) '\(displayName)'")
 					.font(.caption2)
 					.foregroundStyle(.secondary)
+					.lineLimit(1)
 			}
 		}
+	}
+
+	/**
+	 Truncates long initializer signatures for display.
+
+	 For initializers with long parameter lists, shows just "init(...)" instead of the full signature.
+	 */
+	private func truncateInitializer(_ name: String, maxLength: Int) -> String {
+		guard name.count > maxLength else { return name }
+
+		// For initializers, just show "init(...)"
+		if name.hasPrefix("init(") {
+			return "init(...)"
+		}
+
+		// For other long names, truncate with ellipsis
+		let truncated = name.prefix(maxLength)
+		return "\(truncated)..."
 	}
 }
 
@@ -1292,23 +1383,23 @@ private struct ProtocolReferenceRow: View {
 	var body: some View {
 		DynamicStack(horizontalAlignment: .leading, spacing: 4) {
 			// File and line number (clickable)
-			Button("Open location", systemImage: "arrow.forward.circle") {
+			HStack(spacing: 4) {
+				Image(systemName: "arrow.forward.circle")
+					.foregroundStyle(.secondary)
+					.font(.caption)
+				let fileName = reference.location.file.path.lastComponent ?? "unknown"
+				let lineNumber = reference.location.line
+				Text(verbatim: "\(fileName):\(lineNumber)")
+					.font(.caption)
+					.foregroundStyle(.blue)
+			}
+			.onTapGesture {
 				openFileInEditor(
 					path: reference.location.file.path.string,
 					line: reference.location.line
 				)
 			}
-			.labelStyle(.iconOnly)
-			.overlay(
-				HStack(spacing: 4) {
-					let fileName = reference.location.file.path.lastComponent ?? "unknown"
-					let lineNumber = reference.location.line
-					Text(verbatim: "\(fileName):\(lineNumber)")
-						.font(.caption)
-						.foregroundStyle(.blue)
-				}
-			)
-			.buttonStyle(.plain)
+			.help("Open in Xcode")
 
 			// Show containing type/function if available
 			if let parent = reference.parent,
