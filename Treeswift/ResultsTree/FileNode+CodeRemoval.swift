@@ -1,0 +1,305 @@
+//
+//  FileNode+CodeRemoval.swift
+//  Treeswift
+//
+//  Extension to FileNode for removing unused code
+//
+
+import Foundation
+import PeripheryKit
+import SourceGraph
+import SystemPackage
+
+extension FileNode {
+
+	/**
+	Result of removing all unused code from a file.
+	*/
+	struct RemovalResult {
+		let filePath: String
+		let originalContents: String
+		let modifiedContents: String
+		let removedWarningIDs: [String]
+		let adjustedUSRs: [String]
+		let lineAdjustments: [Int]
+	}
+
+	/**
+	Determines if a warning can have its code removed.
+
+	Returns true for:
+	- .unused annotations (with full range info or imports)
+	- .redundantPublicAccessibility annotations
+
+	Returns false for:
+	- .assignOnlyProperty (no code removal)
+	- .redundantProtocol (no code removal)
+	*/
+	static func canRemoveCode(for annotation: ScanResult.Annotation, hasFullRange: Bool, isImport: Bool) -> Bool {
+		switch annotation {
+		case .unused:
+			hasFullRange || isImport
+		case .redundantPublicAccessibility:
+			true
+		case .assignOnlyProperty, .redundantProtocol:
+			false
+		}
+	}
+
+	/**
+	Removes all unused code from this file.
+
+	Processes warnings from bottom to top to maintain line number consistency.
+	Only removes code for warnings where canRemoveCode returns true.
+	Tracks all file modifications and line adjustments for undo/redo support.
+	*/
+	func removeAllUnusedCode(
+		scanResults: [ScanResult],
+		filterState: FilterState?,
+		sourceGraph: SourceGraph?
+	) -> Result<RemovalResult, Error> {
+		// Read original file contents
+		guard let originalContents = try? String(contentsOfFile: path, encoding: .utf8) else {
+			return .failure(NSError(domain: "FileNode", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot read file"]))
+		}
+
+		// Filter and sort warnings for this file (bottom to top)
+		let fileWarnings = scanResults
+			.compactMap { result -> (result: ScanResult, declaration: Declaration, location: Location)? in
+				let declaration = result.declaration
+				let location = ScanResultHelper.location(from: declaration)
+
+				// Match file path
+				guard location.file.path.string == path else { return nil }
+
+				// Apply filter state if provided
+				if let filterState = filterState {
+					guard filterState.shouldShow(result: result, declaration: declaration) else {
+						return nil
+					}
+				}
+
+				// Check if code can be removed for this warning
+				let hasFullRange = location.endLine != nil && location.endColumn != nil
+				let isImport = declaration.kind == .module
+				guard FileNode.canRemoveCode(for: result.annotation, hasFullRange: hasFullRange, isImport: isImport) else {
+					return nil
+				}
+
+				return (result, declaration, location)
+			}
+			.sorted { lhs, rhs in
+				// Sort bottom to top (highest line first)
+				if lhs.location.line != rhs.location.line {
+					return lhs.location.line > rhs.location.line
+				}
+				return lhs.location.column > rhs.location.column
+			}
+
+		// If no warnings can be removed, return early
+		guard !fileWarnings.isEmpty else {
+			return .failure(NSError(domain: "FileNode", code: 2, userInfo: [NSLocalizedDescriptionKey: "No removable warnings found"]))
+		}
+
+		// Process each warning from bottom to top
+		var currentContents = originalContents
+		var removedWarningIDs: [String] = []
+		var adjustedUSRs: [String] = []
+		var lineAdjustments: [Int] = []
+
+		for (result, declaration, location) in fileWarnings {
+			// Generate warning ID
+			let usr = declaration.usrs.first ?? ""
+			let warningID = "\(location.file.path.string):\(usr)"
+
+			// Handle redundant public separately
+			if case .redundantPublicAccessibility = result.annotation {
+				let removalResult = removeRedundantPublic(
+					declaration: declaration,
+					location: location,
+					currentContents: currentContents
+				)
+
+				switch removalResult {
+				case .success(let newContents):
+					currentContents = newContents
+					removedWarningIDs.append(warningID)
+					lineAdjustments.append(0)
+				case .failure:
+					continue
+				}
+			} else if declaration.kind == .module {
+				// Handle import deletion
+				let removalResult = removeImport(
+					location: location,
+					currentContents: currentContents,
+					sourceGraph: sourceGraph
+				)
+
+				switch removalResult {
+				case .success(let (newContents, adjustedUSR)):
+					currentContents = newContents
+					removedWarningIDs.append(warningID)
+					if !adjustedUSR.isEmpty {
+						adjustedUSRs.append(contentsOf: adjustedUSR)
+					}
+					lineAdjustments.append(1)
+				case .failure:
+					continue
+				}
+			} else {
+				// Handle declaration deletion
+				let removalResult = removeDeclaration(
+					declaration: declaration,
+					currentContents: currentContents,
+					sourceGraph: sourceGraph
+				)
+
+				switch removalResult {
+				case .success(let (newContents, linesRemoved, adjustedUSR)):
+					currentContents = newContents
+					removedWarningIDs.append(warningID)
+					if !adjustedUSR.isEmpty {
+						adjustedUSRs.append(contentsOf: adjustedUSR)
+					}
+					lineAdjustments.append(linesRemoved)
+				case .failure:
+					continue
+				}
+			}
+		}
+
+		// Write modified contents to file
+		do {
+			try currentContents.write(toFile: path, atomically: true, encoding: .utf8)
+		} catch {
+			return .failure(error)
+		}
+
+		return .success(RemovalResult(
+			filePath: path,
+			originalContents: originalContents,
+			modifiedContents: currentContents,
+			removedWarningIDs: removedWarningIDs,
+			adjustedUSRs: adjustedUSRs,
+			lineAdjustments: lineAdjustments
+		))
+	}
+
+	/**
+	Removes redundant public keyword from a declaration.
+	*/
+	private func removeRedundantPublic(
+		declaration: Declaration,
+		location: Location,
+		currentContents: String
+	) -> Result<String, Error> {
+		guard declaration.modifiers.contains("public") else {
+			return .failure(NSError(domain: "FileNode", code: 3, userInfo: [NSLocalizedDescriptionKey: "No public modifier found"]))
+		}
+
+		var lines = currentContents.components(separatedBy: .newlines)
+		guard location.line > 0 && location.line <= lines.count else {
+			return .failure(NSError(domain: "FileNode", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid line number"]))
+		}
+
+		let lineIndex = location.line - 1
+		let originalLine = lines[lineIndex]
+
+		// Match "public" followed by any whitespace
+		let pattern = #"public\s+"#
+		if let regex = try? NSRegularExpression(pattern: pattern) {
+			let range = NSRange(originalLine.startIndex..., in: originalLine)
+			let newLine = regex.stringByReplacingMatches(
+				in: originalLine,
+				range: range,
+				withTemplate: ""
+			)
+			lines[lineIndex] = newLine
+		}
+
+		let newContents = lines.joined(separator: "\n")
+		return .success(newContents)
+	}
+
+	/**
+	Removes an import statement.
+	*/
+	private func removeImport(
+		location: Location,
+		currentContents: String,
+		sourceGraph: SourceGraph?
+	) -> Result<(String, [String]), Error> {
+		var lines = currentContents.components(separatedBy: .newlines)
+		guard location.line > 0 && location.line <= lines.count else {
+			return .failure(NSError(domain: "FileNode", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid line number"]))
+		}
+
+		let lineIndex = location.line - 1
+		lines.remove(at: lineIndex)
+
+		let newContents = lines.joined(separator: "\n")
+
+		// Track adjusted USRs for line number updates
+		var adjustedUSRs: [String] = []
+		if let sourceGraph = sourceGraph {
+			for declaration in sourceGraph.allDeclarations {
+				guard declaration.location.file.path.string == path else { continue }
+				guard declaration.location.line > location.line else { continue }
+
+				if let usr = declaration.usrs.first {
+					adjustedUSRs.append(usr)
+				}
+			}
+		}
+
+		return .success((newContents, adjustedUSRs))
+	}
+
+	/**
+	Removes a declaration using DeclarationDeletionHelper.
+	*/
+	private func removeDeclaration(
+		declaration: Declaration,
+		currentContents: String,
+		sourceGraph: SourceGraph?
+	) -> Result<(String, Int, [String]), Error> {
+		// Write current contents to file temporarily
+		do {
+			try currentContents.write(toFile: path, atomically: true, encoding: .utf8)
+		} catch {
+			return .failure(error)
+		}
+
+		// Use DeclarationDeletionHelper to delete
+		let result = DeclarationDeletionHelper.deleteDeclaration(declaration: declaration)
+
+		switch result {
+		case .success(let deletionRange):
+			let linesRemoved = deletionRange.endLine - deletionRange.startLine + 1
+
+			// Read modified contents
+			guard let modifiedContents = try? String(contentsOfFile: path, encoding: .utf8) else {
+				return .failure(NSError(domain: "FileNode", code: 6, userInfo: [NSLocalizedDescriptionKey: "Cannot read modified file"]))
+			}
+
+			// Track adjusted USRs for line number updates
+			var adjustedUSRs: [String] = []
+			if let sourceGraph = sourceGraph {
+				for decl in sourceGraph.allDeclarations {
+					guard decl.location.file.path.string == path else { continue }
+					guard decl.location.line > deletionRange.endLine else { continue }
+
+					if let usr = decl.usrs.first {
+						adjustedUSRs.append(usr)
+					}
+				}
+			}
+
+			return .success((modifiedContents, linesRemoved, adjustedUSRs))
+
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+}

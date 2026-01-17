@@ -48,6 +48,7 @@ swift_library(
         "SourceGraph/Elements/AssetReference.swift",
         "SourceGraph/Elements/CommentCommand.swift",
         "SourceGraph/Elements/Declaration.swift",
+        "SourceGraph/Elements/DeclarationAttribute.swift",
         "SourceGraph/Elements/ImportStatement.swift",
         "SourceGraph/Elements/Location.swift",
         "SourceGraph/Elements/ProjectFileKind.swift",
@@ -55,6 +56,7 @@ swift_library(
         "SourceGraph/Elements/SourceFile.swift",
         "SourceGraph/Mutators/AccessibilityCascader.swift",
         "SourceGraph/Mutators/AncestralReferenceEliminator.swift",
+        "SourceGraph/Mutators/AppIntentsRetainer.swift",
         "SourceGraph/Mutators/AssetReferenceRetainer.swift",
         "SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift",
         "SourceGraph/Mutators/CodablePropertyRetainer.swift",
@@ -68,6 +70,7 @@ swift_library(
         "SourceGraph/Mutators/ExternalOverrideRetainer.swift",
         "SourceGraph/Mutators/ExternalTypeProtocolConformanceReferenceRemover.swift",
         "SourceGraph/Mutators/GenericClassAndStructConstructorReferenceBuilder.swift",
+        "SourceGraph/Mutators/InheritedImplicitInitializerReferenceBuilder.swift",
         "SourceGraph/Mutators/InterfaceBuilderPropertyRetainer.swift",
         "SourceGraph/Mutators/ObjCAccessibleRetainer.swift",
         "SourceGraph/Mutators/PropertyWrapperRetainer.swift",
@@ -89,13 +92,14 @@ swift_library(
         "SourceGraph/SourceGraphDebugger.swift",
         "SourceGraph/SourceGraphMutator.swift",
         "SourceGraph/SourceGraphMutatorRunner.swift",
-        "SourceGraph/SynchronizedSourceGraph.swift",
+        "SourceGraph/SourceGraphMutex.swift",
     ],
     module_name = "SourceGraph",
     deps = [
         "//Sources:Configuration",
         "//Sources:Shared",
         "@swift-syntax//:SwiftSyntax",
+        "@swift-system//:SystemPackage",
     ],
 )
 
@@ -104,6 +108,7 @@ swift_library(
     srcs = [
         "Shared/Benchmark.swift",
         "Shared/Constants.swift",
+        "Shared/JobPool.swift",
         "Shared/PeripheryError.swift",
         "Shared/ProjectKind.swift",
         "Shared/PropertyTypeSanitizer.swift",
@@ -111,7 +116,6 @@ swift_library(
         "Shared/Shell.swift",
         "Shared/SwiftVersion.swift",
         "Shared/SwiftVersionParser.swift",
-        "Shared/UnfairLock.swift",
     ],
     module_name = "Shared",
     deps = [
@@ -194,7 +198,6 @@ swift_library(
         "Indexer/Indexer.swift",
         "Indexer/InfoPlistIndexer.swift",
         "Indexer/InfoPlistParser.swift",
-        "Indexer/JobPool.swift",
         "Indexer/SourceFileCollector.swift",
         "Indexer/SwiftIndexer.swift",
         "Indexer/XCDataModelIndexer.swift",
@@ -219,7 +222,6 @@ swift_binary(
         "Frontend/BazelProjectSetupGuide.swift",
         "Frontend/Commands/CheckUpdateCommand.swift",
         "Frontend/Commands/ClearCacheCommand.swift",
-        "Frontend/Commands/FrontendCommand.swift",
         "Frontend/Commands/ScanCommand.swift",
         "Frontend/Commands/VersionCommand.swift",
         "Frontend/CommonSetupGuide.swift",
@@ -273,6 +275,7 @@ swift_library(
 swift_library(
     name = "Configuration",
     srcs = [
+        "Configuration/ColorOption.swift",
         "Configuration/Configuration.swift",
         "Configuration/OutputFormat.swift",
     ],

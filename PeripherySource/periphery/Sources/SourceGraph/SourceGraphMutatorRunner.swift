@@ -29,6 +29,7 @@ public final class SourceGraphMutatorRunner {
         EnumCaseReferenceBuilder.self,
         DefaultConstructorReferenceBuilder.self,
         StructImplicitInitializerReferenceBuilder.self,
+        InheritedImplicitInitializerReferenceBuilder.self,
 
         DynamicMemberRetainer.self,
         UnusedParameterRetainer.self,
@@ -38,6 +39,7 @@ public final class SourceGraphMutatorRunner {
         XCTestRetainer.self,
         SwiftTestingRetainer.self,
         SwiftUIRetainer.self,
+        AppIntentsRetainer.self,
         StringInterpolationAppendInterpolationRetainer.self,
         PropertyWrapperRetainer.self,
         ResultBuilderRetainer.self,
@@ -65,7 +67,6 @@ public final class SourceGraphMutatorRunner {
 
     public func perform() throws {
         for mutator in mutators {
-            try Task.checkCancellation()
             let elapsed = try Benchmark.measure {
                 let interval = logger.beginInterval("mutator:run")
                 try mutator.init(graph: graph, configuration: configuration, swiftVersion: swiftVersion).mutate()

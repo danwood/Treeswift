@@ -33,15 +33,14 @@ public final class Xcodebuild {
     }
 
     @discardableResult
-    public func build(project: XcodeProjectlike, scheme: String, allSchemes: [String], additionalArguments: [String] = [], excludeTests: Bool = false) throws -> String {
-        let buildAction = excludeTests ? "build" : "build-for-testing"
+    public func build(project: XcodeProjectlike, scheme: String, allSchemes: [String], additionalArguments: [String] = []) throws -> String {
         let args = try [
             "-\(project.type)", "\"\(project.path.lexicallyNormalized().string.withEscapedQuotes)\"",
             "-scheme", "\"\(scheme.withEscapedQuotes)\"",
             "-parallelizeTargets",
             "-derivedDataPath", "'\(derivedDataPath(for: project, schemes: allSchemes).string)'",
             "-quiet",
-            buildAction,
+            "build-for-testing",
         ]
         let envs = [
             "CODE_SIGNING_ALLOWED=\"NO\"",
@@ -67,6 +66,7 @@ public final class Xcodebuild {
         guard let path = pathsToTry.first(where: { $0.exists }) else {
             throw PeripheryError.indexStoreNotFound(derivedDataPath: derivedDataPath.string)
         }
+
         return path
     }
 
@@ -112,6 +112,7 @@ public final class Xcodebuild {
     private func deserialize(_ jsonString: String) throws -> [String: Any]? {
         do {
             guard let jsonData = jsonString.data(using: .utf8) else { return nil }
+
             return try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any]
         } catch {
             throw PeripheryError.jsonDeserializationError(error: error, json: jsonString)

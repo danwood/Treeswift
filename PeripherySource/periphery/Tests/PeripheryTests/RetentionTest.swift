@@ -3,8 +3,6 @@ import SystemPackage
 import XCTest
 
 final class RetentionTest: FixtureSourceGraphTestCase {
-    let performKnownFailures = false
-
     func testNonReferencedClass() {
         analyze {
             assertNotReferenced(.class("FixtureClass1"))
@@ -755,6 +753,19 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    func testConstrainedProtocolExtensionSatisfiesProtocolRequirement() {
+        analyze(retainPublic: true) {
+            assertReferenced(.protocol("FixtureProtocol1021A")) {
+                self.assertReferenced(.varInstance("value"))
+            }
+            assertReferenced(.protocol("FixtureProtocol1021B"))
+            assertReferenced(.extensionProtocol("FixtureProtocol1021B")) {
+                // The extension's value satisfies FixtureProtocol1021A's requirement
+                self.assertReferenced(.varInstance("value"))
+            }
+        }
+    }
+
     func testDoesNotRetainProtocolMembersImplementedByExternalType() {
         analyze(retainPublic: true) {
             assertReferenced(.protocol("FixtureProtocol110")) {
@@ -1100,6 +1111,16 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertReferenced(.class("Fixture205"))
             assertReferenced(.protocol("Fixture205Protocol"))
             assertNotRedundantProtocol("Fixture205Protocol")
+
+            // Inline ignore comments on properties (issue #941)
+            assertReferenced(.class("Fixture310Class")) {
+                self.assertReferenced(.varInstance("simplePropertyInlineIgnored"))
+                self.assertReferenced(.varInstance("computedPropertyInlineIgnored"))
+                self.assertReferenced(.varInstance("computedPropertyWithOpenBraceIgnore"))
+            }
+            assertReferenced(.protocol("Fixture311Protocol")) {
+                self.assertReferenced(.varInstance("protocolPropertyInlineIgnored"))
+            }
         }
 
         // inline comment command tests
@@ -1140,10 +1161,61 @@ final class RetentionTest: FixtureSourceGraphTestCase {
 
     func testCommentCommandOverride() {
         analyze(retainPublic: true) {
+            // Test relative path override (gets converted to absolute)
             assertOverrides(.class("FixtureClass136"), [
-                .location("some/other/file.swift", 12, 34),
+                .location(FilePath.current.pushing("some/other/file.swift"), 12, 34),
                 .kind("banana"),
             ])
+            // Test absolute path override (stays absolute)
+            assertOverrides(.class("FixtureClass137"), [
+                .location("/absolute/path/file.swift", 56, 78),
+            ])
+        }
+    }
+
+    func testSuperfluousIgnoreCommand() {
+        analyze(retainPublic: true) {
+            // These have ignore commands but are actually used, so the ignore is superfluous
+            assertSuperfluousIgnoreCommand(.functionFree("superfluouslyIgnoredFunc()"))
+            assertSuperfluousIgnoreCommand(.class("SuperfluouslyIgnoredClass"))
+
+            // These have ignore commands and are NOT used, so the ignore is needed
+            assertNotSuperfluousIgnoreCommand(.functionFree("correctlyIgnoredFunc()"))
+            assertNotSuperfluousIgnoreCommand(.class("CorrectlyIgnoredClass"))
+
+            // The callers should be referenced normally
+            assertReferenced(.functionFree("callerOfSuperfluouslyIgnoredFunc()"))
+            assertReferenced(.functionFree("useSuperfluouslyIgnoredClass()"))
+
+            // Test ignored declarations within non-ignored parent
+            assertReferenced(.class("NonIgnoredParentClass")) {
+                // This method is ignored but used by callerMethod - superfluous
+                self.assertSuperfluousIgnoreCommand(.functionMethodInstance("superfluouslyIgnoredMethod()"))
+                // This method is ignored and not used - correctly ignored
+                self.assertNotSuperfluousIgnoreCommand(.functionMethodInstance("correctlyIgnoredMethod()"))
+                // The caller method should be referenced normally
+                self.assertReferenced(.functionMethodInstance("callerMethod()"))
+            }
+
+            // Test deeply nested declarations within ignored hierarchy.
+            // Internal references between members of an ignored class should NOT
+            // make those members appear superfluously ignored.
+            assertNotSuperfluousIgnoreCommand(.class("DeeplyNestedIgnoredClass"))
+            assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodA()"))
+            assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodB()"))
+            assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodC()"))
+
+            // Test superfluous ignore for parameters
+            assertReferenced(.class("ParameterIgnoreClass")) {
+                self.assertReferenced(.functionMethodInstance("superfluousParamIgnore(usedParam:)")) {
+                    // Parameter is ignored but actually used - superfluous
+                    self.assertSuperfluousIgnoreCommand(.varParameter("usedParam"))
+                }
+                self.assertReferenced(.functionMethodInstance("correctParamIgnore(unusedParam:)")) {
+                    // Parameter is ignored and not used - correctly ignored
+                    self.assertNotSuperfluousIgnoreCommand(.varParameter("unusedParam"))
+                }
+            }
         }
     }
 
@@ -1220,6 +1292,9 @@ final class RetentionTest: FixtureSourceGraphTestCase {
 
                 self.assertReferenced(.varInstance("ignoredSimpleUnreadVar"))
                 self.assertNotAssignOnlyProperty(.varInstance("ignoredSimpleUnreadVar"))
+
+                self.assertReferenced(.varInstance("wrappedProperty"))
+                self.assertNotAssignOnlyProperty(.varInstance("wrappedProperty"))
             }
         }
 
@@ -1248,6 +1323,9 @@ final class RetentionTest: FixtureSourceGraphTestCase {
 
                 self.assertReferenced(.varInstance("ignoredSimpleUnreadVar"))
                 self.assertNotAssignOnlyProperty(.varInstance("ignoredSimpleUnreadVar"))
+
+                self.assertReferenced(.varInstance("wrappedProperty"))
+                self.assertNotAssignOnlyProperty(.varInstance("wrappedProperty"))
             }
         }
     }
@@ -1665,12 +1743,7 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
-    // MARK: - Known Failures
-
-    // https://github.com/apple/swift/issues/56165
     func testCustomConstructorWithLiteral() {
-        guard performKnownFailures else { return }
-
         analyze(retainPublic: true) {
             assertReferenced(.extensionStruct("Array")) {
                 self.assertReferenced(.functionConstructor("init(title:)"))
@@ -1678,14 +1751,39 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
-    // https://github.com/peripheryapp/periphery/issues/676
     func testRetainsInitializerCalledOnTypeAlias() {
-        guard performKnownFailures else { return }
+        // Resolved by https://github.com/swiftlang/swift/commit/178d6c315dcce9d1110bb23ad905dffaf28c2c3b
+        guard Self.swiftVersion.version.isVersion(greaterThan: "6.2.3") else {
+            return
+        }
 
         analyze(retainPublic: true) {
             assertReferenced(.class("FixtureClass219")) {
                 self.assertReferenced(.functionConstructor("init(foo:)"))
             }
+        }
+    }
+
+    func testDoesNotRetainSPIMembers() {
+        analyze(retainPublic: true, noRetainSPI: ["STP"]) {
+            assertReferenced(.class("FixtureClass220")) {
+                self.assertReferenced(.functionMethodInstance("publicFunc()"))
+                self.assertNotReferenced(.functionMethodInstance("stpSpiFunc()"))
+                self.assertReferenced(.functionMethodInstance("otherSpiFunc()"))
+            }
+            assertNotReferenced(.struct("FixtureStruct220"))
+            assertReferenced(.struct("FixtureStruct221"))
+        }
+    }
+
+    // MARK: - Inherited Initializers
+
+    func testRetainsSuperclassInitializerCalledOnSubclass() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass221Parent")) {
+                self.assertReferenced(.functionConstructor("init(param:)"))
+            }
+            assertReferenced(.class("FixtureClass221Child"))
         }
     }
 }

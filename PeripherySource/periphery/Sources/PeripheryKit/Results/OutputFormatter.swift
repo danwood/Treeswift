@@ -6,9 +6,10 @@ import SystemPackage
 
 public protocol OutputFormatter: AnyObject {
     var configuration: Configuration { get }
+    var logger: Logger { get }
     var currentFilePath: FilePath { get }
 
-    init(configuration: Configuration)
+    init(configuration: Configuration, logger: Logger)
     func format(_ results: [ScanResult], colored: Bool) throws -> String?
 }
 
@@ -32,6 +33,8 @@ extension OutputFormatter {
             "redundantProtocol"
         case .redundantPublicAccessibility:
             "redundantPublicAccessibility"
+        case .superfluousIgnoreCommand:
+            "superfluousIgnoreCommand"
         }
     }
 
@@ -42,32 +45,32 @@ extension OutputFormatter {
         let kindDisplayName = declarationKindDisplayName(from: result.declaration)
 
         if var name = result.declaration.name {
-            description += "\(kindDisplayName.first?.uppercased() ?? "")\(kindDisplayName.dropFirst()) "
-            name = colored ? Logger.colorize(name, .lightBlue) : name
-            description += "'\(name)'"
+            name = colored ? logger.colorize(name, .lightBlue) : name
 
             switch result.annotation {
             case .unused:
-                description += " is unused"
+                description += "Unused \(kindDisplayName) '\(name)'"
             case .assignOnlyProperty:
-                description += " is assigned, but never used"
+                description += "Assign-only \(kindDisplayName) '\(name)' is assigned, but never used"
             case let .redundantProtocol(references, inherited):
-                description += " is redundant as it's never used as an existential type"
+                description += "Redundant protocol '\(name)' (never used as an existential type)"
                 secondaryResults = references.map {
-                    var msg = "Protocol '\(name)' conformance is redundant"
+                    var msg = "Redundant protocol conformance '\(name)'"
 
                     if !inherited.isEmpty {
-                        msg += ", replace with '\(inherited.sorted().joined(separator: ", "))'"
+                        msg += " (replace with '\(inherited.sorted().joined(separator: ", "))')"
                     }
 
                     return ($0.location, msg)
                 }
             case let .redundantPublicAccessibility(modules):
                 let modulesJoined = modules.sorted().joined(separator: ", ")
-                description += " is declared public, but not used outside of \(modulesJoined)"
+                description += "Redundant public accessibility for \(kindDisplayName) '\(name)' (not used outside of \(modulesJoined))"
+            case .superfluousIgnoreCommand:
+                description += "Superfluous ignore comment for \(kindDisplayName) '\(name)' (declaration is referenced and should not be ignored)"
             }
         } else {
-            description += "unused"
+            description += "Unused"
         }
 
         return [(location, description)] + secondaryResults
@@ -84,38 +87,19 @@ extension OutputFormatter {
     }
 
     func locationDescription(_ location: Location) -> String {
-		// 🌲 Updated algorithm includes end location
-        var components = [
+        [
             outputPath(location).string,
             String(location.line),
             String(location.column),
         ]
-        
-        if let endLine = location.endLine, let endColumn = location.endColumn {
-            components.append(String(endLine))
-            components.append(String(endColumn))
-        }
-        
-        return components.joined(separator: ":")
+        .joined(separator: ":")
     }
 
     func declarationKind(from declaration: Declaration) -> String {
         var kind = declaration.kind.rawValue
 
-        for command in declaration.commentCommands {
-            switch command {
-            case let .override(overrides):
-                for override in overrides {
-                    switch override {
-                    case let .kind(overrideKind):
-                        kind = overrideKind
-                    default:
-                        break
-                    }
-                }
-            default:
-                break
-            }
+        if let overrideKind = declaration.commentCommands.kindOverride {
+            kind = overrideKind
         }
 
         return kind
@@ -124,20 +108,8 @@ extension OutputFormatter {
     func declarationKindDisplayName(from declaration: Declaration) -> String {
         var kind = declaration.kind.displayName
 
-        for command in declaration.commentCommands {
-            switch command {
-            case let .override(overrides):
-                for override in overrides {
-                    switch override {
-                    case let .kind(overrideKind):
-                        kind = overrideKind
-                    default:
-                        break
-                    }
-                }
-            default:
-                break
-            }
+        if let overrideKind = declaration.commentCommands.kindOverride {
+            kind = overrideKind
         }
 
         return kind
@@ -146,22 +118,11 @@ extension OutputFormatter {
     func declarationLocation(from declaration: Declaration) -> Location {
         var location = declaration.location
 
-        for command in declaration.commentCommands {
-            switch command {
-            case let .override(overrides):
-                for override in overrides {
-                    switch override {
-                    case let .location(file, line, column):
-                        let sourceFile = SourceFile(path: FilePath(String(file)), modules: [])
-                        let overrideLocation = Location(file: sourceFile, line: line, column: column)
-                        location = overrideLocation
-                    default:
-                        break
-                    }
-                }
-            default:
-                break
-            }
+        if let override = declaration.commentCommands.locationOverride {
+            let (path, line, column) = override
+            let sourceFile = SourceFile(path: path, modules: [])
+            let overrideLocation = Location(file: sourceFile, line: line, column: column)
+            location = overrideLocation
         }
 
         return location

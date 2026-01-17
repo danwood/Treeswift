@@ -1,4 +1,5 @@
 import Foundation
+import Shared
 import SourceGraph
 import SwiftSyntax
 
@@ -7,8 +8,9 @@ public final class ImportSyntaxVisitor: PeripherySyntaxVisitor {
 
     private let sourceLocationBuilder: SourceLocationBuilder
 
-    public init(sourceLocationBuilder: SourceLocationBuilder) {
+    public init(sourceLocationBuilder: SourceLocationBuilder, swiftVersion _: SwiftVersion) {
         self.sourceLocationBuilder = sourceLocationBuilder
+        // swiftVersion is not used in this visitor but is required by the protocol
     }
 
     public func visit(_ node: ImportDeclSyntax) {
@@ -16,19 +18,13 @@ public final class ImportSyntaxVisitor: PeripherySyntaxVisitor {
         let module = parts.first ?? ""
         let attributes = node.attributes.compactMap {
             if case let .attribute(attr) = $0 {
-                attr.attributeName.trimmedDescription
+                attr.attributeName.trimmed.description
             } else {
                 nil
             }
         }
         let location = sourceLocationBuilder.location(at: node.positionAfterSkippingLeadingTrivia)
-
-        var isConditional = false
-
-        if let parent = node.parent?.parent?.parent?.as(IfConfigClauseSyntax.self) {
-            isConditional = true
-        }
-
+        let isConditional = node.parent?.parent?.parent?.is(IfConfigClauseSyntax.self) ?? false
         let statement = ImportStatement(
             module: module,
             isTestable: attributes.contains("testable"),

@@ -19,6 +19,17 @@ private struct TypeFilterItem: Identifiable {
 	let binding: ReferenceWritableKeyPath<FilterState, Bool>
 	let disableWhenTopLevel: Bool
 
+	/**
+	Determines if this type filter should be disabled based on current filter state.
+	Checks both top-level constraint and warning-type constraints.
+	*/
+	func isDisabled(filterState: FilterState) -> Bool {
+		if disableWhenTopLevel && filterState.topLevelOnly {
+			return true
+		}
+		return !filterState.isTypeFilterEnabled(swiftType)
+	}
+
 	static let allItems: [TypeFilterItem] = [
 		TypeFilterItem(id: "struct", swiftType: .struct, label: "Struct", binding: \.showStruct, disableWhenTopLevel: false),
 		TypeFilterItem(id: "class", swiftType: .class, label: "Class", binding: \.showClass, disableWhenTopLevel: false),
@@ -78,16 +89,11 @@ struct FilterBarView: View {
 	}
 
 	private func setAllTypeFilters(to value: Bool) {
-		filterState.showClass = value
-		filterState.showEnum = value
-		filterState.showExtension = value
-		filterState.showFunction = value
-		filterState.showInitializer = value
-		filterState.showParameter = value
-		filterState.showProperty = value
-		filterState.showProtocol = value
-		filterState.showStruct = value
-		filterState.showTypealias = value
+		for item in TypeFilterItem.allItems {
+			if !item.isDisabled(filterState: filterState) {
+				filterState[keyPath: item.binding] = value
+			}
+		}
 	}
 
 	var body: some View {
@@ -167,6 +173,8 @@ struct FilterBarView: View {
 
 				AdaptiveGrid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
 					ForEach(TypeFilterItem.allItems) { item in
+						let isDisabled = item.isDisabled(filterState: filterState)
+
 						OptionClickToggle(
 							isEnabled: $filterState[dynamicMember: item.binding],
 							onOptionClick: setAllTypeFilters
@@ -184,8 +192,8 @@ struct FilterBarView: View {
 							}
 						}
 						.fixedSize()
-						.disabled(item.disableWhenTopLevel && filterState.topLevelOnly)
-						.opacity(item.disableWhenTopLevel && filterState.topLevelOnly ? 0.5 : 1.0)
+						.disabled(isDisabled)
+						.opacity(isDisabled ? 0.5 : 1.0)
 					}
 				}
 			}

@@ -1,4 +1,6 @@
 import Foundation
+import Logger
+import Shared
 @testable import SourceGraph
 @testable import SyntaxAnalysis
 @testable import TestShared
@@ -9,7 +11,9 @@ final class PropertyVisitTest: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        let multiplexingVisitor = try MultiplexingSyntaxVisitor(file: fixturePath)
+        let shell = ShellImpl(logger: Logger(quiet: true, verbose: false, colorMode: .never))
+        let swiftVersion = SwiftVersion(shell: shell)
+        let multiplexingVisitor = try MultiplexingSyntaxVisitor(file: fixturePath, swiftVersion: swiftVersion)
         let visitor = multiplexingVisitor.add(DeclarationSyntaxVisitor.self)
         multiplexingVisitor.visit()
         results = visitor.resultsByLocation
@@ -114,6 +118,12 @@ final class PropertyVisitTest: XCTestCase {
 
         XCTAssertEqual(propertyB.variableType, "String")
         XCTAssertEqual(propertyB.variableTypeLocations, [fixtureLocation(line: 21, column: 70)])
+    }
+
+    func testSimpleTypeWithComment() {
+        let result = results[fixtureLocation(line: 22)]!
+        XCTAssertEqual(result.variableType, "Bool")
+        XCTAssertEqual(result.variableTypeLocations, [fixtureLocation(line: 22, column: 32)])
     }
 
     // MARK: - Private

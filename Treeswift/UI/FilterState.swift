@@ -193,6 +193,54 @@ final class FilterState {
 		.typealias: \.showTypealias
 	]
 
+	enum WarningType {
+		case unused
+		case assignOnly
+		case redundantProtocol
+		case redundantPublic
+	}
+
+	/**
+	Returns the set of warning types that can apply to a given Swift type.
+	Used to determine which type filters should be enabled based on selected warning filters.
+	*/
+	static func applicableWarnings(for swiftType: SwiftType) -> Set<WarningType> {
+		switch swiftType {
+		case .property:
+			return [.unused, .assignOnly, .redundantPublic]
+		case .protocol:
+			return [.unused, .redundantProtocol, .redundantPublic]
+		case .class, .struct, .enum, .typealias, .function, .initializer:
+			return [.unused, .redundantPublic]
+		case .extension:
+			return [.unused, .redundantPublic]
+		case .parameter:
+			return [.unused]
+		case .import:
+			return [.unused]
+		}
+	}
+
+	/**
+	Determines if a Swift type filter should be enabled based on current warning filter selection.
+	A type filter is enabled if at least one applicable warning type is enabled.
+	*/
+	func isTypeFilterEnabled(_ swiftType: SwiftType) -> Bool {
+		let applicableWarnings = Self.applicableWarnings(for: swiftType)
+
+		for warning in applicableWarnings {
+			switch warning {
+			case .unused where showUnused: return true
+			case .assignOnly where showAssignOnly: return true
+			case .redundantProtocol where showRedundantProtocol: return true
+			case .redundantPublic where showRedundantPublic: return true
+			default: continue
+			}
+		}
+
+		return false
+	}
+
 	/// Check if a warning should be shown based on current filter settings
 	func shouldShow(result: ScanResult, declaration: Declaration) -> Bool {
 		// Check top-level filter

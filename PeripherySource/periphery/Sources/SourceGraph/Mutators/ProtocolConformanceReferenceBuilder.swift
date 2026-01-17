@@ -2,6 +2,12 @@ import Configuration
 import Foundation
 import Shared
 
+/// Inverts references between protocol requirements and their conforming implementations.
+///
+/// The Swift indexer creates references from conforming declarations TO protocol requirements
+/// (e.g., `S.foo -> P.foo`). We invert these so protocol requirements reference their implementations
+/// (`P.foo -> S.foo`). This ensures that when code calls a method on a protocol type, the conforming
+/// implementations are transitively marked as used.
 final class ProtocolConformanceReferenceBuilder: SourceGraphMutator {
     private let graph: SourceGraph
 
@@ -19,10 +25,10 @@ final class ProtocolConformanceReferenceBuilder: SourceGraphMutator {
     // MARK: - Private
 
     private func referenceConformingDeclarationsImplementedInSuperclass() -> Set<Reference> {
-        var newReferences: Set<Reference> = []
         let protocols = graph.declarations(ofKind: .protocol)
 
-        for proto in protocols {
+        let newReferences = Set(JobPool(jobs: Array(protocols)).flatMap { [graph] proto in
+            var result: [Reference] = []
             // Find all classes that implement this protocol.
             let conformingClasses = graph.references(to: proto)
                 .reduce(into: Set<Declaration>()) { result, ref in
@@ -66,12 +72,18 @@ final class ProtocolConformanceReferenceBuilder: SourceGraphMutator {
                                 )
                                 reference.name = declInSuperclass.name
                                 reference.parent = unimplementedProtoDecl
-                                graph.add(reference, from: unimplementedProtoDecl)
-                                newReferences.insert(reference)
+                                result.append(reference)
                             }
                         }
                     }
                 }
+            }
+            return result
+        })
+        // Perform mutations on the graph based on the calculated references
+        for newReference in newReferences {
+            if let parent = newReference.parent {
+                graph.add(newReference, from: parent)
             }
         }
 

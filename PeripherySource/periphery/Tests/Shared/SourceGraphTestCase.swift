@@ -11,6 +11,7 @@ open class SourceGraphTestCase: XCTestCase {
     static var plan: IndexPlan!
     static var shell: Shell!
     static var logger: Logger!
+    static var swiftVersion: SwiftVersion!
     static var results: [ScanResult] = []
 
     private static var graph: SourceGraph!
@@ -20,8 +21,9 @@ open class SourceGraphTestCase: XCTestCase {
 
     override open class func setUp() {
         super.setUp()
-        logger = Logger(quiet: true)
-        shell = Shell(logger: logger)
+        logger = Logger(quiet: true, verbose: false, colorMode: .never)
+        shell = ShellImpl(logger: logger)
+        swiftVersion = SwiftVersion(shell: shell)
         let configuration = Configuration()
         configuration.quiet = true
         graph = SourceGraph(configuration: configuration, logger: logger)
@@ -57,9 +59,10 @@ open class SourceGraphTestCase: XCTestCase {
         graph = SourceGraph(configuration: configuration, logger: logger)
         let pipeline = IndexPipeline(
             plan: newPlan,
-            graph: SynchronizedSourceGraph(graph: graph),
+            graph: SourceGraphMutex(graph: graph),
             logger: logger.contextualized(with: "index"),
-            configuration: configuration
+            configuration: configuration,
+            swiftVersion: swiftVersion
         )
         try! pipeline.perform()
 
@@ -68,7 +71,7 @@ open class SourceGraphTestCase: XCTestCase {
             graph: graph,
             logger: logger,
             configuration: configuration,
-            swiftVersion: SwiftVersion(shell: shell)
+            swiftVersion: swiftVersion
         ).perform()
         results = ScanResultBuilder.build(for: graph)
     }
@@ -206,6 +209,44 @@ open class SourceGraphTestCase: XCTestCase {
         scopeStack.removeLast()
     }
 
+    func assertSuperfluousIgnoreCommand(_ description: DeclarationDescription, file: StaticString = #file, line: UInt = #line) {
+        // For parameters, we need to check results directly since they're created at result-building time
+        if description.kind == .varParameter {
+            let found = Self.results.superfluousIgnoreCommandDeclarations.contains {
+                $0.kind == description.kind && $0.name == description.name
+            }
+            if !found {
+                XCTFail("Expected superfluous ignore command for parameter: \(description.name)", file: file, line: line)
+            }
+            return
+        }
+
+        guard let declaration = materialize(description, in: Self.allIndexedDeclarations, file: file, line: line) else { return }
+
+        if !Self.results.superfluousIgnoreCommandDeclarations.contains(declaration) {
+            XCTFail("Expected declaration to have superfluous ignore command: \(declaration)", file: file, line: line)
+        }
+    }
+
+    func assertNotSuperfluousIgnoreCommand(_ description: DeclarationDescription, file: StaticString = #file, line: UInt = #line) {
+        // For parameters, we need to check results directly since they're created at result-building time
+        if description.kind == .varParameter {
+            let found = Self.results.superfluousIgnoreCommandDeclarations.contains {
+                $0.kind == description.kind && $0.name == description.name
+            }
+            if found {
+                XCTFail("Expected no superfluous ignore command for parameter: \(description.name)", file: file, line: line)
+            }
+            return
+        }
+
+        guard let declaration = materialize(description, in: Self.allIndexedDeclarations, file: file, line: line) else { return }
+
+        if Self.results.superfluousIgnoreCommandDeclarations.contains(declaration) {
+            XCTFail("Expected declaration to not have superfluous ignore command: \(declaration)", file: file, line: line)
+        }
+    }
+
     func assertOverrides(_ description: DeclarationDescription, _ overrides: [CommentCommand.Override], file: StaticString = #file, line: UInt = #line) {
         guard let declaration = materialize(description, file: file, line: line) else {
             XCTFail("Failed to materialize \(description)", file: file, line: line)
@@ -303,6 +344,16 @@ private extension [ScanResult] {
     var redundantPublicAccessibilityDeclarations: Set<Declaration> {
         compactMapSet {
             if case .redundantPublicAccessibility = $0.annotation {
+                return $0.declaration
+            }
+
+            return nil
+        }
+    }
+
+    var superfluousIgnoreCommandDeclarations: Set<Declaration> {
+        compactMapSet {
+            if case .superfluousIgnoreCommand = $0.annotation {
                 return $0.declaration
             }
 

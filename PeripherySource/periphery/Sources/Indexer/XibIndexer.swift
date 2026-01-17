@@ -5,11 +5,15 @@ import SourceGraph
 import SystemPackage
 
 final class XibIndexer: Indexer {
+    enum XibError: Error {
+        case failedToParse(path: FilePath, underlyingError: Error)
+    }
+
     private let xibFiles: Set<FilePath>
-    private let graph: SynchronizedSourceGraph
+    private let graph: SourceGraphMutex
     private let logger: ContextualLogger
 
-    required init(xibFiles: Set<FilePath>, graph: SynchronizedSourceGraph, logger: ContextualLogger, configuration: Configuration) {
+    required init(xibFiles: Set<FilePath>, graph: SourceGraphMutex, logger: ContextualLogger, configuration: Configuration) {
         self.xibFiles = xibFiles
         self.graph = graph
         self.logger = logger.contextualized(with: "xib")
@@ -24,9 +28,15 @@ final class XibIndexer: Indexer {
             guard let self else { return }
 
             let elapsed = try Benchmark.measure {
-                try XibParser(path: xibPath)
-                    .parse()
-                    .forEach { self.graph.add($0) }
+                do {
+                    let refs = try XibParser(path: xibPath)
+                        .parse()
+                    self.graph.withLock { graph in
+                        refs.forEach { graph.add($0) }
+                    }
+                } catch {
+                    throw XibError.failedToParse(path: xibPath, underlyingError: error)
+                }
             }
 
             logger.debug("\(xibPath.string) (\(elapsed)s)")

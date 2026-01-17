@@ -1,4 +1,5 @@
 import Foundation
+import Shared
 import SourceGraph
 import SwiftSyntax
 
@@ -7,7 +8,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         location: Location,
         accessibility: Accessibility?,
         modifiers: [String],
-        attributes: [String],
+        attributes: Set<DeclarationAttribute>,
         commentCommands: [CommentCommand],
         variableType: String?,
         variableTypeLocations: Set<Location>,
@@ -19,11 +20,13 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         variableInitFunctionCallLocations: Set<Location>,
         functionCallMetatypeArgumentLocations: Set<Location>,
         typeInitializerLocations: Set<Location>,
+        variableInitExprLocations: Set<Location>,
         hasGenericFunctionReturnedMetatypeParameters: Bool
     )
 
     private let sourceLocationBuilder: SourceLocationBuilder
     private let typeSyntaxInspector: TypeSyntaxInspector
+    private let swiftVersion: SwiftVersion
     private(set) var results: [Result] = []
 
     public var resultsByLocation: [Location: Result] {
@@ -32,8 +35,9 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         }
     }
 
-    public init(sourceLocationBuilder: SourceLocationBuilder) {
+    public init(sourceLocationBuilder: SourceLocationBuilder, swiftVersion: SwiftVersion) {
         self.sourceLocationBuilder = sourceLocationBuilder
+        self.swiftVersion = swiftVersion
         typeSyntaxInspector = .init(sourceLocationBuilder: sourceLocationBuilder)
     }
 
@@ -46,7 +50,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -59,7 +62,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -71,7 +73,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -84,7 +85,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -97,7 +97,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -109,7 +108,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                 trivia: node.leadingTrivia,
                 enumCaseParameterClause: element.parameterClause,
                 at: element.name.positionAfterSkippingLeadingTrivia
-                , endPosition: node.endPosition
             )
         }
     }
@@ -119,11 +117,17 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
 
         if let memberType = node.extendedType.as(MemberTypeSyntax.self) {
             position = memberType.name.positionAfterSkippingLeadingTrivia
-        } else if let genericArgumentClause = node.extendedType.as(IdentifierTypeSyntax.self)?.genericArgumentClause {
-            // Generic protocol extensions in the form `extension Foo<Type>` have incorrect locations in the index store.
-            // This results in syntax metadata not being applied to the declaration due to the location mismatch. To
-            // workaround this, parse this node with the incorrect location.
-            position = genericArgumentClause.rightAngle.positionAfterSkippingLeadingTrivia
+        } else if let identifierType = node.extendedType.as(IdentifierTypeSyntax.self),
+                  let genericArgumentClause = identifierType.genericArgumentClause
+        {
+            if swiftVersion.version.isVersion(lessThanOrEqualTo: "6.2.3") {
+                // Swift <= 6.2.3: Generic protocol extensions in the form `extension Foo<Type>` have incorrect locations
+                // in the index store. This results in syntax metadata not being applied to the declaration due to the
+                // location mismatch. To workaround this, parse this node with the incorrect location.
+                position = genericArgumentClause.rightAngle.positionAfterSkippingLeadingTrivia
+            } else {
+                position = identifierType.name.positionAfterSkippingLeadingTrivia
+            }
         }
 
         parse(
@@ -133,7 +137,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericWhereClause: node.genericWhereClause,
             at: position
-            , endPosition: node.endPosition
         )
     }
 
@@ -147,7 +150,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -160,7 +162,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.initKeyword.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -170,7 +171,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
             at: node.deinitKeyword.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -184,7 +184,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.subscriptKeyword.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -202,8 +201,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     closureParameterClause: closureParameters,
                     returnClause: closureSignature?.returnClause,
                     variableInitFunctionCallExpr: functionCallExpr,
+                    variableInitExpr: binding.initializer?.value,
                     at: binding.positionAfterSkippingLeadingTrivia
-                    , endPosition: node.endPosition
                 )
             } else if let tuplePatternSyntax = binding.pattern.as(TuplePatternSyntax.self) {
                 visitVariableTupleBinding(
@@ -218,7 +217,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     attributes: node.attributes,
                     trivia: node.leadingTrivia.merging(node.trailingTrivia),
                     at: binding.positionAfterSkippingLeadingTrivia
-                    , endPosition: node.endPosition
                 )
             }
         }
@@ -248,7 +246,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     variableType: type?.type,
                     variableInitFunctionCallExpr: initializer?.expression.as(FunctionCallExprSyntax.self),
                     at: element.positionAfterSkippingLeadingTrivia
-                    , endPosition: node.endPosition
                 )
             }
         }
@@ -263,7 +260,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericWhereClause: node.genericWhereClause,
             typeInitializerClause: node.initializer,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -276,7 +272,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericWhereClause: node.genericWhereClause,
             typeInitializerClause: node.initializer,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -286,7 +281,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             attributes: nil,
             trivia: node.commentCommandTrivia,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -296,7 +290,6 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
             at: node.name.positionAfterSkippingLeadingTrivia
-            , endPosition: node.endPosition
         )
     }
 
@@ -315,19 +308,27 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         genericParameterClause: GenericParameterClauseSyntax? = nil,
         genericWhereClause: GenericWhereClauseSyntax? = nil,
         variableInitFunctionCallExpr: FunctionCallExprSyntax? = nil,
+        variableInitExpr: ExprSyntax? = nil,
         typeInitializerClause: TypeInitializerClauseSyntax? = nil,
         at position: AbsolutePosition
-		,
-        endPosition: AbsolutePosition? = nil
     ) {
         let modifierNames = modifiers?.map(\.name.text) ?? []
         let accessibility = modifierNames.mapFirst { Accessibility(rawValue: $0) }
-        let attributeNames = attributes?.compactMap {
-            AttributeSyntax($0)?.attributeName.trimmedDescription ?? AttributeSyntax($0)?.attributeName.firstToken(viewMode: .sourceAccurate)?.text
-        } ?? []
-        let location = endPosition != nil ? 
-            sourceLocationBuilder.location(from: position, to: endPosition!) :
-            sourceLocationBuilder.location(at: position)
+
+        var parsedAttributes: Set<DeclarationAttribute> = []
+
+        if let attributes {
+            parsedAttributes = attributes.compactMapSet { attr in
+                guard case let .attribute(attrSyntax) = attr else { return nil }
+
+                return DeclarationAttribute(
+                    name: attrSyntax.attributeName.trimmedDescription,
+                    arguments: attrSyntax.arguments?.trimmedDescription
+                )
+            }
+        }
+
+        let location = sourceLocationBuilder.location(at: position)
         let returnClauseTypeLocations = typeNameLocations(for: returnClause)
         let parameterClauseTypes = parameterClause?.parameters.map(\.type) ?? []
         let closureParameterClauseTypes = closureParameterClause?.parameters.compactMap(\.type) ?? []
@@ -348,7 +349,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             location: location,
             accessibility: accessibility,
             modifiers: modifierNames,
-            attributes: attributeNames,
+            attributes: parsedAttributes,
             commentCommands: CommentCommand.parseCommands(in: trivia),
             variableType: type(for: variableType),
             variableTypeLocations: typeLocations(for: variableType),
@@ -360,6 +361,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             variableInitFunctionCallLocations: locations(for: variableInitFunctionCallExpr),
             functionCallMetatypeArgumentLocations: functionCallMetatypeArgumentLocations(for: variableInitFunctionCallExpr),
             typeInitializerLocations: typeLocations(for: typeInitializerClause?.value),
+            variableInitExprLocations: memberBaseLocations(for: variableInitExpr),
             hasGenericFunctionReturnedMetatypeParameters: hasGenericFunctionReturnedMetatypeParameters
         ))
     }
@@ -375,11 +377,11 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
 
         let genericParameterNames = genericParameterClause
             .parameters
-            .mapSet { $0.name.trimmedDescription }
+            .mapSet { $0.name.trimmed.description }
 
         return parameterClauseTypes
             .contains {
-                if let baseTypeName = $0.as(MetatypeTypeSyntax.self)?.baseType.trimmedDescription,
+                if let baseTypeName = $0.as(MetatypeTypeSyntax.self)?.baseType.trimmed.description,
                    genericParameterNames.contains(baseTypeName),
                    returnClauseTypeLocations.contains(where: { $0.name == baseTypeName })
                 {
@@ -392,11 +394,13 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
 
     private func type(for typeSyntax: TypeSyntax?) -> String? {
         guard let typeSyntax else { return nil }
+
         return typeSyntaxInspector.type(for: typeSyntax)
     }
 
     private func typeLocations(for typeSyntax: TypeSyntax?) -> Set<Location> {
         guard let typeSyntax else { return [] }
+
         return typeSyntaxInspector.typeLocations(for: typeSyntax)
     }
 
@@ -517,6 +521,53 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                 }
             }
     }
+
+    /// Extracts locations of type references from member access expressions in variable initializers.
+    /// For example, in `[SomeEnum.foo]`, this returns the location of `SomeEnum`.
+    private func memberBaseLocations(for expr: ExprSyntax?) -> Set<Location> {
+        guard let expr else { return [] }
+
+        var locations = Set<Location>()
+        collectMemberBaseLocations(from: expr, into: &locations)
+        return locations
+    }
+
+    private func collectMemberBaseLocations(from expr: ExprSyntax, into locations: inout Set<Location>) {
+        if let arrayExpr = expr.as(ArrayExprSyntax.self) {
+            for element in arrayExpr.elements {
+                collectMemberBaseLocations(from: element.expression, into: &locations)
+            }
+        } else if let dictExpr = expr.as(DictionaryExprSyntax.self) {
+            if case let .elements(elements) = dictExpr.content {
+                for element in elements {
+                    collectMemberBaseLocations(from: element.key, into: &locations)
+                    collectMemberBaseLocations(from: element.value, into: &locations)
+                }
+            }
+        } else if let memberExpr = expr.as(MemberAccessExprSyntax.self) {
+            if let baseIdentifier = memberExpr.base?.as(DeclReferenceExprSyntax.self) {
+                let location = sourceLocationBuilder.location(at: baseIdentifier.positionAfterSkippingLeadingTrivia)
+                locations.insert(location)
+            } else if let base = memberExpr.base {
+                collectMemberBaseLocations(from: base, into: &locations)
+            }
+        } else if let tupleExpr = expr.as(TupleExprSyntax.self) {
+            for element in tupleExpr.elements {
+                collectMemberBaseLocations(from: element.expression, into: &locations)
+            }
+        } else if let callExpr = expr.as(FunctionCallExprSyntax.self) {
+            for argument in callExpr.arguments {
+                collectMemberBaseLocations(from: argument.expression, into: &locations)
+            }
+        } else if let ternaryExpr = expr.as(TernaryExprSyntax.self) {
+            collectMemberBaseLocations(from: ternaryExpr.thenExpression, into: &locations)
+            collectMemberBaseLocations(from: ternaryExpr.elseExpression, into: &locations)
+        } else if let sequenceExpr = expr.as(SequenceExprSyntax.self) {
+            for element in sequenceExpr.elements {
+                collectMemberBaseLocations(from: element, into: &locations)
+            }
+        }
+    }
 }
 
 // MARK: - Inline Comment Commands
@@ -527,21 +578,21 @@ private extension SyntaxProtocol {
     /// Matches uses like these:
     ///
     /// ```
-    /// // periphery:ignore
+    /// // ignore
     /// Foo {
     /// }
     /// ```
     ///
     /// ```
-    /// Foo { // periphery:ignore
+    /// Foo { // ignore
     /// }
     /// ```
     ///
     /// ```
-    /// Foo {} // periphery:ignore
+    /// Foo {} // ignore
     /// ```
     var commentCommandTrivia: Trivia {
-        var commandTrivia = leadingTrivia
+        var commandTrivia = leadingTrivia.merging(trailingTrivia)
 
         if let hasMemberBlock = self as? HasMemberBlock {
             commandTrivia = commandTrivia
@@ -553,6 +604,12 @@ private extension SyntaxProtocol {
             commandTrivia = commandTrivia
                 .merging(body.leftBrace.trailingTrivia)
                 .merging(body.rightBrace.trailingTrivia)
+        }
+
+        if let hasAccessorBlock = self as? HasAccessorBlock, let accessorBlock = hasAccessorBlock.accessorBlock {
+            commandTrivia = commandTrivia
+                .merging(accessorBlock.leftBrace.trailingTrivia)
+                .merging(accessorBlock.rightBrace.trailingTrivia)
         }
 
         return commandTrivia
@@ -579,3 +636,14 @@ private protocol HasCodeBody {
 extension FunctionDeclSyntax: HasCodeBody {}
 extension InitializerDeclSyntax: HasCodeBody {}
 extension DeinitializerDeclSyntax: HasCodeBody {}
+
+/// Identifies types with an AccessorBlockSyntax child
+private protocol HasAccessorBlock {
+    var accessorBlock: AccessorBlockSyntax? { get }
+}
+
+extension VariableDeclSyntax: HasAccessorBlock {
+    var accessorBlock: AccessorBlockSyntax? {
+        bindings.first?.accessorBlock
+    }
+}

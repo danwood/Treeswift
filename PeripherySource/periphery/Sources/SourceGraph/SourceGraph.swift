@@ -20,6 +20,8 @@ public final class SourceGraph {
     public private(set) var unusedModuleImports: Set<Declaration> = []
     public private(set) var assignOnlyProperties: Set<Declaration> = []
     public private(set) var extensions: [Declaration: Set<Declaration>] = [:]
+    public private(set) var explicitlyIgnoredDeclarations: Set<Declaration> = []
+    public private(set) var functionsWithIgnoredParameters: Set<Declaration> = []
 
     private var indexedModules: Set<String> = []
     private var unindexedExportedModules: Set<String> = []
@@ -87,6 +89,14 @@ public final class SourceGraph {
 
     func markIgnored(_ declaration: Declaration) {
         _ = ignoredDeclarations.insert(declaration)
+    }
+
+    public func markExplicitlyIgnored(_ declaration: Declaration) {
+        _ = explicitlyIgnoredDeclarations.insert(declaration)
+    }
+
+    public func markHasIgnoredParameters(_ declaration: Declaration) {
+        _ = functionsWithIgnoredParameters.insert(declaration)
     }
 
     public func markRetained(_ declaration: Declaration) {
@@ -248,6 +258,7 @@ public final class SourceGraph {
                 // extension SomeClass: SomeProtocol {}
                 // protocol SomeProtocol: SomeClass {}
                 guard !seenDeclarations.contains(inheritedDecl) else { continue }
+
                 references = inheritedTypeReferences(of: inheritedDecl, seenDeclarations: seenDeclarations.union([decl])).union(references)
             }
         }
@@ -330,6 +341,7 @@ public final class SourceGraph {
             .compactMap { declaration(withUsr: $0.usr) }
             .reduce(into: .init()) { result, decl in
                 guard decl.isOverride else { return }
+
                 result.insert(decl)
                 result.formUnion(allOverrideDeclarations(fromBase: decl))
             }
@@ -340,6 +352,7 @@ public final class SourceGraph {
 
         return inheritedTypeReferences(of: decl).contains {
             guard let name = $0.name else { return false }
+
             return [.protocol, .typealias].contains($0.kind) && codableTypes.contains(name)
         }
     }
@@ -349,6 +362,7 @@ public final class SourceGraph {
 
         return inheritedTypeReferences(of: decl).contains {
             guard let name = $0.name else { return false }
+
             return [.protocol, .typealias].contains($0.kind) && encodableTypes.contains(name)
         }
     }

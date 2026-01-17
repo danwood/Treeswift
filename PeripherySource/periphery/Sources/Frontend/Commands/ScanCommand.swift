@@ -6,7 +6,7 @@ import PeripheryKit
 import Shared
 import SystemPackage
 
-struct ScanCommand: FrontendCommand {
+struct ScanCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "scan",
         abstract: "Scan for unused code"
@@ -30,7 +30,7 @@ struct ScanCommand: FrontendCommand {
     @Option(parsing: .upToNextOption, help: "Schemes to build. All targets built by these schemes will be scanned")
     var schemes: [String] = defaultConfiguration.$schemes.defaultValue
 
-    @Option(help: "Output format (allowed: \(OutputFormat.allValueStrings.joined(separator: ", ")))")
+    @Option(help: "Output format")
     var format: OutputFormat = defaultConfiguration.$outputFormat.defaultValue
 
     @Flag(help: "Exclude test targets from indexing")
@@ -56,6 +56,9 @@ struct ScanCommand: FrontendCommand {
 
     @Flag(help: "Retain all public declarations, recommended for framework/library projects")
     var retainPublic: Bool = defaultConfiguration.$retainPublic.defaultValue
+
+    @Option(parsing: .upToNextOption, help: "Public SPIs (System Programming Interfaces) to check for unused code even when '--retain-public' is enabled")
+    var noRetainSPI: [String] = defaultConfiguration.$noRetainSPI.defaultValue
 
     @Flag(help: "Disable identification of redundant public accessibility")
     var disableRedundantPublicAnalysis: Bool = defaultConfiguration.$disableRedundantPublicAnalysis.defaultValue
@@ -123,6 +126,12 @@ struct ScanCommand: FrontendCommand {
     @Flag(help: "Only output results")
     var quiet: Bool = defaultConfiguration.$quiet.defaultValue
 
+    @Option(help: "Colored output mode")
+    var color: ColorOption = defaultConfiguration.$color.defaultValue
+
+    @Flag(name: .customLong("no-color"), help: .hidden)
+    var noColor: Bool = false
+
     @Option(help: "JSON package manifest path (obtained using `swift package describe --type json` or manually)")
     var jsonPackageManifestPath: FilePath?
 
@@ -143,6 +152,9 @@ struct ScanCommand: FrontendCommand {
 
     @Option(help: "Filter pattern applied to the Bazel top-level targets query")
     var bazelFilter: String?
+
+    @Option(help: "Path to a global index store populated by Bazel. If provided, will be used instead of individual module stores.")
+    var bazelIndexStore: FilePath?
 
     private static let defaultConfiguration = Configuration()
 
@@ -167,6 +179,7 @@ struct ScanCommand: FrontendCommand {
         configuration.apply(\.$outputFormat, format)
         configuration.apply(\.$retainFiles, retainFiles)
         configuration.apply(\.$retainPublic, retainPublic)
+        configuration.apply(\.$noRetainSPI, noRetainSPI)
         configuration.apply(\.$retainAssignOnlyProperties, retainAssignOnlyProperties)
         configuration.apply(\.$retainAssignOnlyPropertyTypes, retainAssignOnlyPropertyTypes)
         configuration.apply(\.$retainObjcAccessible, retainObjcAccessible)
@@ -181,6 +194,7 @@ struct ScanCommand: FrontendCommand {
         configuration.apply(\.$externalTestCaseClasses, externalTestCaseClasses)
         configuration.apply(\.$verbose, verbose)
         configuration.apply(\.$quiet, quiet)
+        configuration.apply(\.$color, noColor ? .never : color)
         configuration.apply(\.$disableUpdateCheck, disableUpdateCheck)
         configuration.apply(\.$strict, strict)
         configuration.apply(\.$indexStorePath, indexStorePath)
@@ -200,15 +214,18 @@ struct ScanCommand: FrontendCommand {
         configuration.apply(\.$genericProjectConfig, genericProjectConfig)
         configuration.apply(\.$bazel, bazel)
         configuration.apply(\.$bazelFilter, bazelFilter)
+        configuration.apply(\.$bazelIndexStore, bazelIndexStore)
 
         configuration.buildFilenameMatchers()
 
-        let logger = Logger(
-            quiet: configuration.quiet,
-            verbose: configuration.verbose
-        )
+        let logger = Logger(configuration: configuration)
         logger.contextualized(with: "version").debug(PeripheryVersion)
-        let shell = Shell(logger: logger)
+        let shell = ShellImpl(logger: logger) {
+            logger.warn(
+                "Termination can result in a corrupt index. Try the '--clean-build' flag if you get erroneous results such as false-positives and incorrect source file locations.",
+                newlinePrefix: true // Print a newline after ^C
+            )
+        }
         let swiftVersion = SwiftVersion(shell: shell)
         logger.debug(swiftVersion.fullVersion)
         try swiftVersion.validateVersion()
@@ -227,7 +244,7 @@ struct ScanCommand: FrontendCommand {
         let updateChecker = UpdateChecker(logger: logger, configuration: configuration)
         updateChecker.run()
 
-        let (results, graph) = try Scan(	// 🌲 Scan now returns a duple
+        let results = try Scan(
             configuration: configuration,
             logger: logger,
             swiftVersion: swiftVersion
@@ -245,6 +262,7 @@ struct ScanCommand: FrontendCommand {
 
         if let baselinePath = configuration.writeBaseline {
             let usrs = filteredResults
+                .filter(\.includeInBaseline)
                 .flatMapSet { $0.usrs }
                 .union(baseline?.usrs ?? [])
             let baseline = Baseline.v1(usrs: usrs.sorted())
@@ -253,9 +271,10 @@ struct ScanCommand: FrontendCommand {
         }
 
         let outputFormat = configuration.outputFormat
-        let formatter = outputFormat.formatter.init(configuration: configuration)
+        let formatter = outputFormat.formatter.init(configuration: configuration, logger: logger)
+        let colored = outputFormat.supportsColoredOutput && logger.isColoredOutputEnabled
 
-        if let output = try formatter.format(filteredResults, colored: outputFormat.supportsColoredOutput) {
+        if let output = try formatter.format(filteredResults, colored: colored) {
             if outputFormat.supportsAuxiliaryOutput {
                 logger.info("", canQuiet: true)
             }
@@ -265,7 +284,7 @@ struct ScanCommand: FrontendCommand {
             if !filteredResults.isEmpty, let resultsPath = configuration.writeResults {
                 var output = output
 
-                if outputFormat.supportsColoredOutput {
+                if colored {
                     // The formatted output contains ANSI escape codes, so we need to re-format
                     // with coloring disabled.
                     output = try formatter.format(filteredResults, colored: false) ?? ""
@@ -294,6 +313,7 @@ struct ScanCommand: FrontendCommand {
 }
 
 extension OutputFormat: ExpressibleByArgument {}
+extension ColorOption: ExpressibleByArgument {}
 
 extension FilePath: ArgumentParser.ExpressibleByArgument {
     public init?(argument: String) {

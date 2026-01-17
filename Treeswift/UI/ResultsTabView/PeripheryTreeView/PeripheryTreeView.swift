@@ -23,6 +23,8 @@ struct PeripheryTreeView: View {
 	@State private var hiddenFileIDs: Set<String> = []
 	@State private var removingFileIDs: Set<String> = []
 	@State private var hiddenWarningIDs: Set<String> = []
+	@State private var fileOperationProgress = FileOperationProgressState()
+	@State private var showProgressSheet = false
 	@Environment(\.undoManager) private var undoManager
 
 	var body: some View {
@@ -38,7 +40,13 @@ struct PeripheryTreeView: View {
 					selectedID: $selectedID,
 					removingFileIDs: $removingFileIDs,
 					hiddenWarningIDs: hiddenWarningIDs,
-					onIgnoreAllWarnings: ignoreAllWarnings
+					onIgnoreAllWarnings: ignoreAllWarnings,
+					onRemoveAllUnusedCode: removeAllUnusedCode,
+					onIgnoreAllWarningsInFolder: ignoreAllWarningsInFolder,
+					onRemoveAllUnusedCodeInFolder: removeAllUnusedCodeInFolder,
+					copyMenuLabel: copyMenuLabel,
+					copyPathMenuLabel: copyPathMenuLabel,
+					copyFilePathsToClipboard: copyFilePathsToClipboard
 				)
 				.frame(maxWidth: .infinity, alignment: .leading)
 			}
@@ -93,6 +101,15 @@ struct PeripheryTreeView: View {
 			if let warningID = notification.object as? String {
 				hiddenWarningIDs.remove(warningID)
 			}
+		}
+		.sheet(isPresented: $showProgressSheet) {
+			FileOperationProgressSheet(
+				progressState: fileOperationProgress,
+				onCancel: {
+					fileOperationProgress.isCancelled = true
+				}
+			)
+			.interactiveDismissDisabled()
 		}
 	}
 
@@ -387,6 +404,555 @@ struct PeripheryTreeView: View {
 		}
 		return nil
 	}
+
+	/**
+	Generates an appropriate "Copy" menu label based on warning count.
+
+	Returns "Copy Warning" for single warnings, "Copy Warnings" for multiple.
+	*/
+	private func copyMenuLabel(for node: TreeNode) -> String {
+		let warningCount = countWarnings(in: node)
+		return warningCount == 1 ? "Copy Warning" : "Copy Warnings"
+	}
+
+	/**
+	Generates an appropriate "Copy File Path" menu label based on file count.
+
+	Returns "Copy File Path" for single files, "Copy File Paths" for multiple.
+	*/
+	private func copyPathMenuLabel(for node: TreeNode) -> String {
+		let fileCount = countFiles(in: node)
+		return fileCount == 1 ? "Copy File Path" : "Copy File Paths"
+	}
+
+	/**
+	Counts warnings in a tree node respecting the current filter state.
+	*/
+	private func countWarnings(in node: TreeNode) -> Int {
+		switch node {
+		case .file(let file):
+			return scanResults.filter { result in
+				let declaration = result.declaration
+				let location = ScanResultHelper.location(from: declaration)
+
+				guard location.file.path.string == file.path else { return false }
+				guard filterState?.shouldShow(result: result, declaration: declaration) ?? true else { return false }
+
+				let usr = declaration.usrs.first ?? ""
+				let warningID = "\(location.file.path.string):\(usr)"
+				return !hiddenWarningIDs.contains(warningID)
+			}.count
+
+		case .folder(let folder):
+			return folder.children.reduce(0) { $0 + countWarnings(in: $1) }
+		}
+	}
+
+	/**
+	Counts files in a tree node respecting the current filter state.
+	*/
+	private func countFiles(in node: TreeNode) -> Int {
+		switch node {
+		case .file:
+			return 1
+
+		case .folder(let folder):
+			return folder.children.reduce(0) { $0 + countFiles(in: $1) }
+		}
+	}
+
+	/**
+	Copies file paths to clipboard.
+
+	Collects all file paths from the node and copies them to the clipboard, one per line.
+	*/
+	private func copyFilePathsToClipboard(for node: TreeNode) {
+		var paths: [String] = []
+		collectFilePaths(from: node, into: &paths)
+		let text = paths.joined(separator: "\n")
+		TreeCopyFormatter.copyToClipboard(text)
+	}
+
+	/**
+	Recursively collects file paths from a tree node.
+	*/
+	private func collectFilePaths(from node: TreeNode, into paths: inout [String]) {
+		switch node {
+		case .file(let file):
+			paths.append(file.path)
+
+		case .folder(let folder):
+			for child in folder.children {
+				collectFilePaths(from: child, into: &paths)
+			}
+		}
+	}
+
+	/**
+	Removes all unused code from a file.
+
+	Processes all warnings in the file and removes code where possible,
+	working from bottom to top to preserve line numbers during deletion.
+	Supports full undo/redo.
+	*/
+	private func removeAllUnusedCode(for file: FileNode) {
+		let result = file.removeAllUnusedCode(
+			scanResults: scanResults,
+			filterState: filterState,
+			sourceGraph: nil
+		)
+
+		switch result {
+		case .success(let removalResult):
+			// Invalidate file cache
+			SourceFileReader.invalidateCache(for: file.path)
+
+			// Hide all removed warnings with animation
+			for warningID in removalResult.removedWarningIDs {
+				_ = withAnimation(.easeInOut(duration: 0.3)) {
+					hiddenWarningIDs.insert(warningID)
+				}
+			}
+
+			// Register undo/redo
+			registerRemoveAllUndo(
+				filePath: removalResult.filePath,
+				originalContents: removalResult.originalContents,
+				modifiedContents: removalResult.modifiedContents,
+				removedWarningIDs: removalResult.removedWarningIDs
+			)
+
+			// Post notifications for each removed warning
+			for warningID in removalResult.removedWarningIDs {
+				NotificationCenter.default.post(
+					name: Notification.Name("PeripheryWarningCompleted"),
+					object: warningID
+				)
+			}
+
+		case .failure(let error):
+			print("Failed to remove unused code: \(error.localizedDescription)")
+		}
+	}
+
+	/**
+	Registers undo/redo for the remove all unused code action.
+	*/
+	private func registerRemoveAllUndo(
+		filePath: String,
+		originalContents: String,
+		modifiedContents: String,
+		removedWarningIDs: [String]
+	) {
+		// Define undo action
+		@MainActor
+		func performUndo() {
+			do {
+				try originalContents.write(toFile: filePath, atomically: true, encoding: .utf8)
+			} catch {
+				print("Failed to restore file during undo: \(error)")
+				return
+			}
+
+			SourceFileReader.invalidateCache(for: filePath)
+
+			Task { @MainActor in
+				// Restore all warnings
+				for warningID in removedWarningIDs {
+					hiddenWarningIDs.remove(warningID)
+
+					NotificationCenter.default.post(
+						name: Notification.Name("PeripheryWarningRestored"),
+						object: warningID
+					)
+				}
+
+				// Register redo
+				undoManager?.registerUndo(withTarget: NSObject()) { _ in
+					performRedo()
+				}
+				undoManager?.setActionName("Remove All Unused Code")
+			}
+		}
+
+		// Define redo action
+		@MainActor
+		func performRedo() {
+			do {
+				try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
+			} catch {
+				print("Failed to write file during redo: \(error)")
+				return
+			}
+
+			SourceFileReader.invalidateCache(for: filePath)
+
+			Task { @MainActor in
+				// Hide all warnings again
+				for warningID in removedWarningIDs {
+					hiddenWarningIDs.insert(warningID)
+
+					NotificationCenter.default.post(
+						name: Notification.Name("PeripheryWarningCompleted"),
+						object: warningID
+					)
+				}
+
+				// Register undo
+				undoManager?.registerUndo(withTarget: NSObject()) { _ in
+					performUndo()
+				}
+				undoManager?.setActionName("Remove All Unused Code")
+			}
+		}
+
+		// Register initial undo
+		undoManager?.registerUndo(withTarget: NSObject()) { _ in
+			performUndo()
+		}
+		undoManager?.setActionName("Remove All Unused Code")
+	}
+
+	/**
+	Ignores all warnings in a folder by inserting ignore directives in all files.
+
+	Processes each file in the folder (recursively) that has visible warnings based
+	on the current filter state. Supports full undo/redo.
+	*/
+	private func ignoreAllWarningsInFolder(folder: FolderNode) {
+		Task { @MainActor in
+			// Collect all files with warnings in this folder
+			var filesToIgnore: [FileNode] = []
+			collectFilesWithWarnings(from: .folder(folder), into: &filesToIgnore)
+
+			guard !filesToIgnore.isEmpty else {
+				print("No files with warnings in folder")
+				return
+			}
+
+			// Process each file with progress tracking
+			var fileModifications: [(path: String, original: String, modified: String, fileID: String)] = []
+			var processedFileIDs: [String] = []
+
+			await processFilesWithProgress(filesToIgnore) { file in
+				// Insert ignore comment
+				let result = try PeripheryIgnoreCommentInserter.insertIgnoreAllComment(at: file.path)
+
+				fileModifications.append((file.path, result.original, result.modified, file.id))
+				SourceFileReader.invalidateCache(for: file.path)
+				processedFileIDs.append(file.id)
+			}
+
+			// Only register undo if not cancelled
+			guard !fileOperationProgress.isCancelled else { return }
+
+			// Batch animation for all files at once
+			withAnimation(.easeInOut(duration: 0.3)) {
+				for fileID in processedFileIDs {
+					hiddenFileIDs.insert(fileID)
+				}
+			}
+
+			// Register undo/redo
+			registerIgnoreAllInFolderUndo(fileModifications: fileModifications)
+		}
+	}
+
+	/**
+	Registers undo/redo for ignoring all warnings in a folder.
+	*/
+	private func registerIgnoreAllInFolderUndo(
+		fileModifications: [(path: String, original: String, modified: String, fileID: String)]
+	) {
+		// Define undo action
+		@MainActor
+		func performUndo() {
+			for modification in fileModifications {
+				do {
+					try modification.original.write(toFile: modification.path, atomically: true, encoding: .utf8)
+				} catch {
+					print("Failed to restore file during undo: \(error)")
+					continue
+				}
+
+				SourceFileReader.invalidateCache(for: modification.path)
+
+				Task { @MainActor in
+					hiddenFileIDs.remove(modification.fileID)
+				}
+			}
+
+			undoManager?.registerUndo(withTarget: NSObject()) { _ in
+				performRedo()
+			}
+			undoManager?.setActionName("Ignore All Warnings")
+		}
+
+		// Define redo action
+		@MainActor
+		func performRedo() {
+			for modification in fileModifications {
+				do {
+					try modification.modified.write(toFile: modification.path, atomically: true, encoding: .utf8)
+				} catch {
+					print("Failed to write file during redo: \(error)")
+					continue
+				}
+
+				SourceFileReader.invalidateCache(for: modification.path)
+
+				Task { @MainActor in
+					hiddenFileIDs.insert(modification.fileID)
+				}
+			}
+
+			undoManager?.registerUndo(withTarget: NSObject()) { _ in
+				performUndo()
+			}
+			undoManager?.setActionName("Ignore All Warnings")
+		}
+
+		// Register initial undo
+		undoManager?.registerUndo(withTarget: NSObject()) { _ in
+			performUndo()
+		}
+		undoManager?.setActionName("Ignore All Warnings")
+	}
+
+	/**
+	Removes all unused code in a folder.
+
+	Processes each file in the folder (recursively) that has removable warnings.
+	Supports full undo/redo.
+	*/
+	private func removeAllUnusedCodeInFolder(folder: FolderNode) {
+		Task { @MainActor in
+			// Collect all files with warnings in this folder
+			var filesToProcess: [FileNode] = []
+			collectFilesWithWarnings(from: .folder(folder), into: &filesToProcess)
+
+			guard !filesToProcess.isEmpty else {
+				print("No files with warnings in folder")
+				return
+			}
+
+			// Process each file with progress tracking
+			var fileModifications: [(path: String, original: String, modified: String, warningIDs: [String])] = []
+			var allRemovedWarningIDs: [String] = []
+
+			await processFilesWithProgress(filesToProcess) { file in
+				// Process file
+				let result = file.removeAllUnusedCode(
+					scanResults: scanResults,
+					filterState: filterState,
+					sourceGraph: nil
+				)
+
+				switch result {
+				case .success(let removalResult):
+					SourceFileReader.invalidateCache(for: file.path)
+
+					fileModifications.append((
+						removalResult.filePath,
+						removalResult.originalContents,
+						removalResult.modifiedContents,
+						removalResult.removedWarningIDs
+					))
+
+					allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
+
+				case .failure(let error):
+					// Only log if it's not the "no removable warnings" case
+					let nsError = error as NSError
+					if nsError.domain == "FileNode" && nsError.code == 2 {
+						// This is normal - file has warnings but none are removable
+						// (e.g., .assignOnlyProperty, .redundantProtocol, or filtered warnings)
+					} else {
+						print("Failed to remove unused code from \(file.path): \(error.localizedDescription)")
+					}
+				}
+			}
+
+			// Only register undo if not cancelled
+			guard !fileOperationProgress.isCancelled else { return }
+
+			// Batch animation for all warnings at once
+			withAnimation(.easeInOut(duration: 0.3)) {
+				for warningID in allRemovedWarningIDs {
+					hiddenWarningIDs.insert(warningID)
+				}
+			}
+
+			// Post notifications for all warnings
+			for warningID in allRemovedWarningIDs {
+				NotificationCenter.default.post(
+					name: Notification.Name("PeripheryWarningCompleted"),
+					object: warningID
+				)
+			}
+
+			// Register undo/redo
+			if !fileModifications.isEmpty {
+				registerRemoveAllInFolderUndo(fileModifications: fileModifications)
+			}
+		}
+	}
+
+	/**
+	Registers undo/redo for removing all unused code in a folder.
+	*/
+	private func registerRemoveAllInFolderUndo(
+		fileModifications: [(path: String, original: String, modified: String, warningIDs: [String])]
+	) {
+		// Define undo action
+		@MainActor
+		func performUndo() {
+			for modification in fileModifications {
+				do {
+					try modification.original.write(toFile: modification.path, atomically: true, encoding: .utf8)
+				} catch {
+					print("Failed to restore file during undo: \(error)")
+					continue
+				}
+
+				SourceFileReader.invalidateCache(for: modification.path)
+
+				Task { @MainActor in
+					// Restore all warnings
+					for warningID in modification.warningIDs {
+						hiddenWarningIDs.remove(warningID)
+
+						NotificationCenter.default.post(
+							name: Notification.Name("PeripheryWarningRestored"),
+							object: warningID
+						)
+					}
+				}
+			}
+
+			undoManager?.registerUndo(withTarget: NSObject()) { _ in
+				performRedo()
+			}
+			undoManager?.setActionName("Remove All Unused Code")
+		}
+
+		// Define redo action
+		@MainActor
+		func performRedo() {
+			for modification in fileModifications {
+				do {
+					try modification.modified.write(toFile: modification.path, atomically: true, encoding: .utf8)
+				} catch {
+					print("Failed to write file during redo: \(error)")
+					continue
+				}
+
+				SourceFileReader.invalidateCache(for: modification.path)
+
+				Task { @MainActor in
+					// Hide all warnings again
+					for warningID in modification.warningIDs {
+						hiddenWarningIDs.insert(warningID)
+
+						NotificationCenter.default.post(
+							name: Notification.Name("PeripheryWarningCompleted"),
+							object: warningID
+						)
+					}
+				}
+			}
+
+			undoManager?.registerUndo(withTarget: NSObject()) { _ in
+				performUndo()
+			}
+			undoManager?.setActionName("Remove All Unused Code")
+		}
+
+		// Register initial undo
+		undoManager?.registerUndo(withTarget: NSObject()) { _ in
+			performUndo()
+		}
+		undoManager?.setActionName("Remove All Unused Code")
+	}
+
+	/**
+	Processes multiple files with progress tracking and cancellation support.
+	*/
+	private func processFilesWithProgress(
+		_ files: [FileNode],
+		operation: @escaping (FileNode) async throws -> Void
+	) async {
+		fileOperationProgress.totalCount = files.count
+		fileOperationProgress.processedCount = 0
+		fileOperationProgress.isCancelled = false
+		fileOperationProgress.isProcessing = true
+
+		// Only show progress sheet if operation takes longer than threshold
+		let showProgressTask = Task { @MainActor in
+			try? await Task.sleep(for: .milliseconds(300))
+			if !fileOperationProgress.isCancelled && fileOperationProgress.isProcessing {
+				showProgressSheet = true
+			}
+		}
+
+		defer {
+			showProgressTask.cancel()
+			showProgressSheet = false
+			fileOperationProgress.reset()
+		}
+
+		for (index, file) in files.enumerated() {
+			// Check cancellation at file boundaries
+			guard !fileOperationProgress.isCancelled else {
+				break
+			}
+
+			fileOperationProgress.currentFile = file.path
+			fileOperationProgress.processedCount = index
+
+			// Yield to UI updates
+			await Task.yield()
+
+			do {
+				try await operation(file)
+			} catch {
+				print("Error processing \(file.path): \(error)")
+				// Continue processing remaining files
+			}
+		}
+
+		fileOperationProgress.processedCount = files.count
+	}
+
+	/**
+	Collects all file nodes that have warnings from a tree node.
+	*/
+	private func collectFilesWithWarnings(from node: TreeNode, into files: inout [FileNode]) {
+		switch node {
+		case .file(let file):
+			// Check if file has any visible warnings
+			let hasWarnings = scanResults.contains { result in
+				let declaration = result.declaration
+				let location = ScanResultHelper.location(from: declaration)
+
+				guard location.file.path.string == file.path else { return false }
+				guard filterState?.shouldShow(result: result, declaration: declaration) ?? true else { return false }
+
+				let usr = declaration.usrs.first ?? ""
+				let warningID = "\(location.file.path.string):\(usr)"
+				return !hiddenWarningIDs.contains(warningID)
+			}
+
+			if hasWarnings {
+				files.append(file)
+			}
+
+		case .folder(let folder):
+			for child in folder.children {
+				collectFilesWithWarnings(from: child, into: &files)
+			}
+		}
+	}
 }
 
 private struct TreeNodeView: View {
@@ -399,6 +965,12 @@ private struct TreeNodeView: View {
 	let hiddenWarningIDs: Set<String>
 	var indentLevel: Int = 0
 	let onIgnoreAllWarnings: (FileNode) -> Void
+	let onRemoveAllUnusedCode: (FileNode) -> Void
+	let onIgnoreAllWarningsInFolder: (FolderNode) -> Void
+	let onRemoveAllUnusedCodeInFolder: (FolderNode) -> Void
+	let copyMenuLabel: (TreeNode) -> String
+	let copyPathMenuLabel: (TreeNode) -> String
+	let copyFilePathsToClipboard: (TreeNode) -> Void
 
 	var body: some View {
 		switch node {
@@ -416,7 +988,13 @@ private struct TreeNodeView: View {
 						removingFileIDs: $removingFileIDs,
 						hiddenWarningIDs: hiddenWarningIDs,
 						indentLevel: indentLevel + 1,
-						onIgnoreAllWarnings: onIgnoreAllWarnings
+						onIgnoreAllWarnings: onIgnoreAllWarnings,
+						onRemoveAllUnusedCode: onRemoveAllUnusedCode,
+						onIgnoreAllWarningsInFolder: onIgnoreAllWarningsInFolder,
+						onRemoveAllUnusedCodeInFolder: onRemoveAllUnusedCodeInFolder,
+						copyMenuLabel: copyMenuLabel,
+						copyPathMenuLabel: copyPathMenuLabel,
+						copyFilePathsToClipboard: copyFilePathsToClipboard
 					)
 				}
 			} label: {
@@ -443,16 +1021,30 @@ private struct TreeNodeView: View {
 						}
 				)
 				.contextMenu {
-					Button("Copy") {
+					Button(copyMenuLabel(.folder(folder))) {
 						let text = TreeCopyFormatter.formatForCopy(node: .folder(folder), scanResults: scanResults, filterState: filterState)
 						TreeCopyFormatter.copyToClipboard(text)
 					}
 					.keyboardShortcut("c", modifiers: .command)
 
+					Button(copyPathMenuLabel(.folder(folder))) {
+						copyFilePathsToClipboard(.folder(folder))
+					}
+
 					Divider()
 
 					Button("Open in Finder") {
 						openFolderInFinder(path: folder.path)
+					}
+
+					Divider()
+
+					Button("Remove All Unused Code") {
+						onRemoveAllUnusedCodeInFolder(folder)
+					}
+
+					Button("Ignore All Warnings") {
+						onIgnoreAllWarningsInFolder(folder)
 					}
 				}
 			}
@@ -484,11 +1076,15 @@ private struct TreeNodeView: View {
 					}
 			)
 			.contextMenu {
-				Button("Copy") {
+				Button(copyMenuLabel(.file(file))) {
 					let text = TreeCopyFormatter.formatForCopy(node: .file(file), scanResults: scanResults, filterState: filterState)
 					TreeCopyFormatter.copyToClipboard(text)
 				}
 				.keyboardShortcut("c", modifiers: .command)
+
+				Button(copyPathMenuLabel(.file(file))) {
+					copyFilePathsToClipboard(.file(file))
+				}
 
 				Divider()
 
@@ -497,6 +1093,10 @@ private struct TreeNodeView: View {
 				}
 
 				Divider()
+
+				Button("Remove All Unused Code") {
+					onRemoveAllUnusedCode(file)
+				}
 
 				Button("Ignore All Warnings") {
 					onIgnoreAllWarnings(file)
