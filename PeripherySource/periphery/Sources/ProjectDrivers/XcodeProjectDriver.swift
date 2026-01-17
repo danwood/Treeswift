@@ -14,18 +14,21 @@
         private let xcodebuild: Xcodebuild
         private let project: XcodeProjectlike
         private let schemes: Set<String>
+        private weak var progressDelegate: ScanProgressDelegate?
 
         public convenience init(
             projectPath: FilePath,
             configuration: Configuration,
             shell: Shell,
             logger: Logger
-        ) throws {
+			, progressDelegate: ScanProgressDelegate? = nil
+       ) throws {
             if configuration.outputFormat.supportsAuxiliaryOutput {
                 let asterisk = logger.colorize("*", .boldGreen)
                 logger.info("\(asterisk) Inspecting project...")
             }
 
+			// 🌲 Remove "Inspecting project..." output; use progressDelegate instead
             let xcodebuild = Xcodebuild(shell: shell, logger: logger)
 
             guard !configuration.schemes.isEmpty else {
@@ -76,6 +79,7 @@
                 xcodebuild: xcodebuild,
                 project: project,
                 schemes: schemes
+                , progressDelegate: progressDelegate
             )
         }
 
@@ -85,12 +89,14 @@
             xcodebuild: Xcodebuild,
             project: XcodeProjectlike,
             schemes: Set<String>
+            , progressDelegate: ScanProgressDelegate? = nil
         ) {
             self.logger = logger
             self.configuration = configuration
             self.xcodebuild = xcodebuild
             self.project = project
             self.schemes = schemes
+            self.progressDelegate = progressDelegate
         }
     }
 
@@ -108,10 +114,15 @@
                     logger.info("\(asterisk) Building \(scheme)...")
                 }
 
+				// 🌲 Remove "Building \(scheme)..." output; use progressDelegate instead
+				try Task.checkCancellation()
+                progressDelegate?.didStartBuilding(scheme: scheme)
+
                 try xcodebuild.build(project: project,
                                      scheme: scheme,
                                      allSchemes: Array(schemes),
-                                     additionalArguments: configuration.buildArguments)
+                                     additionalArguments: configuration.buildArguments
+                                     , excludeTests: configuration.excludeTests)
             }
         }
 
@@ -124,7 +135,8 @@
 
             let targets = project.targets
             try targets.forEach { try $0.identifyFiles() }
-            let excludedTestTargets = configuration.excludeTests ? project.targets.filter(\.isTestTarget).mapSet(\.name) : []
+			// 🌲 Below changed from mapSet(\.name) to targetNameToModuleName($0.name) to convert space to _
+            let excludedTestTargets = configuration.excludeTests ? project.targets.filter(\.isTestTarget).mapSet { targetNameToModuleName($0.name) } : []
             let collector = SourceFileCollector(
                 indexStorePaths: indexStorePaths,
                 excludedTestTargets: excludedTestTargets,
@@ -144,6 +156,13 @@
                 xcDataModelPaths: xcDataModelPaths,
                 xcMappingModelPaths: xcMappingModelPaths
             )
+        }
+        
+        // MARK: - Private
+        // FIXME: 🌲 Can this be simplified??
+        private func targetNameToModuleName(_ targetName: String) -> String {
+            // Xcode converts spaces to underscores in module names
+            return targetName.replacingOccurrences(of: " ", with: "_")
         }
     }
 #endif

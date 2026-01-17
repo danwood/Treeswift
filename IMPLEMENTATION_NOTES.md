@@ -83,15 +83,16 @@ The `PeripherySource/periphery` directory is managed as a **git subtree** tracki
 # Add upstream remote
 git remote add periphery-upstream https://github.com/peripheryapp/periphery.git
 
-# Add periphery as subtree
-git subtree add --prefix=PeripherySource/periphery periphery-upstream 3.2.0 --squash
+# Current baseline: clean upstream 5a4ac8b (post-3.4.0) at commit 4dd2a038
 ```
 
 **To update to a newer released version of Periphery:**
 
+See [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md) for the complete update workflow.
+
 ```bash
-# Pull a specific version tag (e.g., version 3.3.0)
-git subtree pull --prefix=PeripherySource/periphery periphery-upstream 3.3.0 --squash
+# Example: Pull a specific version tag (e.g., version 3.5.0)
+git subtree pull --prefix=PeripherySource/periphery periphery-upstream 3.5.0 --squash
 
 # After the merge, verify local modifications are still present
 
@@ -127,7 +128,7 @@ git commit -m "Re-apply local modifications after periphery update to master"
 - Simple merge workflow for pulling upstream changes
 - The local package can be referenced directly in Xcode
 
-**Source:** https://github.com/peripheryapp/periphery (Based on version 3.2.0, MIT License, managed as git subtree)
+**Source:** https://github.com/peripheryapp/periphery (Based on 3.4.0+ post-release commit 5a4ac8b, MIT License, managed as git subtree)
 
 ### 2. PeripheryScanRunner Wrapper
 

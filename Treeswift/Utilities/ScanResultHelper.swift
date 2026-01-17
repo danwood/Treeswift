@@ -81,6 +81,8 @@ struct ScanResultHelper {
 				suffix = "is redundant as it's never used as an existential type"
 			case .redundantPublicAccessibility:
 				suffix = "is declared public, but not used outside of this module"
+			case .superfluousIgnoreCommand:
+				suffix = "is a superfluous periphery ignore command"
 			}
 
 			return "\(prefix) '\(name)' \(suffix)"
@@ -89,6 +91,8 @@ struct ScanResultHelper {
 		}
 	}
 
+	// FIXME: Can these two functions be consolidated?
+	
 	// Format description as AttributedString with bold symbol names
 	nonisolated static func formatAttributedDescription(declaration: Declaration, annotation: ScanResult.Annotation) -> AttributedString {
 		let kindDisplayName = kindDisplayName(from: declaration)
@@ -116,6 +120,8 @@ struct ScanResultHelper {
 				suffix = " is redundant as it's never used as an existential type"
 			case .redundantPublicAccessibility:
 				suffix = " is declared public, but not used outside of this module"
+			case .superfluousIgnoreCommand:
+				suffix = "is a superfluous periphery ignore command"
 			}
 			result.append(AttributedString(suffix))
 		} else {

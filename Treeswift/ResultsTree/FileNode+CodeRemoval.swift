@@ -43,6 +43,9 @@ extension FileNode {
 			true
 		case .assignOnlyProperty, .redundantProtocol:
 			false
+		case .superfluousIgnoreCommand:
+			false
+			// FIXME: Should be able to remove this!
 		}
 	}
 

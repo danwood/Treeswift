@@ -106,6 +106,6 @@ lhs.file == rhs.file && lhs.line == rhs.line && lhs.column == rhs.column
 && lhs.endLine == rhs.endLine && lhs.endColumn == rhs.endColumn
 ```
 
-**Verify changes:** `git diff a2fad16 HEAD -- PeripherySource/periphery/` should show minimal modifications.
+**Verify changes:** `git diff 4dd2a038 HEAD -- PeripherySource/periphery/` should show minimal modifications.
 
 **Document all changes** in [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md)

@@ -10,6 +10,7 @@ import SwiftUI
 import PeripheryKit
 import Configuration
 import SourceGraph
+import Logger
 import Foundation
 
 @Observable
@@ -115,7 +116,9 @@ final class ScanState {
 						if logToConsole && !results.isEmpty {
 							Task.detached(priority: .utility) {
 								do {
-									let formatter = config.outputFormat.formatter.init(configuration: config)
+									// Create logger for formatting (matches PeripheryScanRunner pattern)
+									let logger = Logger(quiet: false, verbose: false, colorMode: .never)
+									let formatter = config.outputFormat.formatter.init(configuration: config, logger: logger)
 									if let output = try formatter.format(results, colored: false) {
 										"=== Periphery Output ===\n\(output)".logToConsole()
 									}

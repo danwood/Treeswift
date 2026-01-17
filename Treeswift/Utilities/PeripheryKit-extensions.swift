@@ -33,6 +33,7 @@ extension ScanResult.Annotation {
 		case .assignOnlyProperty: "assignOnlyProperty"
 		case .redundantProtocol: "redundantProtocol"
 		case .redundantPublicAccessibility: "redundantPublicAccessibility"
+		case .superfluousIgnoreCommand: "superfluousIgnoreCommand"
 		}
 	}
 }
@@ -47,6 +48,7 @@ extension ScanResult.Annotation: @retroactive RawRepresentable {
 		case .assignOnlyProperty: 1
 		case .redundantProtocol: 2
 		case .redundantPublicAccessibility: 3
+		case .superfluousIgnoreCommand: 4
 		}
 	}
 

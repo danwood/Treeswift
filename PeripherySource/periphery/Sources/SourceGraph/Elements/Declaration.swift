@@ -1,6 +1,6 @@
 import Foundation
 
-public final class Declaration {
+public final class Declaration: @unchecked Sendable {
     public enum Kind: String, RawRepresentable, CaseIterable {
         case `associatedtype`
         case `class`
@@ -213,9 +213,9 @@ public final class Declaration {
             }
         }
     }
-
-    public let location: Location
-    public var attributes: Set<DeclarationAttribute> = []
+	
+	public var location: Location	// 🌲 FIXME: Can we return this back to a 'let'?
+	public var attributes: Set<DeclarationAttribute> = []
     public var modifiers: Set<String> = []
     public var accessibility: DeclarationAccessibility = .init(value: .internal, isExplicit: false)
     public let kind: Kind

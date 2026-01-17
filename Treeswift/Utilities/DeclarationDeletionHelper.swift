@@ -20,7 +20,7 @@ struct DeclarationDeletionHelper {
 	static func findDeletionStartLine(
 		lines: [String],
 		declarationLine: Int,
-		attributes: Set<String>
+		attributes: Set<DeclarationAttribute>
 	) -> Int {
 		guard declarationLine > 1 else { return declarationLine }
 

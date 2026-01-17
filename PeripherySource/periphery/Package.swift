@@ -1,6 +1,11 @@
 // swift-tools-version:6.0
 import PackageDescription
 
+// 🌲 MODIFIED VERSION FOR LOCAL PACKAGE USAGE
+// This Package.swift has been modified from the upstream Periphery package to enable
+// deep integration with Treeswift. All changes expose internal modules as library
+// products so they can be imported by external packages.
+
 var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-system", from: "1.0.0"),
     .package(url: "https://github.com/jpsim/Yams", from: "6.0.0"),
@@ -31,8 +36,20 @@ var projectDriverDependencies: [PackageDescription.Target.Dependency] = [
 #endif
 
 var targets: [PackageDescription.Target] = [
+    // 🌲 MODIFICATION: Split Frontend into executable + library
+    // Original: Single executableTarget with all Frontend code
+    // Modified: Separated to allow FrontendLib to be imported by external packages
     .executableTarget(
         name: "Frontend",
+        dependencies: [
+            .target(name: "FrontendLib"),
+            .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        ],
+        path: "Sources/Frontend",
+        sources: ["main.swift"]
+    ),
+    .target(
+        name: "FrontendLib",
         dependencies: [
             .target(name: "Shared"),
             .target(name: "Configuration"),
@@ -42,6 +59,8 @@ var targets: [PackageDescription.Target] = [
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "FilenameMatcher", package: "swift-filename-matcher"),
         ]
+        , path: "Sources/Frontend",
+        exclude: ["main.swift"]
     ),
     .target(
         name: "Configuration",
@@ -180,6 +199,20 @@ let package = Package(
     products: [
         .executable(name: "periphery", targets: ["Frontend"]),
         .library(name: "PeripheryKit", targets: ["PeripheryKit"]),
+
+		// 🌲 MODIFICATION: Additional library products exposed for external package integration
+		// These internal modules are exposed to allow Treeswift and other consumers
+		// to import and use Periphery's internals directly for deep integration
+        .library(name: "Configuration", targets: ["Configuration"]),
+        .library(name: "SourceGraph", targets: ["SourceGraph"]),
+        .library(name: "Shared", targets: ["Shared"]),
+        .library(name: "Logger", targets: ["Logger"]),
+        .library(name: "Extensions", targets: ["Extensions"]),
+        .library(name: "Indexer", targets: ["Indexer"]),
+        .library(name: "ProjectDrivers", targets: ["ProjectDrivers"]),
+        .library(name: "SyntaxAnalysis", targets: ["SyntaxAnalysis"]),
+        .library(name: "XcodeSupport", targets: ["XcodeSupport"]),
+        .library(name: "FrontendLib", targets: ["FrontendLib"]),
     ],
     dependencies: dependencies,
     targets: targets,

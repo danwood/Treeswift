@@ -48,7 +48,8 @@ enum DeclarationIconHelper {
 	}
 
 	nonisolated static func isMainApp(_ declaration: Declaration) -> Bool {
-		if declaration.attributes.contains("main") && declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
+		// FIXME: Is it right to use description here?
+		if declaration.attributes.description.contains("main") && declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
 			return true
 		}
 

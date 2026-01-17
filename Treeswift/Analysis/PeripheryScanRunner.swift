@@ -18,10 +18,76 @@ import Extensions
 import FrontendLib
 
 // Custom Shell that ensures PATH includes developer tools
-fileprivate class GUIShell: Shell {
-	nonisolated required init(logger: Logger) {
-		super.init(logger: logger)
+fileprivate final class GUIShell: Shell {
+	@discardableResult
+	func exec(_ args: [String]) throws -> String {
+		let (status, stdout, stderr) = try execute(args)
 
+		if status == 0 {
+			return stdout
+		}
+
+		throw PeripheryError.shellCommandFailed(
+			cmd: args,
+			status: status,
+			output: [stdout, stderr].filter { !$0.isEmpty }.joined(separator: "\n").trimmed
+		)
+	}
+
+	@discardableResult
+	func execStatus(_ args: [String]) throws -> Int32 {
+		let (status, _, _) = try execute(args, captureOutput: false)
+		return status
+	}
+
+	private func execute(
+		_ cmd: [String],
+		captureOutput: Bool = true
+	) throws -> (Int32, String, String) {
+		let process = Process()
+		process.launchPath = "/bin/bash"
+		process.arguments = ["-c", cmd.joined(separator: " ")]
+
+		var stdoutPipe: Pipe?
+		var stderrPipe: Pipe?
+
+		if captureOutput {
+			stdoutPipe = Pipe()
+			stderrPipe = Pipe()
+			process.standardOutput = stdoutPipe
+			process.standardError = stderrPipe
+		}
+
+		process.launch()
+
+		var standardOutput = ""
+		var standardError = ""
+
+		if let stdoutData = try stdoutPipe?.fileHandleForReading.readToEnd() {
+			guard let stdoutStr = String(data: stdoutData, encoding: .utf8) else {
+				throw PeripheryError.shellOutputEncodingFailed(
+					cmd: cmd,
+					encoding: .utf8
+				)
+			}
+			standardOutput = stdoutStr
+		}
+
+		if let stderrData = try stderrPipe?.fileHandleForReading.readToEnd() {
+			guard let stderrStr = String(data: stderrData, encoding: .utf8) else {
+				throw PeripheryError.shellOutputEncodingFailed(
+					cmd: cmd,
+					encoding: .utf8
+				)
+			}
+			standardError = stderrStr
+		}
+
+		process.waitUntilExit()
+		return (process.terminationStatus, standardOutput, standardError)
+	}
+
+	nonisolated required init(logger: Logger) {
 		// GUI apps don't inherit the full PATH from the shell
 		// Add common locations for Xcode and developer tools
 		var path = ProcessInfo.processInfo.environment["PATH"] ?? ""
@@ -249,7 +315,7 @@ final class PeripheryScanRunner: Sendable {
 		// Create logger with configuration settings
 		let logger = Logger(
 			quiet: configuration.quiet,
-			verbose: configuration.verbose
+			verbose: configuration.verbose, colorMode: .never
 		)
 
 		// Use custom shell that sets up PATH for GUI apps
@@ -307,9 +373,9 @@ final class PeripheryScanRunner: Sendable {
 		// Write formatted results to file if specified (from ScanCommand.run():265-275)
 		if !filteredResults.isEmpty, let resultsPath = configuration.writeResults {
 			let outputFormat = configuration.outputFormat
-			let formatter = outputFormat.formatter.init(configuration: configuration)
+			let formatter = outputFormat.formatter.init(configuration: configuration, logger: logger)
 
-			if let output = try formatter.format(filteredResults, colored: false) {
+			if let output: String = try formatter.format(filteredResults, colored: false) {
 				try output.write(to: resultsPath.url, atomically: true, encoding: .utf8)
 			}
 		}
