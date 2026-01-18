@@ -1,0 +1,9 @@
+.build
+.git
+.mise
+.release
+Tests/AccessibilityTests/AccessibilityProject/.build
+Tests/Fixtures/.build
+Tests/SPMTests/SPMProject/.build
+Tests/SPMTests/SPMProjectMacOS/.build
+Tests/XcodeTests/UIKitProject/LocalPackages/LocalPackage/.build

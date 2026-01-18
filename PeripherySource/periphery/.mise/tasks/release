@@ -1,0 +1,132 @@
+#!/bin/bash
+
+set -e
+
+GREEN='\033[1;32m'
+NC='\033[0m' # No Color
+
+confirm () {
+  green "$1 (y/n): "
+  read answer
+
+  if [ "$answer" != "y" ]
+  then
+    exit 0
+  fi
+}
+
+green () {
+  printf "${GREEN}${1}${NC}"
+}
+
+codesign () {
+  /usr/bin/codesign --force --options=runtime --sign "Developer ID Application: Ian Leitch (8L8F8HSTR4)" "$1"
+}
+
+notarize () {
+  xcrun notarytool submit --keychain-profile "PeripheryNotarize" --wait "$1"
+}
+
+xcodebuild -version
+
+printf "\nVersion: "
+read version
+printf "Got it: $version\n"
+
+confirm "\nContinue?"
+
+rm -rf .release
+mkdir .release
+
+cat .mise/tasks/scripts/Version.swift.template | sed s/__VERSION__/${version}/ > Sources/Frontend/Version.swift
+cat .mise/tasks/scripts/artifactbundle_info.json.template | sed s/__VERSION__/${version}/ > .release/info.json
+ruby -e "file = 'MODULE.bazel'; content = File.read(file); content.sub!(/version = \".+?\"/, 'version = \"${version}\"'); File.write(file, content)"
+
+echo -e "\nUpdate CHANGELOG.md"
+confirm "Continue?"
+
+mise r build --arch release
+
+if [ ! -f .release/periphery ]; then
+  echo "ERROR: Missing release binary?"
+  exit 1
+fi
+
+echo "Testing release binary..."
+for i in {1..3}; do
+    .release/periphery scan --strict
+done
+
+cp LICENSE.md MODULE.bazel BUILD.bazel .release/
+cp -R bazel Sources .release/
+rm -r .release/bazel/dev
+cp .mise/tasks/scripts/release_notes.md.template .release/release_notes.md
+
+confirm "\nContinue?"
+
+# Codesign
+cd .release
+codesign periphery
+
+# Archive
+zip_filename="periphery-${version}.zip"
+zip -r "${zip_filename}" periphery LICENSE.md
+codesign "${zip_filename}"
+
+echo -e "\n${zip_filename} checksum:"
+sha256=$( shasum -a 256 ${zip_filename} | awk '{print $1}' )
+echo ${sha256}
+
+macos_artifact="periphery-${version}-macos"
+artifactbundle="periphery-${version}.artifactbundle"
+zip_artifactbundle="periphery-${version}.artifactbundle.zip"
+
+mkdir -p ${macos_artifact}/bin
+cp periphery ${macos_artifact}/bin
+mkdir ${artifactbundle}
+cp -R ${macos_artifact} LICENSE.md info.json ${artifactbundle}
+zip -r "${zip_artifactbundle}" periphery-${version}.artifactbundle
+codesign "${zip_artifactbundle}"
+
+echo -e "\n${zip_artifactbundle} checksum:"
+artifactbundle_sha256=$( shasum -a 256 ${zip_artifactbundle} | awk '{print $1}' )
+echo ${artifactbundle_sha256}
+
+bazel_zip_filename="periphery-bazel-${version}.zip"
+zip -r "${bazel_zip_filename}" LICENSE.md MODULE.bazel BUILD.bazel bazel Sources
+codesign "${bazel_zip_filename}"
+
+# Notarize
+notarize "${zip_filename}"
+notarize "${zip_artifactbundle}"
+
+echo -e "\nVerify changes"
+confirm "Continue?"
+
+# GitHub
+git commit -a -m "Release ${version}"
+git tag -a ${version} -m "Periphery ${version}"
+git push origin master
+git push origin ${version}
+
+cursor --wait release_notes.md
+echo -e "$(cat release_notes.md)" > release_notes.md
+echo
+echo "Release Notes:"
+cat release_notes.md
+echo
+
+confirm "Continue?"
+
+is_latest="true"
+
+if [[ ${version} == *"beta"* ]]; then
+  is_latest="false"
+fi
+
+cd ..
+gh release create --latest="${is_latest}" -F .release/release_notes.md "${version}" ".release/${zip_filename}" ".release/${zip_artifactbundle}" ".release/${bazel_zip_filename}"
+
+echo "Next steps:"
+echo "* Update Homebrew formula"
+echo "* Update Bazel Central Registry"
