@@ -1,0 +1,381 @@
+import Foundation
+import SourceGraph
+import SwiftParser
+import SwiftSyntax
+import SystemPackage
+
+public protocol Item {
+    var items: [Item] { get }
+}
+
+public struct Function: Item, Hashable {
+    public static func == (lhs: Function, rhs: Function) -> Bool {
+        lhs.location == rhs.location
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(location)
+    }
+
+    public let name: String
+    public let fullName: String
+    public let location: Location
+    public let items: [Item]
+    public let parameters: [Parameter]
+    public let genericParameters: [String]
+    public let attributes: [Attribute]
+}
+
+public struct Attribute {
+    let name: String
+    let arguments: String?
+}
+
+public struct Parameter: Item, Hashable {
+    public enum PartKind {
+        case identifier(String)
+        case wildcard
+
+        public var text: String {
+            switch self {
+            case let .identifier(name):
+                name
+            case .wildcard:
+                "_"
+            }
+        }
+    }
+
+    public static func == (lhs: Parameter, rhs: Parameter) -> Bool {
+        lhs.location == rhs.location
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(location)
+    }
+
+    let label: PartKind
+    public let name: PartKind
+    let metatype: String?
+    let location: Location
+
+    public let items: [Item] = []
+
+    public func makeDeclaration(withParent parent: Declaration) -> Declaration {
+        let parentUsrs = parent.usrs.sorted().joined(separator: "-")
+        let usr = "param-\(name.text)-\(parent.name ?? "unknown-function")-\(parentUsrs)"
+        let decl = Declaration(kind: .varParameter, usrs: [usr], location: location)
+        decl.name = name.text
+        decl.parent = parent
+        return decl
+    }
+}
+
+struct Variable: Item {
+    let names: [String]
+    let items: [Item]
+}
+
+struct Closure: Item {
+    let params: [String]
+    let items: [Item]
+}
+
+struct Identifier: Item {
+    let name: String
+    let items: [Item] = []
+}
+
+struct GenericItem: Item {
+    let node: Syntax
+    let items: [Item]
+}
+
+struct UnusedParameterParser {
+    private let syntax: SourceFileSyntax
+    private let parseProtocols: Bool
+    private let file: SourceFile
+    private let locationConverter: SourceLocationConverter
+
+    static func parse(
+        file: SourceFile,
+        syntax: SourceFileSyntax,
+        locationConverter: SourceLocationConverter,
+        parseProtocols: Bool
+    ) -> [Function] {
+        let parser = self.init(
+            file: file,
+            syntax: syntax,
+            locationConverter: locationConverter,
+            parseProtocols: parseProtocols
+        )
+        return parser.parse()
+    }
+
+    static func parse(file: SourceFile, parseProtocols: Bool) throws -> [Function] {
+        let source = try String(contentsOf: file.path.url, encoding: .utf8)
+        let syntax = Parser.parse(source: source)
+        let locationConverter = SourceLocationConverter(fileName: file.path.string, tree: syntax)
+        return parse(
+            file: file,
+            syntax: syntax,
+            locationConverter: locationConverter,
+            parseProtocols: parseProtocols
+        )
+    }
+
+    private init(file: SourceFile, syntax: SourceFileSyntax, locationConverter: SourceLocationConverter, parseProtocols: Bool) {
+        self.file = file
+        self.syntax = syntax
+        self.locationConverter = locationConverter
+        self.parseProtocols = parseProtocols
+    }
+
+    func parse() -> [Function] {
+        parse(node: syntax, collecting: Function.self)
+    }
+
+    // MARK: - Private
+
+    private func parse<T: Item>(node: SyntaxProtocol, collecting: T.Type) -> [T] {
+        parse(children: node.children(viewMode: .sourceAccurate), collecting: collecting)
+    }
+
+    private func parse<T: Item>(children: SyntaxChildren, collecting: T.Type) -> [T] {
+        parse(nodes: Array(children), collecting: collecting)
+    }
+
+    private func parse<T: Item>(nodes: [Syntax], collecting _: T.Type) -> [T] {
+        let collector = Collector<T>()
+        nodes.forEach { _ = parse(node: $0, collector) }
+        return collector.collection
+    }
+
+    private func parse(node anyNode: SyntaxProtocol?, _ collector: Collector<some Any>? = nil) -> Item? {
+        guard let node = anyNode?._syntaxNode else { return nil }
+
+        let parsed: Item? = if let node = node.as(MemberAccessExprSyntax.self) {
+            // It's not possible for the member itself to be a reference to a parameter,
+            // however the base expression may be.
+            parse(node: node.base, collector)
+        } else if let node = node.as(CodeBlockItemSyntax.self) {
+            parse(node: node.item, collector)
+        } else if let node = node.as(FunctionParameterClauseSyntax.self) {
+            parse(node: node.parameters, collector)
+        } else if let node = node.as(VariableDeclSyntax.self) {
+            parse(variableDecl: node, collector)
+        } else if let node = node.as(ClosureExprSyntax.self) {
+            parse(closureExpr: node, collector)
+        } else if let node = node.as(DeclReferenceExprSyntax.self) {
+            parse(identifier: node.baseName)
+        } else if let node = node.as(FunctionParameterSyntax.self) {
+            parse(functionParameter: node)
+        } else if let node = node.as(FunctionDeclSyntax.self) {
+            parse(functionDecl: node, collector)
+        } else if let node = node.as(InitializerDeclSyntax.self) {
+            parse(initializerDecl: node, collector)
+        } else if let optBindingCondition = node.as(OptionalBindingConditionSyntax.self) {
+            if optBindingCondition.initializer == nil,
+               let pattern = optBindingCondition.pattern.as(IdentifierPatternSyntax.self),
+               let parentStmt = optBindingCondition.parent?.parent?.parent,
+               parentStmt.is(IfExprSyntax.self) || parentStmt.is(GuardStmtSyntax.self)
+            {
+                // Handle `let x {}` syntax.
+                parse(identifier: pattern.identifier)
+            } else {
+                parse(childrenFrom: node, collector)
+            }
+        } else {
+            parse(childrenFrom: node, collector)
+        }
+
+        if let collector, let parsed {
+            collector.add(parsed)
+        }
+
+        return parsed
+    }
+
+    private func parse(childrenFrom node: Syntax, _ collector: Collector<some Any>?) -> Item? {
+        let items = node.children(viewMode: .sourceAccurate).compactMap { parse(node: $0, collector) }
+        if !items.isEmpty {
+            return GenericItem(node: node, items: items)
+        }
+        return nil
+    }
+
+    private func parse(functionParameter syntax: FunctionParameterSyntax) -> Item {
+        var metatype: String?
+
+        if let optionalType = syntax.type.as(OptionalTypeSyntax.self) {
+            if let metatypeSyntax = optionalType.children(viewMode: .sourceAccurate).mapFirst({ $0.as(MetatypeTypeSyntax.self) }) {
+                metatype = metatypeSyntax.description
+            }
+        } else if let optionalType = syntax.type.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
+            if let metatypeSyntax = optionalType.children(viewMode: .sourceAccurate).mapFirst({ $0.as(MetatypeTypeSyntax.self) }) {
+                metatype = metatypeSyntax.description
+            }
+        } else if let metatypeSyntax = syntax.type.as(MetatypeTypeSyntax.self) {
+            metatype = metatypeSyntax.description
+        }
+
+        let positionSyntax: SyntaxProtocol = syntax.secondName ?? syntax.firstName
+        let location = sourceLocation(of: positionSyntax.positionAfterSkippingLeadingTrivia)
+
+        let labelSyntax = syntax.firstName
+        let nameSyntax = syntax.secondName ?? syntax.firstName
+
+        let label: Parameter.PartKind = switch labelSyntax.tokenKind {
+        case .wildcard:
+            .wildcard
+        case .identifier:
+            .identifier(labelSyntax.identifier?.name ?? labelSyntax.text)
+        default:
+            .identifier(labelSyntax.text)
+        }
+
+        let name: Parameter.PartKind = switch nameSyntax.tokenKind {
+        case .wildcard:
+            .wildcard
+        case .identifier:
+            .identifier(nameSyntax.identifier?.name ?? nameSyntax.text)
+        default:
+            .identifier(nameSyntax.text)
+        }
+
+        return Parameter(label: label,
+                         name: name,
+                         metatype: metatype,
+                         location: location)
+    }
+
+    private func parse(closureExpr syntax: ClosureExprSyntax, _ collector: Collector<some Any>?) -> Closure? {
+        let signature = syntax.children(viewMode: .sourceAccurate).mapFirst { $0.as(ClosureSignatureSyntax.self) }
+        let rawParams = signature?.parameterClause?.children(viewMode: .sourceAccurate).compactMap { $0.as(ClosureShorthandParameterSyntax.self) }
+        let params = rawParams?.map(\.name.text) ?? []
+
+        // Parse capture list expressions (e.g., [captured = state.someProperty])
+        let captureItems = signature?.capture?.items.compactMap { parse(node: $0.initializer?.value, collector) } ?? []
+
+        let bodyItems = syntax.statements.compactMap { parse(node: $0.item, collector) }
+        return Closure(params: params, items: captureItems + bodyItems)
+    }
+
+    private func parse(variableDecl syntax: VariableDeclSyntax, _ collector: Collector<some Any>?) -> Variable {
+        let bindings = syntax.bindings
+
+        let names = bindings.flatMap { binding -> [String] in
+            let pattern = binding.pattern
+
+            if let pattern = pattern.as(IdentifierPatternSyntax.self) {
+                return [pattern.identifier.text]
+            } else if let pattern = pattern.as(TuplePatternSyntax.self) {
+                return pattern.elements.compactMap {
+                    let token = $0.pattern.children(viewMode: .sourceAccurate).mapFirst { $0.as(TokenSyntax.self) }
+                    return token?.text
+                }
+            } else {
+                return []
+            }
+        }
+
+        let items = bindings.flatMap {
+            let initializerItems = $0.initializer?.children(viewMode: .sourceAccurate).compactMap { parse(node: $0, collector) } ?? []
+            let accessorItems = $0.accessorBlock?.children(viewMode: .sourceAccurate).compactMap { parse(node: $0, collector) } ?? []
+            return initializerItems + accessorItems
+        }
+
+        return Variable(names: names, items: items)
+    }
+
+    private func parse(identifier: TokenSyntax) -> Item {
+        // Strip backquotes so that '`class`' becomes just 'class'.
+        let name = identifier.text.replacingOccurrences(of: "`", with: "")
+        return Identifier(name: name)
+    }
+
+    private func parse(functionDecl syntax: FunctionDeclSyntax, _ collector: Collector<some Any>?) -> Item? {
+        build(function: syntax.signature,
+              attributes: syntax.attributes,
+              genericParams: syntax.genericParameterClause,
+              body: syntax.body,
+              named: syntax.name.text,
+              position: syntax.name.positionAfterSkippingLeadingTrivia,
+              collector)
+    }
+
+    private func parse(initializerDecl syntax: InitializerDeclSyntax, _ collector: Collector<some Any>?) -> Item? {
+        build(function: syntax.signature,
+              attributes: syntax.attributes,
+              genericParams: syntax.genericParameterClause,
+              body: syntax.body,
+              named: "init",
+              position: syntax.initKeyword.positionAfterSkippingLeadingTrivia,
+              collector)
+    }
+
+    private func build(
+        function syntax: SyntaxProtocol,
+        attributes: AttributeListSyntax?,
+        genericParams: GenericParameterClauseSyntax?,
+        body: CodeBlockSyntax?,
+        named name: String,
+        position: AbsolutePosition,
+        _ collector: Collector<some Any>?
+    ) -> Function? {
+        if body == nil, !parseProtocols {
+            // Function has no body, must be a protocol declaration.
+            return nil
+        }
+
+        // Swift supports nested functions, so it's possible this function captures a param from an outer function.
+        let params = parse(children: syntax.children(viewMode: .sourceAccurate), collecting: Parameter.self)
+        let items = parse(node: body, collector)?.items ?? []
+        let fullName = buildFullName(for: name, with: params)
+        let genericParamNames = genericParams?.parameters.map(\.name.text) ?? []
+        let parsedAttributes: [Attribute] = attributes?
+            .compactMap(\.self)
+            .compactMap {
+                if case let .attribute(attr) = $0 {
+                    return Attribute(
+                        name: attr.attributeName.trimmed.description,
+                        arguments: attr.arguments?.trimmed.description
+                    )
+                }
+
+                return nil
+            } ?? []
+
+        return Function(
+            name: name,
+            fullName: fullName,
+            location: sourceLocation(of: position),
+            items: items,
+            parameters: params,
+            genericParameters: genericParamNames,
+            attributes: parsedAttributes
+        )
+    }
+
+    private func buildFullName(for function: String, with params: [Parameter]) -> String {
+        let strParams = params.map(\.label.text).joined(separator: ":")
+        return "\(function)(\(strParams):)"
+    }
+
+    private func sourceLocation(of position: AbsolutePosition) -> Location {
+        let location = locationConverter.location(for: position)
+        return Location(file: file,
+                        line: location.line,
+                        column: location.column)
+    }
+}
+
+private final class Collector<T> {
+    private(set) var collection: [T] = []
+
+    func add(_ item: Item) {
+        if let item = item as? T {
+            collection.append(item)
+        }
+    }
+}

@@ -1,0 +1,5 @@
+alias(
+    name = "periphery",
+    actual = "//Sources:Frontend_opt",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,12 @@
+--swiftversion 6.0
+
+--exclude **/.build/
+--exclude Tests/Fixtures/
+--exclude Tests/AccessibilityTests/AccessibilityProject/
+--exclude Tests/XcodeTests/UIKitProject/
+--exclude Tests/XcodeTests/SwiftUIProject/
+
+--enable blockComments
+--enable blankLinesAfterGuardStatements
+--enable blankLinesAroundMark
+--enable blankLinesBetweenImports
