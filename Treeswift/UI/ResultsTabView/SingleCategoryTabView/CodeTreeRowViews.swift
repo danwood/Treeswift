@@ -1,13 +1,13 @@
 //
-//  CategoriesRowViews.swift
+//  CodeTreeRowViews.swift
 //  Treeswift
 //
 //  Row views for Categories display (sections, declarations, synthetic roots)
 //
 
-import SwiftUI
 import AppKit
 import Flow
+import SwiftUI
 
 struct SectionRowView: View {
 	let section: SectionNode
@@ -36,8 +36,8 @@ struct SectionRowView: View {
 								}
 							}
 						))
-							.toggleStyle(.switch)
-							.controlSize(.small)
+						.toggleStyle(.switch)
+						.controlSize(.small)
 					}
 					.treeLabelPadding(indentLevel: indentLevel + 1)
 				}
@@ -143,7 +143,6 @@ struct SyntheticRootRowView: View {
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.background(selectedID == root.id ? Color.accentColor.opacity(0.2) : Color.clear)
 			.contentShape(.rect)
-
 			.onTapGesture {
 				selectedID = root.id
 			}
@@ -182,8 +181,8 @@ struct DeclarationRowView: View {
 	var projectRootPath: String?
 
 	/**
-	Checks if the filename matches the symbol name
-	*/
+	 Checks if the filename matches the symbol name
+	 */
 	private var fileNameMatchesSymbol: Bool {
 		guard let fileName = declaration.locationInfo.fileName else { return false }
 		let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
@@ -191,8 +190,8 @@ struct DeclarationRowView: View {
 	}
 
 	/**
-	Returns location info display text without the filename and icon portions
-	*/
+	 Returns location info display text without the filename and icon portions
+	 */
 	private var locationInfoWithoutFileName: String {
 		var parts: [String] = []
 
@@ -253,7 +252,7 @@ struct DeclarationRowView: View {
 							if matchesFileName {
 								Text(declaration.displayName + declaration.conformances)
 									.font(.body)
-								+ Text(".swift")
+									+ Text(".swift")
 									.font(.system(.body, design: .monospaced))
 									.foregroundStyle(.secondary)
 							} else {
@@ -277,7 +276,6 @@ struct DeclarationRowView: View {
 				.frame(maxWidth: .infinity, alignment: .leading)
 				.background(selectedID == declaration.id ? Color.accentColor.opacity(0.2) : Color.clear)
 				.contentShape(.rect)
-
 				.onTapGesture {
 					selectedID = declaration.id
 				}

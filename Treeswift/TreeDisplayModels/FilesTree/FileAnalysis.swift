@@ -14,8 +14,8 @@ nonisolated struct FileStatistics: Hashable, Sendable {
 	let folderReferenceCount: Int
 	let sameFolderFileCount: Int
 	let isEntryPoint: Bool
-	let referencingFolders: [String]  // Folder names that reference this file (cross-folder)
-	let sameFolderFileNames: [String]  // File names in same folder that reference this file
+	let referencingFolders: [String] // Folder names that reference this file (cross-folder)
+	let sameFolderFileNames: [String] // File names in same folder that reference this file
 
 	var isFolderPrivate: Bool {
 		let hasSymbols = symbolCount > 0

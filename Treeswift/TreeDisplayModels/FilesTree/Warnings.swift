@@ -25,7 +25,13 @@ nonisolated struct AnalysisWarning: Hashable, Sendable {
 	let details: [String]?
 	let symbolReferences: [SymbolReference]?
 
-	init(severity: WarningSeverity, message: String, suggestedActions: [SuggestedAction] = [], details: [String]? = nil, symbolReferences: [SymbolReference]? = nil) {
+	init(
+		severity: WarningSeverity,
+		message: String,
+		suggestedActions: [SuggestedAction] = [],
+		details: [String]? = nil,
+		symbolReferences: [SymbolReference]? = nil
+	) {
 		self.severity = severity
 		self.message = message
 		// Initialize all actions as incomplete (false)
@@ -48,28 +54,28 @@ nonisolated enum SuggestedAction: Hashable, Sendable {
 
 	var displayText: String {
 		switch self {
-		case .moveSymbolsToFolder(let symbols, let target):
+		case let .moveSymbolsToFolder(symbols, target):
 			if symbols.count == 1 {
-				return "Move \(symbols[0]) to \(target.displayName)"
+				"Move \(symbols[0]) to \(target.displayName)"
 			} else {
-				return "Move \(symbols.count) symbols to \(target.displayName)"
+				"Move \(symbols.count) symbols to \(target.displayName)"
 			}
-		case .moveFileToFolder(_, let fileName, let target):
-			return "Move \(fileName) to \(target.displayName)"
-		case .moveFolderIntoFolder(_, let sourceName, let target):
-			return "Move \(sourceName)/ into \(target.displayName)"
-		case .renameFolder(_, let suggestedName):
-			return "Rename folder to '\(suggestedName)'"
-		case .splitFolderIntoSubfolders(_, let suggestion):
-			return "Split into subfolders (\(suggestion))"
-		case .refactorToUseMainSymbol(_, let mainSymbol, _):
-			return "Refactor to use only \(mainSymbol)"
-		case .checkEncapsulation(_, let reason):
-			return "Check encapsulation: \(reason)"
-		case .renameFileToMatchSymbol(_, _, let suggestedName):
-			return "Rename file to '\(suggestedName)'"
-		case .moveFileToTrash(_, let fileName):
-			return "Move '\(fileName)' to Trash"
+		case let .moveFileToFolder(_, fileName, target):
+			"Move \(fileName) to \(target.displayName)"
+		case let .moveFolderIntoFolder(_, sourceName, target):
+			"Move \(sourceName)/ into \(target.displayName)"
+		case let .renameFolder(_, suggestedName):
+			"Rename folder to '\(suggestedName)'"
+		case let .splitFolderIntoSubfolders(_, suggestion):
+			"Split into subfolders (\(suggestion))"
+		case let .refactorToUseMainSymbol(_, mainSymbol, _):
+			"Refactor to use only \(mainSymbol)"
+		case let .checkEncapsulation(_, reason):
+			"Check encapsulation: \(reason)"
+		case let .renameFileToMatchSymbol(_, _, suggestedName):
+			"Rename file to '\(suggestedName)'"
+		case let .moveFileToTrash(_, fileName):
+			"Move '\(fileName)' to Trash"
 		}
 	}
 }
@@ -79,7 +85,7 @@ nonisolated struct FolderTarget: Hashable, Sendable {
 	let folderName: String
 
 	var displayName: String {
-		return folderName + "/"
+		folderName + "/"
 	}
 }
 

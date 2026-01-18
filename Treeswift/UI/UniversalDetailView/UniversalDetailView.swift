@@ -5,9 +5,9 @@
 //  Universal detail panel router that shows appropriate content based on active tab
 //
 
-import SwiftUI
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 
 struct UniversalDetailView: View {
 	let selectedTab: ResultsTab
@@ -29,7 +29,13 @@ struct UniversalDetailView: View {
 					switch selectedTab {
 					case .periphery:
 						if let node = peripheryNode {
-							PeripheryDetailView(node: node, scanResults: scanResults, sourceGraph: sourceGraph, projectPath: projectPath, filterState: $filterState)
+							PeripheryDetailView(
+								node: node,
+								scanResults: scanResults,
+								sourceGraph: sourceGraph,
+								projectPath: projectPath,
+								filterState: $filterState
+							)
 						} else {
 							EmptySelectionView(message: "Select an item in the Periphery tab to view details")
 						}

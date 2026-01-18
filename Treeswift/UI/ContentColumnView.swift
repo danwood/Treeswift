@@ -5,9 +5,9 @@
 //  Content column showing configuration form and scan results
 //
 
-import SwiftUI
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 
 struct ContentColumnView: View {
 	@Binding var configuration: PeripheryConfiguration
@@ -31,6 +31,7 @@ struct ContentColumnView: View {
 		case buildArgs
 		case buildScanButton
 	}
+
 	@FocusState private var focusedField: FocusableField?
 
 	var body: some View {
@@ -42,9 +43,9 @@ struct ContentColumnView: View {
 					focusedField: $focusedField,
 					layoutSettings: $layoutSettings
 				)
-					.onChange(of: configuration) { _, newValue in
-						onUpdate(newValue)
-					}
+				.onChange(of: configuration) { _, newValue in
+					onUpdate(newValue)
+				}
 
 				if scanState.isScanning {
 					HStack(spacing: 8) {
@@ -69,7 +70,7 @@ struct ContentColumnView: View {
 						.textSelection(.enabled)
 						.padding()
 						.background(Color.red.opacity(0.1))
-						.clipShape(.rect(cornerRadius:8))
+						.clipShape(.rect(cornerRadius: 8))
 						.padding()
 				}
 
@@ -98,7 +99,7 @@ struct ContentColumnView: View {
 						bodyGetterTabSelectedID: $bodyGetterTabSelectedID,
 						unattachedTabSelectedID: $unattachedTabSelectedID
 					)
-					.environment(\.refreshFileTree, { scanState.refreshFileTree() })
+					.environment(\.refreshFileTree) { scanState.refreshFileTree() }
 				} else if !scanState.isScanning {
 					Text("Run a scan to see results")
 						.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -113,24 +114,29 @@ struct ContentColumnView: View {
 		.animation(.easeInOut(duration: 0.3), value: scanState.isScanning)
 		.toolbar {
 			ToolbarItem(placement: .automatic) {
-				Button(scanState.isScanning ? "Stop" : "Build & Scan", systemImage: scanState.isScanning ? "stop.fill" : "play.fill", action: scanState.isScanning ? scanState.stopScan : {
-					peripheryTabSelectedID = nil
-					filesTabSelectedID = nil
-					treeTabSelectedID = nil
-					viewExtensionsTabSelectedID = nil
-					sharedTabSelectedID = nil
-					orphansTabSelectedID = nil
-					previewOrphansTabSelectedID = nil
-					bodyGetterTabSelectedID = nil
-					unattachedTabSelectedID = nil
-					scanState.startScan(configuration: configuration)
-				})
+				Button(
+					scanState.isScanning ? "Stop" : "Build & Scan",
+					systemImage: scanState.isScanning ? "stop.fill" : "play.fill",
+					action: scanState.isScanning ? scanState.stopScan : {
+						peripheryTabSelectedID = nil
+						filesTabSelectedID = nil
+						treeTabSelectedID = nil
+						viewExtensionsTabSelectedID = nil
+						sharedTabSelectedID = nil
+						orphansTabSelectedID = nil
+						previewOrphansTabSelectedID = nil
+						bodyGetterTabSelectedID = nil
+						unattachedTabSelectedID = nil
+						scanState.startScan(configuration: configuration)
+					}
+				)
 				.labelStyle(.titleAndIcon)
 				.buttonStyle(.borderless)
 				.frame(maxWidth: .infinity)
 				.keyboardShortcut(.defaultAction)
 				.focused($focusedField, equals: .buildScanButton)
-				.disabled(!scanState.isScanning && configuration.projectType == .xcode && (isLoadingSchemes || configuration.schemes.isEmpty))
+				.disabled(!scanState.isScanning && configuration
+					.projectType == .xcode && (isLoadingSchemes || configuration.schemes.isEmpty))
 				.widthPreserving {
 					Button("Build & Scan", systemImage: "play.fill", action: {})
 						.labelStyle(.titleAndIcon)

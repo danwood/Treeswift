@@ -9,7 +9,6 @@ import Foundation
 
 @MainActor
 struct SourceFileReader {
-
 	// Cache to avoid re-reading same files
 	private static var cache: [String: [String]] = [:]
 	private static let maxCacheSize = 50
@@ -29,10 +28,10 @@ struct SourceFileReader {
 	}
 
 	/**
-	Invalidate the cache for a specific file.
+	 Invalidate the cache for a specific file.
 
-	Call this after modifying a file to ensure subsequent reads get fresh content.
-	*/
+	 Call this after modifying a file to ensure subsequent reads get fresh content.
+	 */
 	static func invalidateCache(for filePath: String) {
 		cache.removeValue(forKey: filePath)
 	}

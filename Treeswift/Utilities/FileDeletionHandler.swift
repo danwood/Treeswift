@@ -18,12 +18,12 @@ extension FileHandle: TextOutputStream {
 
 enum FileDeletionHandler {
 	/**
-	Moves a file to the trash.
+	 Moves a file to the trash.
 
-	Returns true if successful, false otherwise.
-	Logs to stderr with the file path.
-	On error, logs the error but doesn't throw (allows operation to continue).
-	*/
+	 Returns true if successful, false otherwise.
+	 Logs to stderr with the file path.
+	 On error, logs the error but doesn't throw (allows operation to continue).
+	 */
 	static func moveToTrash(filePath: String) -> Bool {
 		let fileURL = URL(fileURLWithPath: filePath)
 		let fileManager = FileManager.default
@@ -50,13 +50,13 @@ enum FileDeletionHandler {
 	}
 
 	/**
-	Restores a file by writing its contents to the original path.
+	 Restores a file by writing its contents to the original path.
 
-	Creates parent directories if needed.
-	Returns true if successful, false otherwise.
-	Logs to stderr with the file path.
-	On error, logs the error but doesn't throw (allows operation to continue).
-	*/
+	 Creates parent directories if needed.
+	 Returns true if successful, false otherwise.
+	 Logs to stderr with the file path.
+	 On error, logs the error but doesn't throw (allows operation to continue).
+	 */
 	static func restoreFile(filePath: String, contents: String) -> Bool {
 		let fileURL = URL(fileURLWithPath: filePath)
 		let fileManager = FileManager.default

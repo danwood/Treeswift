@@ -6,34 +6,35 @@
 //  Maintains scan results, progress, and task state for a single configuration
 //
 
-import SwiftUI
-import PeripheryKit
 import Configuration
-import SourceGraph
-import Logger
 import Foundation
+import Logger
+import PeripheryKit
+import SourceGraph
+import SwiftUI
 
 @Observable
 @MainActor
 final class ScanState {
 	// Scan results - automatically observable with @Observable
 	var scanResults: [ScanResult] = []
-	var sourceGraph: SourceGraph? = nil
+	var sourceGraph: SourceGraph?
 	var treeNodes: [TreeNode] = []
-	var treeSection: CategoriesNode? = nil
-	var viewExtensionsSection: CategoriesNode? = nil
-	var sharedSection: CategoriesNode? = nil
-	var orphansSection: CategoriesNode? = nil
-	var previewOrphansSection: CategoriesNode? = nil
-	var bodyGetterSection: CategoriesNode? = nil
-	var unattachedSection: CategoriesNode? = nil
+	var treeSection: CategoriesNode?
+	var viewExtensionsSection: CategoriesNode?
+	var sharedSection: CategoriesNode?
+	var orphansSection: CategoriesNode?
+	var previewOrphansSection: CategoriesNode?
+	var bodyGetterSection: CategoriesNode?
+	var unattachedSection: CategoriesNode?
 	var fileTreeNodes: [FileBrowserNode] = [] {
 		didSet {
 			fileNodesLookup = Self.buildFileNodesLookup(from: fileTreeNodes)
 		}
 	}
+
 	var categoriesOutput: String = ""
-	var projectPath: String? = nil
+	var projectPath: String?
 
 	// Lookup dictionaries for O(1) node access
 	var fileNodesLookup: [String: FileBrowserNode] = [:]
@@ -41,10 +42,10 @@ final class ScanState {
 	// Scan progress state
 	var isScanning: Bool = false
 	var scanStatus: String = "Scanning…"
-	var errorMessage: String? = nil
+	var errorMessage: String?
 
 	// Task management
-	var scanTask: Task<Void, Never>? = nil
+	var scanTask: Task<Void, Never>?
 	let scanner = PeripheryScanRunner()
 
 	// Background task tracking
@@ -53,8 +54,7 @@ final class ScanState {
 	var backgroundTasksCompleted: Int = 0
 	var streamCompleted: Bool = false
 
-	init(configurationID _: UUID) {
-	}
+	init(configurationID _: UUID) {}
 
 	/// Runs a complete Periphery scan with progressive streaming
 	///
@@ -102,23 +102,26 @@ final class ScanState {
 					projectDirectory: projectDirectory
 				) {
 					switch progress {
-					case .statusUpdate(let status):
+					case let .statusUpdate(status):
 						// Update UI status and log to console
 						scanStatus = status
 						"* \(status)".logToConsole()
 
-					case .scanComplete(let results, let graph):
+					case let .scanComplete(results, graph):
 						// Phase 1 complete - tabs can appear now
 						scanResults = results
 						sourceGraph = graph
 
 						// Log formatted periphery output to console if enabled
-						if logToConsole && !results.isEmpty {
+						if logToConsole, !results.isEmpty {
 							Task.detached(priority: .utility) {
 								do {
 									// Create logger for formatting (matches PeripheryScanRunner pattern)
 									let logger = Logger(quiet: false, verbose: false, colorMode: .never)
-									let formatter = config.outputFormat.formatter.init(configuration: config, logger: logger)
+									let formatter = config.outputFormat.formatter.init(
+										configuration: config,
+										logger: logger
+									)
 									if let output = try formatter.format(results, colored: false) {
 										"=== Periphery Output ===\n\(output)".logToConsole()
 									}
@@ -198,9 +201,9 @@ final class ScanState {
 							backgroundTasksTotal += 1
 						}
 
-					case .categoriesSectionAdded(let section):
+					case let .categoriesSectionAdded(section):
 						// Route Categories section to appropriate property based on ID
-						guard case .section(let sectionNode) = section else { continue }
+						guard case let .section(sectionNode) = section else { continue }
 						switch sectionNode.id {
 						case .hierarchy:
 							treeSection = section
@@ -281,7 +284,7 @@ final class ScanState {
 	}
 
 	private func checkIfFullyComplete() {
-		if streamCompleted && backgroundTasksCompleted >= backgroundTasksTotal {
+		if streamCompleted, backgroundTasksCompleted >= backgroundTasksTotal {
 			isScanning = false
 			scanStatus = "Scan complete"
 			scanTask = nil
@@ -341,13 +344,16 @@ final class ScanState {
 		return lookup
 	}
 
-	private static func buildFileNodesLookupRecursive(nodes: [FileBrowserNode], into lookup: inout [String: FileBrowserNode]) {
+	private static func buildFileNodesLookupRecursive(
+		nodes: [FileBrowserNode],
+		into lookup: inout [String: FileBrowserNode]
+	) {
 		for node in nodes {
 			switch node {
-			case .directory(let dir):
+			case let .directory(dir):
 				lookup[dir.id] = node
 				buildFileNodesLookupRecursive(nodes: dir.children, into: &lookup)
-			case .file(let file):
+			case let .file(file):
 				lookup[file.id] = node
 			}
 		}
@@ -358,7 +364,7 @@ final class ScanState {
 	private nonisolated static func computeContainsSwiftFiles(nodes: [FileBrowserNode]) -> [FileBrowserNode] {
 		nodes.map { node in
 			switch node {
-			case .directory(var dir):
+			case var .directory(dir):
 				let updatedChildren = computeContainsSwiftFiles(nodes: dir.children)
 				dir.children = updatedChildren
 
@@ -366,7 +372,7 @@ final class ScanState {
 					switch child {
 					case .file:
 						true
-					case .directory(let childDir):
+					case let .directory(childDir):
 						childDir.containsSwiftFiles
 					}
 				}

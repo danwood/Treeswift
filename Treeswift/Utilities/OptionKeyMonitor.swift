@@ -5,9 +5,10 @@
 //  Monitor Option key state for SwiftUI views
 //
 
+import AppKit
+
 // periphery:ignore:all
 import SwiftUI
-import AppKit
 
 /**
  A view modifier that monitors the Option key state and updates a binding.

@@ -8,25 +8,24 @@
 import SwiftUI
 
 // Extension providing tree expansion utilities for Set<String>
-extension Set where Element == String {
-
+extension Set<String> {
 	// Toggles expansion for an ID and optionally all its descendants
 	mutating func toggleExpansion(
 		id: String,
 		withDescendants: Bool = false,
 		collectDescendants: (() -> Set<String>)? = nil
 	) {
-		let isExpanded = self.contains(id)
+		let isExpanded = contains(id)
 
 		if isExpanded {
-			self.remove(id)
+			remove(id)
 			if withDescendants, let descendants = collectDescendants?() {
-				self.subtract(descendants)
+				subtract(descendants)
 			}
 		} else {
-			self.insert(id)
+			insert(id)
 			if withDescendants, let descendants = collectDescendants?() {
-				self.formUnion(descendants)
+				formUnion(descendants)
 			}
 		}
 	}

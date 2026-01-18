@@ -5,10 +5,10 @@
 //  Hierarchical tree view for scan results
 //
 
-import SwiftUI
 import AppKit
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 struct PeripheryTreeView: View {
@@ -31,7 +31,7 @@ struct PeripheryTreeView: View {
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
 
-		return VStack(alignment: .leading, spacing: 0) {
+		VStack(alignment: .leading, spacing: 0) {
 			ForEach(filteredNodesCache, id: \.id) { node in
 				TreeNodeView(
 					node: node,
@@ -54,7 +54,10 @@ struct PeripheryTreeView: View {
 		}
 		.focusableTreeNavigation(
 			selectedID: $selectedID,
-			visibleItems: TreeKeyboardNavigation.buildVisibleItemList(nodes: filteredNodesCache, expandedIDs: expandedIDs),
+			visibleItems: TreeKeyboardNavigation.buildVisibleItemList(
+				nodes: filteredNodesCache,
+				expandedIDs: expandedIDs
+			),
 			claimFocusTrigger: $claimFocusTrigger
 		)
 		.focusedValue(\.copyableText, currentCopyableText(from: filteredNodesCache))
@@ -81,7 +84,7 @@ struct PeripheryTreeView: View {
 		.onChange(of: rootNodes) {
 			recomputeFilteredNodes()
 		}
-		.onChange(of: filterState?.filterChangeCounter) { oldValue, newValue in
+		.onChange(of: filterState?.filterChangeCounter) { _, _ in
 			recomputeFilteredNodes()
 		}
 		.onChange(of: scanResults) {
@@ -93,15 +96,17 @@ struct PeripheryTreeView: View {
 		.onChange(of: hiddenWarningIDs) {
 			recomputeFilteredNodes()
 		}
-		.onReceive(NotificationCenter.default.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
-			if let warningID = notification.object as? String {
-				hiddenWarningIDs.insert(warningID)
-			}
+		.onReceive(NotificationCenter.default
+			.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
+				if let warningID = notification.object as? String {
+					hiddenWarningIDs.insert(warningID)
+				}
 		}
-		.onReceive(NotificationCenter.default.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
-			if let warningID = notification.object as? String {
-				hiddenWarningIDs.remove(warningID)
-			}
+		.onReceive(NotificationCenter.default
+			.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
+				if let warningID = notification.object as? String {
+					hiddenWarningIDs.remove(warningID)
+				}
 		}
 		.sheet(isPresented: $showProgressSheet) {
 			FileOperationProgressSheet(
@@ -115,11 +120,10 @@ struct PeripheryTreeView: View {
 	}
 
 	private func recomputeFilteredNodes() {
-		let newFiltered: [TreeNode]
-		if let filterState = filterState {
-			newFiltered = rootNodes.compactMap { filterNode($0, with: filterState) }
+		let newFiltered: [TreeNode] = if let filterState {
+			rootNodes.compactMap { filterNode($0, with: filterState) }
 		} else {
-			newFiltered = rootNodes
+			rootNodes
 		}
 		// Always update - SwiftUI will handle diff efficiently
 		filteredNodesCache = newFiltered
@@ -137,7 +141,7 @@ struct PeripheryTreeView: View {
 	private func collectFolderIDs(from nodes: [TreeNode], into set: inout Set<String>) {
 		for node in nodes {
 			switch node {
-			case .folder(let folder):
+			case let .folder(folder):
 				// Skip auto-expanding PeripherySource folder
 				if folder.name == "PeripherySource" {
 					continue
@@ -151,8 +155,8 @@ struct PeripheryTreeView: View {
 	}
 
 	private func currentCopyableText(from nodes: [TreeNode]) -> String? {
-		guard let selectedID = selectedID,
-			  let node = TreeNodeFinder.findTreeNode(withID: selectedID, in: nodes) else {
+		guard let selectedID,
+		      let node = TreeNodeFinder.findTreeNode(withID: selectedID, in: nodes) else {
 			return nil
 		}
 		return TreeCopyFormatter.formatForCopy(node: node, scanResults: scanResults, filterState: filterState)
@@ -160,13 +164,13 @@ struct PeripheryTreeView: View {
 
 	private func filterNode(_ node: TreeNode, with filterState: FilterState) -> TreeNode? {
 		switch node {
-		case .folder(var folder):
+		case var .folder(folder):
 			let filteredChildren = folder.children.compactMap { filterNode($0, with: filterState) }
 			guard !filteredChildren.isEmpty else { return nil }
 			folder.children = filteredChildren
 			return .folder(folder)
 
-		case .file(let file):
+		case let .file(file):
 			// Check if file is manually hidden via "Ignore All Warnings"
 			if hiddenFileIDs.contains(file.id) {
 				return nil
@@ -191,10 +195,10 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Inserts a periphery:ignore:all comment at the top of the file and hides it from the tree.
+	 Inserts a periphery:ignore:all comment at the top of the file and hides it from the tree.
 
-	Supports full undo/redo, including restoring empty folders that were removed.
-	*/
+	 Supports full undo/redo, including restoring empty folders that were removed.
+	 */
 	private func ignoreAllWarnings(for file: FileNode) {
 		// Insert the ignore comment and get original/modified contents
 		let result: (original: String, modified: String)
@@ -257,8 +261,8 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Registers undo/redo for the ignore all warnings action.
-	*/
+	 Registers undo/redo for the ignore all warnings action.
+	 */
 	private func registerUndoRedo(
 		capturedOriginal: String,
 		capturedModified: String,
@@ -267,7 +271,6 @@ struct PeripheryTreeView: View {
 		wasSelected: Bool,
 		emptyFolderIDs: [String]
 	) {
-
 		// Register undo/redo using nested closure pattern
 		func performUndo() {
 			// Restore original file contents
@@ -346,11 +349,11 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Finds ancestor folder IDs that will become empty after hiding the specified file.
+	 Finds ancestor folder IDs that will become empty after hiding the specified file.
 
-	This method must be called AFTER adding the fileID to hiddenFileIDs so it can accurately
-	determine which folders will be empty after filtering.
-	*/
+	 This method must be called AFTER adding the fileID to hiddenFileIDs so it can accurately
+	 determine which folders will be empty after filtering.
+	 */
 	private func findEmptyAncestorIDs(for fileID: String, in nodes: [TreeNode]) -> [String] {
 		// First, find the path from root to the file (list of ancestor folder IDs)
 		guard let ancestorPath = findAncestorPath(for: fileID, in: nodes) else {
@@ -363,7 +366,7 @@ struct PeripheryTreeView: View {
 		for ancestorID in ancestorPath.reversed() {
 			// Find the folder node
 			guard let folderNode = TreeNodeFinder.findTreeNode(withID: ancestorID, in: nodes),
-				  case .folder(let folder) = folderNode else {
+			      case let .folder(folder) = folderNode else {
 				continue
 			}
 
@@ -383,19 +386,23 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Finds the list of ancestor folder IDs from root to the parent of the given node.
-	*/
+	 Finds the list of ancestor folder IDs from root to the parent of the given node.
+	 */
 	private func findAncestorPath(for nodeID: String, in nodes: [TreeNode], currentPath: [String] = []) -> [String]? {
 		for node in nodes {
 			switch node {
-			case .folder(let folder):
+			case let .folder(folder):
 				// Check if the target is a direct child of this folder
 				if folder.children.contains(where: { $0.id == nodeID }) {
 					return currentPath + [folder.id]
 				}
 
 				// Recurse into this folder's children
-				if let path = findAncestorPath(for: nodeID, in: folder.children, currentPath: currentPath + [folder.id]) {
+				if let path = findAncestorPath(
+					for: nodeID,
+					in: folder.children,
+					currentPath: currentPath + [folder.id]
+				) {
 					return path
 				}
 
@@ -407,32 +414,32 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Generates an appropriate "Copy" menu label based on warning count.
+	 Generates an appropriate "Copy" menu label based on warning count.
 
-	Returns "Copy Warning" for single warnings, "Copy Warnings" for multiple.
-	*/
+	 Returns "Copy Warning" for single warnings, "Copy Warnings" for multiple.
+	 */
 	private func copyMenuLabel(for node: TreeNode) -> String {
 		let warningCount = countWarnings(in: node)
 		return warningCount == 1 ? "Copy Warning" : "Copy Warnings"
 	}
 
 	/**
-	Generates an appropriate "Copy File Path" menu label based on file count.
+	 Generates an appropriate "Copy File Path" menu label based on file count.
 
-	Returns "Copy File Path" for single files, "Copy File Paths" for multiple.
-	*/
+	 Returns "Copy File Path" for single files, "Copy File Paths" for multiple.
+	 */
 	private func copyPathMenuLabel(for node: TreeNode) -> String {
 		let fileCount = countFiles(in: node)
 		return fileCount == 1 ? "Copy File Path" : "Copy File Paths"
 	}
 
 	/**
-	Counts warnings in a tree node respecting the current filter state.
-	*/
+	 Counts warnings in a tree node respecting the current filter state.
+	 */
 	private func countWarnings(in node: TreeNode) -> Int {
 		switch node {
-		case .file(let file):
-			return scanResults.filter { result in
+		case let .file(file):
+			scanResults.count(where: { result in
 				let declaration = result.declaration
 				let location = ScanResultHelper.location(from: declaration)
 
@@ -442,31 +449,31 @@ struct PeripheryTreeView: View {
 				let usr = declaration.usrs.first ?? ""
 				let warningID = "\(location.file.path.string):\(usr)"
 				return !hiddenWarningIDs.contains(warningID)
-			}.count
+			})
 
-		case .folder(let folder):
-			return folder.children.reduce(0) { $0 + countWarnings(in: $1) }
+		case let .folder(folder):
+			folder.children.reduce(0) { $0 + countWarnings(in: $1) }
 		}
 	}
 
 	/**
-	Counts files in a tree node respecting the current filter state.
-	*/
+	 Counts files in a tree node respecting the current filter state.
+	 */
 	private func countFiles(in node: TreeNode) -> Int {
 		switch node {
 		case .file:
-			return 1
+			1
 
-		case .folder(let folder):
-			return folder.children.reduce(0) { $0 + countFiles(in: $1) }
+		case let .folder(folder):
+			folder.children.reduce(0) { $0 + countFiles(in: $1) }
 		}
 	}
 
 	/**
-	Copies file paths to clipboard.
+	 Copies file paths to clipboard.
 
-	Collects all file paths from the node and copies them to the clipboard, one per line.
-	*/
+	 Collects all file paths from the node and copies them to the clipboard, one per line.
+	 */
 	private func copyFilePathsToClipboard(for node: TreeNode) {
 		var paths: [String] = []
 		collectFilePaths(from: node, into: &paths)
@@ -475,14 +482,14 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Recursively collects file paths from a tree node.
-	*/
+	 Recursively collects file paths from a tree node.
+	 */
 	private func collectFilePaths(from node: TreeNode, into paths: inout [String]) {
 		switch node {
-		case .file(let file):
+		case let .file(file):
 			paths.append(file.path)
 
-		case .folder(let folder):
+		case let .folder(folder):
 			for child in folder.children {
 				collectFilePaths(from: child, into: &paths)
 			}
@@ -490,12 +497,12 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Removes all unused code from a file.
+	 Removes all unused code from a file.
 
-	Processes all warnings in the file and removes code where possible,
-	working from bottom to top to preserve line numbers during deletion.
-	Supports full undo/redo.
-	*/
+	 Processes all warnings in the file and removes code where possible,
+	 working from bottom to top to preserve line numbers during deletion.
+	 Supports full undo/redo.
+	 */
 	private func removeAllUnusedCode(for file: FileNode) {
 		let result = file.removeAllUnusedCode(
 			scanResults: scanResults,
@@ -504,7 +511,7 @@ struct PeripheryTreeView: View {
 		)
 
 		switch result {
-		case .success(let removalResult):
+		case let .success(removalResult):
 			// Invalidate file cache
 			SourceFileReader.invalidateCache(for: file.path)
 
@@ -549,14 +556,14 @@ struct PeripheryTreeView: View {
 				)
 			}
 
-		case .failure(let error):
+		case let .failure(error):
 			print("Failed to remove unused code: \(error.localizedDescription)")
 		}
 	}
 
 	/**
-	Registers undo/redo for the remove all unused code action.
-	*/
+	 Registers undo/redo for the remove all unused code action.
+	 */
 	private func registerRemoveAllUndo(
 		filePath: String,
 		originalContents: String,
@@ -643,11 +650,11 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Ignores all warnings in a folder by inserting ignore directives in all files.
+	 Ignores all warnings in a folder by inserting ignore directives in all files.
 
-	Processes each file in the folder (recursively) that has visible warnings based
-	on the current filter state. Supports full undo/redo.
-	*/
+	 Processes each file in the folder (recursively) that has visible warnings based
+	 on the current filter state. Supports full undo/redo.
+	 */
 	private func ignoreAllWarningsInFolder(folder: FolderNode) {
 		Task { @MainActor in
 			// Collect all files with warnings in this folder
@@ -688,8 +695,8 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Registers undo/redo for ignoring all warnings in a folder.
-	*/
+	 Registers undo/redo for ignoring all warnings in a folder.
+	 */
 	private func registerIgnoreAllInFolderUndo(
 		fileModifications: [(path: String, original: String, modified: String, fileID: String)]
 	) {
@@ -749,11 +756,11 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Removes all unused code in a folder.
+	 Removes all unused code in a folder.
 
-	Processes each file in the folder (recursively) that has removable warnings.
-	Supports full undo/redo.
-	*/
+	 Processes each file in the folder (recursively) that has removable warnings.
+	 Supports full undo/redo.
+	 */
 	private func removeAllUnusedCodeInFolder(folder: FolderNode) {
 		Task { @MainActor in
 			// Collect all files with warnings in this folder
@@ -785,7 +792,7 @@ struct PeripheryTreeView: View {
 				)
 
 				switch result {
-				case .success(let removalResult):
+				case let .success(removalResult):
 					SourceFileReader.invalidateCache(for: file.path)
 
 					// Check if file should be deleted
@@ -810,10 +817,10 @@ struct PeripheryTreeView: View {
 
 					allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
 
-				case .failure(let error):
+				case let .failure(error):
 					// Only log if it's not the "no removable warnings" case
 					let nsError = error as NSError
-					if nsError.domain == "FileNode" && nsError.code == 2 {
+					if nsError.domain == "FileNode", nsError.code == 2 {
 						// This is normal - file has warnings but none are removable
 						// (e.g., .assignOnlyProperty, .redundantProtocol, or filtered warnings)
 					} else {
@@ -848,8 +855,8 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Registers undo/redo for removing all unused code in a folder.
-	*/
+	 Registers undo/redo for removing all unused code in a folder.
+	 */
 	private func registerRemoveAllInFolderUndo(
 		fileModifications: [(
 			path: String,
@@ -940,8 +947,8 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Processes multiple files with progress tracking and cancellation support.
-	*/
+	 Processes multiple files with progress tracking and cancellation support.
+	 */
 	private func processFilesWithProgress(
 		_ files: [FileNode],
 		operation: @escaping (FileNode) async throws -> Void
@@ -954,7 +961,7 @@ struct PeripheryTreeView: View {
 		// Only show progress sheet if operation takes longer than threshold
 		let showProgressTask = Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(300))
-			if !fileOperationProgress.isCancelled && fileOperationProgress.isProcessing {
+			if !fileOperationProgress.isCancelled, fileOperationProgress.isProcessing {
 				showProgressSheet = true
 			}
 		}
@@ -989,11 +996,11 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
-	Collects all file nodes that have warnings from a tree node.
-	*/
+	 Collects all file nodes that have warnings from a tree node.
+	 */
 	private func collectFilesWithWarnings(from node: TreeNode, into files: inout [FileNode]) {
 		switch node {
-		case .file(let file):
+		case let .file(file):
 			// Check if file has any visible warnings
 			let hasWarnings = scanResults.contains { result in
 				let declaration = result.declaration
@@ -1011,7 +1018,7 @@ struct PeripheryTreeView: View {
 				files.append(file)
 			}
 
-		case .folder(let folder):
+		case let .folder(folder):
 			for child in folder.children {
 				collectFilesWithWarnings(from: child, into: &files)
 			}
@@ -1038,7 +1045,7 @@ private struct TreeNodeView: View {
 
 	var body: some View {
 		switch node {
-		case .folder(let folder):
+		case let .folder(folder):
 			DisclosureGroup(
 				isExpanded: expansionBinding(for: folder.id, in: $expandedIDs)
 			) {
@@ -1086,7 +1093,11 @@ private struct TreeNodeView: View {
 				)
 				.contextMenu {
 					Button(copyMenuLabel(.folder(folder))) {
-						let text = TreeCopyFormatter.formatForCopy(node: .folder(folder), scanResults: scanResults, filterState: filterState)
+						let text = TreeCopyFormatter.formatForCopy(
+							node: .folder(folder),
+							scanResults: scanResults,
+							filterState: filterState
+						)
 						TreeCopyFormatter.copyToClipboard(text)
 					}
 					.keyboardShortcut("c", modifiers: .command)
@@ -1114,22 +1125,27 @@ private struct TreeNodeView: View {
 			}
 			.disclosureGroupStyle(TreeDisclosureStyle())
 
-		case .file(let file):
+		case let .file(file):
 			HStack(spacing: 0) {
 				ChevronOrPlaceholder(
 					hasChildren: false,
 					expandedIDs: $expandedIDs,
 					id: file.id,
-					toggleWithDescendants: { }
+					toggleWithDescendants: {}
 				)
 
-				FileRowView(file: file, filterState: filterState, scanResults: scanResults, removingFileIDs: removingFileIDs, hiddenWarningIDs: hiddenWarningIDs)
+				FileRowView(
+					file: file,
+					filterState: filterState,
+					scanResults: scanResults,
+					removingFileIDs: removingFileIDs,
+					hiddenWarningIDs: hiddenWarningIDs
+				)
 			}
 			.treeLabelPadding(indentLevel: indentLevel)
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.background(selectedID == file.id ? Color.accentColor.opacity(0.2) : Color.clear)
 			.contentShape(.rect)
-
 			.onTapGesture {
 				selectedID = file.id
 			}
@@ -1141,7 +1157,11 @@ private struct TreeNodeView: View {
 			)
 			.contextMenu {
 				Button(copyMenuLabel(.file(file))) {
-					let text = TreeCopyFormatter.formatForCopy(node: .file(file), scanResults: scanResults, filterState: filterState)
+					let text = TreeCopyFormatter.formatForCopy(
+						node: .file(file),
+						scanResults: scanResults,
+						filterState: filterState
+					)
 					TreeCopyFormatter.copyToClipboard(text)
 				}
 				.keyboardShortcut("c", modifiers: .command)
@@ -1179,4 +1199,3 @@ private struct TreeNodeView: View {
 		}
 	}
 }
-

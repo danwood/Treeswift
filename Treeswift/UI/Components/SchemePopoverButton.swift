@@ -32,7 +32,7 @@ struct SchemePopoverButton: View {
 			.padding(.horizontal, 8)
 			.padding(.vertical, 4)
 			.background(Color(nsColor: .controlBackgroundColor))
-			.clipShape(.rect(cornerRadius:4))
+			.clipShape(.rect(cornerRadius: 4))
 			.overlay(
 				RoundedRectangle(cornerRadius: 4)
 					.stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
@@ -71,9 +71,9 @@ struct SchemePopoverButton: View {
 
 	private var textColor: Color {
 		if isLoading || availableSchemes.isEmpty {
-			return .secondary
+			.secondary
 		} else {
-			return .primary
+			.primary
 		}
 	}
 }

@@ -15,14 +15,14 @@ enum TreeIcon: @unchecked Sendable {
 
 	nonisolated var asText: String {
 		switch self {
-		case .systemImage(let name):
-			return "[\(name)]"
-		case .emoji(let emoji):
-			return emoji
-		case .emojiOnSystemImage(let emoji, _, _):
-			return emoji
-		case .imageResource(let name):
-			return "[\(name)]"
+		case let .systemImage(name):
+			"[\(name)]"
+		case let .emoji(emoji):
+			emoji
+		case let .emojiOnSystemImage(emoji, _, _):
+			emoji
+		case let .imageResource(name):
+			"[\(name)]"
 		}
 	}
 }
@@ -32,18 +32,18 @@ extension TreeIcon {
 	@ViewBuilder
 	func view(size: CGFloat = 16) -> some View {
 		switch self {
-		case .systemImage(let name):
+		case let .systemImage(name):
 			Image(systemName: name)
 				.resizable()
 				.aspectRatio(contentMode: .fit)
 				.frame(width: size, height: size)
-		case .emoji(let emoji):
+		case let .emoji(emoji):
 			Image(emoji: emoji)
 				.resizable()
 				.aspectRatio(1, contentMode: .fit)
 				.help(emojiTooltip(for: emoji))
 				.frame(width: size, height: size)
-		case .emojiOnSystemImage(let emoji, let name, let scale):
+		case let .emojiOnSystemImage(emoji, name, scale):
 			ZStack {
 				Image(systemName: name)
 					.resizable()
@@ -55,8 +55,7 @@ extension TreeIcon {
 					.frame(width: size * scale, height: size * scale)
 			}
 			.help(emojiTooltip(for: emoji))
-
-		case .imageResource(let name):
+		case let .imageResource(name):
 			Image(name)
 				.resizable()
 				.aspectRatio(contentMode: .fit)
@@ -64,7 +63,7 @@ extension TreeIcon {
 		}
 	}
 
-	nonisolated private func emojiTooltip(for icon: String) -> String {
+	private nonisolated func emojiTooltip(for icon: String) -> String {
 		switch icon {
 		case "🔷": "Main App entry point (@main)"
 		case "🖼️": "SwiftUI View"
@@ -91,18 +90,18 @@ extension TreeIcon {
 extension TreeIcon: Hashable {
 	nonisolated func hash(into hasher: inout Hasher) {
 		switch self {
-		case .systemImage(let name):
+		case let .systemImage(name):
 			hasher.combine(0)
 			hasher.combine(name)
-		case .emoji(let emoji):
+		case let .emoji(emoji):
 			hasher.combine(1)
 			hasher.combine(emoji)
-		case .emojiOnSystemImage(let emoji, let name, let scale):
+		case let .emojiOnSystemImage(emoji, name, scale):
 			hasher.combine(2)
 			hasher.combine(emoji)
 			hasher.combine(name)
 			hasher.combine(scale)
-		case .imageResource(let name):
+		case let .imageResource(name):
 			hasher.combine(3)
 			hasher.combine(name)
 		}
@@ -110,33 +109,32 @@ extension TreeIcon: Hashable {
 
 	nonisolated static func == (lhs: TreeIcon, rhs: TreeIcon) -> Bool {
 		switch (lhs, rhs) {
-		case (.systemImage(let l), .systemImage(let r)):
-			return l == r
-		case (.emoji(let l), .emoji(let r)):
-			return l == r
-		case (.emojiOnSystemImage(let le, let ln, let ls), .emojiOnSystemImage(let re, let rn, let rs)):
-			return le == re && ln == rn && ls == rs
-		case (.imageResource(let l), .imageResource(let r)):
-			return l == r
+		case let (.systemImage(l), .systemImage(r)):
+			l == r
+		case let (.emoji(l), .emoji(r)):
+			l == r
+		case let (.emojiOnSystemImage(le, ln, ls), .emojiOnSystemImage(re, rn, rs)):
+			le == re && ln == rn && ls == rs
+		case let (.imageResource(l), .imageResource(r)):
+			l == r
 		default:
-			return false
+			false
 		}
 	}
 }
 
 #Preview("emoji") {
-	
 	var size: CGFloat { 100 }
-	
+
 	VStack {
 		TreeIcon.emoji("🔵").view(size: size)
 			.background(Color.orange.opacity(0.3))
 			.padding()
-		
+
 		TreeIcon.systemImage("document").view(size: size)
 			.background(Color.orange.opacity(0.3))
 			.padding()
-		
+
 		TreeIcon.emojiOnSystemImage("🖼️", "folder", 0.6).view(size: size)
 			.background(Color.orange.opacity(0.3))
 			.padding()

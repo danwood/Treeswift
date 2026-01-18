@@ -5,8 +5,8 @@
 //  Centralized executor for code deletion and modification operations.
 //
 
-import Foundation
 import Cocoa
+import Foundation
 import SourceGraph
 import SystemPackage
 
@@ -23,7 +23,6 @@ import SystemPackage
  This executor is UI-agnostic and can be used from any context.
  */
 struct DeletionOperationExecutor {
-
 	/**
 	 Executes declaration deletion with smart boundary detection.
 
@@ -55,7 +54,7 @@ struct DeletionOperationExecutor {
 		let result = DeclarationDeletionHelper.deleteDeclaration(declaration: declaration)
 
 		switch result {
-		case .success(let deletionRange):
+		case let .success(deletionRange):
 			// Invalidate source file cache
 			SourceFileReader.invalidateCache(for: filePath)
 
@@ -63,16 +62,15 @@ struct DeletionOperationExecutor {
 			let linesRemoved = deletionRange.endLine - deletionRange.startLine + 1
 			let afterLine = deletionRange.endLine
 
-			let adjustedUSRs: [String]
-			if let sourceGraph = sourceGraph {
-				adjustedUSRs = SourceGraphLineAdjuster.adjustAndTrack(
+			let adjustedUSRs: [String] = if let sourceGraph {
+				SourceGraphLineAdjuster.adjustAndTrack(
 					sourceGraph: sourceGraph,
 					filePath: filePath,
 					afterLine: afterLine,
 					lineDelta: -linesRemoved
 				)
 			} else {
-				adjustedUSRs = []
+				[]
 			}
 
 			// Get modified contents after deletion
@@ -104,7 +102,7 @@ struct DeletionOperationExecutor {
 
 			return .success(())
 
-		case .failure(let error):
+		case let .failure(error):
 			return .failure(error)
 		}
 	}
@@ -146,14 +144,14 @@ struct DeletionOperationExecutor {
 
 		// Delete the declaration range
 		var lines = originalContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else {
+		guard location.line > 0, location.line <= lines.count else {
 			return .failure(NSError(
 				domain: "DeletionOperationExecutor",
 				code: 4,
 				userInfo: [NSLocalizedDescriptionKey: "Invalid line range"]
 			))
 		}
-		guard endLine > 0 && endLine <= lines.count else {
+		guard endLine > 0, endLine <= lines.count else {
 			return .failure(NSError(
 				domain: "DeletionOperationExecutor",
 				code: 4,
@@ -164,7 +162,7 @@ struct DeletionOperationExecutor {
 		// Remove lines from startLine to endLine (inclusive)
 		let startIndex = location.line - 1
 		let endIndex = endLine - 1
-		lines.removeSubrange(startIndex...endIndex)
+		lines.removeSubrange(startIndex ... endIndex)
 
 		// Write back to file
 		let newContents = lines.joined(separator: "\n")
@@ -181,16 +179,15 @@ struct DeletionOperationExecutor {
 		let linesRemoved = endLine - location.line + 1
 		let afterLine = endLine
 
-		let adjustedUSRs: [String]
-		if let sourceGraph = sourceGraph {
-			adjustedUSRs = SourceGraphLineAdjuster.adjustAndTrack(
+		let adjustedUSRs: [String] = if let sourceGraph {
+			SourceGraphLineAdjuster.adjustAndTrack(
 				sourceGraph: sourceGraph,
 				filePath: filePath,
 				afterLine: afterLine,
 				lineDelta: -linesRemoved
 			)
 		} else {
-			adjustedUSRs = []
+			[]
 		}
 
 		// Register undo
@@ -241,7 +238,7 @@ struct DeletionOperationExecutor {
 
 		// Delete the single import line
 		var lines = originalContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else {
+		guard location.line > 0, location.line <= lines.count else {
 			return .failure(NSError(
 				domain: "DeletionOperationExecutor",
 				code: 4,
@@ -267,16 +264,15 @@ struct DeletionOperationExecutor {
 		// Adjust line numbers and track which declarations were adjusted
 		let afterLine = location.line
 
-		let adjustedUSRs: [String]
-		if let sourceGraph = sourceGraph {
-			adjustedUSRs = SourceGraphLineAdjuster.adjustAndTrack(
+		let adjustedUSRs: [String] = if let sourceGraph {
+			SourceGraphLineAdjuster.adjustAndTrack(
 				sourceGraph: sourceGraph,
 				filePath: filePath,
 				afterLine: afterLine,
-				lineDelta: -1  // Removed one line
+				lineDelta: -1 // Removed one line
 			)
 		} else {
-			adjustedUSRs = []
+			[]
 		}
 
 		// Register undo
@@ -287,7 +283,7 @@ struct DeletionOperationExecutor {
 			filePath: filePath,
 			warningID: warningID,
 			adjustedUSRs: adjustedUSRs,
-			lineAdjustment: 1,  // One line removed
+			lineAdjustment: 1, // One line removed
 			sourceGraph: sourceGraph,
 			actionName: "Delete Import",
 			onComplete: onComplete,
@@ -328,7 +324,7 @@ struct DeletionOperationExecutor {
 		}
 
 		var lines = originalContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else {
+		guard location.line > 0, location.line <= lines.count else {
 			return .failure(NSError(
 				domain: "DeletionOperationExecutor",
 				code: 4,
@@ -359,16 +355,15 @@ struct DeletionOperationExecutor {
 		SourceFileReader.invalidateCache(for: filePath)
 
 		// Adjust line numbers for declarations after this one
-		let adjustedUSRs: [String]
-		if let sourceGraph = sourceGraph {
-			adjustedUSRs = SourceGraphLineAdjuster.adjustAndTrack(
+		let adjustedUSRs: [String] = if let sourceGraph {
+			SourceGraphLineAdjuster.adjustAndTrack(
 				sourceGraph: sourceGraph,
 				filePath: filePath,
-				afterLine: insertionLine - 1,  // Line before insertion
-				lineDelta: 1  // Added one line
+				afterLine: insertionLine - 1, // Line before insertion
+				lineDelta: 1 // Added one line
 			)
 		} else {
-			adjustedUSRs = []
+			[]
 		}
 
 		// Register undo (note: for insertion, we negate the line adjustment)
@@ -379,7 +374,7 @@ struct DeletionOperationExecutor {
 			filePath: filePath,
 			warningID: warningID,
 			adjustedUSRs: adjustedUSRs,
-			lineAdjustment: -1,  // Negative because we added a line (undo removes it)
+			lineAdjustment: -1, // Negative because we added a line (undo removes it)
 			sourceGraph: sourceGraph,
 			actionName: "Insert Ignore Directive",
 			onComplete: onComplete,

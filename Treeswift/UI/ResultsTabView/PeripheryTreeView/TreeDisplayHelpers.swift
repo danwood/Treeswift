@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
-Displays chevron for expandable nodes or placeholder for leaf nodes
-*/
+ Displays chevron for expandable nodes or placeholder for leaf nodes
+ */
 struct ChevronOrPlaceholder: View {
 	let hasChildren: Bool
 	@Binding var expandedIDs: Set<String>
@@ -31,8 +31,8 @@ struct ChevronOrPlaceholder: View {
 }
 
 /**
-View modifier for consistent tree row label padding
-*/
+ View modifier for consistent tree row label padding
+ */
 private struct TreeLabelPadding: ViewModifier {
 	let indentLevel: Int
 	@Environment(\.treeLayoutSettings) var layoutSettings

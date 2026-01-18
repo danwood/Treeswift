@@ -10,8 +10,8 @@ import Foundation
 extension String {
 	/// Truncates string to specified length, appending ellipsis if truncated
 	nonisolated func truncated(to maxLength: Int) -> String {
-		if self.count > maxLength {
-			return String(self.prefix(maxLength)) + "…"
+		if count > maxLength {
+			return String(prefix(maxLength)) + "…"
 		}
 		return self
 	}

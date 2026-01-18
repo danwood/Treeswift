@@ -31,24 +31,28 @@ final class FilterState {
 			filterChangeCounter += 1
 		}
 	}
+
 	var showAssignOnly: Bool = true {
 		didSet {
 			Self.defaults.set(showAssignOnly, forKey: "filterState.showAssignOnly")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showRedundantProtocol: Bool = true {
 		didSet {
 			Self.defaults.set(showRedundantProtocol, forKey: "filterState.showRedundantProtocol")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showRedundantPublic: Bool = true {
 		didSet {
 			Self.defaults.set(showRedundantPublic, forKey: "filterState.showRedundantPublic")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showSuperfluousIgnoreCommand: Bool = true {
 		didSet {
 			Self.defaults.set(showSuperfluousIgnoreCommand, forKey: "filterState.showSuperfluousIgnoreCommand")
@@ -63,60 +67,70 @@ final class FilterState {
 			filterChangeCounter += 1
 		}
 	}
+
 	var showEnum: Bool = true {
 		didSet {
 			Self.defaults.set(showEnum, forKey: "filterState.showEnum")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showExtension: Bool = true {
 		didSet {
 			Self.defaults.set(showExtension, forKey: "filterState.showExtension")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showFunction: Bool = true {
 		didSet {
 			Self.defaults.set(showFunction, forKey: "filterState.showFunction")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showImport: Bool = true {
 		didSet {
 			Self.defaults.set(showImport, forKey: "filterState.showImport")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showInitializer: Bool = true {
 		didSet {
 			Self.defaults.set(showInitializer, forKey: "filterState.showInitializer")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showParameter: Bool = true {
 		didSet {
 			Self.defaults.set(showParameter, forKey: "filterState.showParameter")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showProperty: Bool = true {
 		didSet {
 			Self.defaults.set(showProperty, forKey: "filterState.showProperty")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showProtocol: Bool = true {
 		didSet {
 			Self.defaults.set(showProtocol, forKey: "filterState.showProtocol")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showStruct: Bool = true {
 		didSet {
 			Self.defaults.set(showStruct, forKey: "filterState.showStruct")
 			filterChangeCounter += 1
 		}
 	}
+
 	var showTypealias: Bool = true {
 		didSet {
 			Self.defaults.set(showTypealias, forKey: "filterState.showTypealias")
@@ -210,30 +224,30 @@ final class FilterState {
 	}
 
 	/**
-	Returns the set of warning types that can apply to a given Swift type.
-	Used to determine which type filters should be enabled based on selected warning filters.
-	*/
+	 Returns the set of warning types that can apply to a given Swift type.
+	 Used to determine which type filters should be enabled based on selected warning filters.
+	 */
 	static func applicableWarnings(for swiftType: SwiftType) -> Set<WarningType> {
 		switch swiftType {
 		case .property:
-			return [.unused, .assignOnly, .redundantPublic]
+			[.unused, .assignOnly, .redundantPublic]
 		case .protocol:
-			return [.unused, .redundantProtocol, .redundantPublic]
+			[.unused, .redundantProtocol, .redundantPublic]
 		case .class, .struct, .enum, .typealias, .function, .initializer:
-			return [.unused, .redundantPublic]
+			[.unused, .redundantPublic]
 		case .extension:
-			return [.unused, .redundantPublic]
+			[.unused, .redundantPublic]
 		case .parameter:
-			return [.unused]
+			[.unused]
 		case .import:
-			return [.unused]
+			[.unused]
 		}
 	}
 
 	/**
-	Determines if a Swift type filter should be enabled based on current warning filter selection.
-	A type filter is enabled if at least one applicable warning type is enabled.
-	*/
+	 Determines if a Swift type filter should be enabled based on current warning filter selection.
+	 A type filter is enabled if at least one applicable warning type is enabled.
+	 */
 	func isTypeFilterEnabled(_ swiftType: SwiftType) -> Bool {
 		let applicableWarnings = Self.applicableWarnings(for: swiftType)
 
@@ -253,7 +267,7 @@ final class FilterState {
 	/// Check if a warning should be shown based on current filter settings
 	func shouldShow(result: ScanResult, declaration: Declaration) -> Bool {
 		// Check top-level filter
-		if topLevelOnly && declaration.parent != nil {
+		if topLevelOnly, declaration.parent != nil {
 			return false
 		}
 

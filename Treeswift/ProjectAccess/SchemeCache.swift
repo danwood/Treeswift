@@ -101,7 +101,7 @@ class SchemeCache {
 
 	/// Invalidate cache entry for an optional path (convenience method)
 	func invalidateIfNeeded(path: String?) {
-		if let path = path {
+		if let path {
 			invalidate(path: path)
 		}
 	}

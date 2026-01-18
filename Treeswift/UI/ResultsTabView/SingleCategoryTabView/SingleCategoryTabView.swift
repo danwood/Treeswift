@@ -28,7 +28,7 @@ struct SingleCategoryTabView: View {
 	let showToggle: Bool
 
 	private var sectionNode: SectionNode? {
-		guard case .section(let s) = section else { return nil }
+		guard case let .section(s) = section else { return nil }
 		return s
 	}
 
@@ -41,9 +41,9 @@ struct SingleCategoryTabView: View {
 	}
 
 	var copyableText: String? {
-		guard let selectedID = selectedID,
-			  let section = section,
-			  let node = TreeNodeFinder.findCategoriesNode(withID: selectedID, in: [section]) else {
+		guard let selectedID,
+		      let section,
+		      let node = TreeNodeFinder.findCategoriesNode(withID: selectedID, in: [section]) else {
 			return nil
 		}
 		return TreeCopyFormatter.formatForCopy(
@@ -64,7 +64,7 @@ struct SingleCategoryTabView: View {
 				ProgressView("Loading…")
 					.padding()
 			)
-		} else if let sectionNode = sectionNode {
+		} else if let sectionNode {
 			return AnyView(
 				VStack(alignment: .leading, spacing: 12) {
 					// Section title at top (not in disclosure group)
@@ -135,7 +135,7 @@ struct SingleCategoryTabView: View {
 	}
 
 	private var filteredChildren: [CategoriesNode] {
-		guard let sectionNode = sectionNode else { return [] }
+		guard let sectionNode else { return [] }
 
 		if !showOnlyViews || !showToggle {
 			return sectionNode.children
@@ -146,11 +146,11 @@ struct SingleCategoryTabView: View {
 	}
 
 	/**
-	Filters nodes to show only Views when "Show Only Views" toggle is enabled
-	*/
+	 Filters nodes to show only Views when "Show Only Views" toggle is enabled
+	 */
 	private func filterNodeForViews(_ node: CategoriesNode) -> CategoriesNode? {
 		switch node {
-		case .section(var section):
+		case var .section(section):
 			if section.id == .hierarchy {
 				var flattenedChildren: [CategoriesNode] = []
 				for child in section.children {
@@ -161,7 +161,7 @@ struct SingleCategoryTabView: View {
 			}
 			return node
 
-		case .declaration(let decl):
+		case let .declaration(decl):
 			if decl.isView {
 				var mutableDecl = decl
 				var flattenedChildren: [CategoriesNode] = []
@@ -174,7 +174,7 @@ struct SingleCategoryTabView: View {
 				return nil
 			}
 
-		case .syntheticRoot(var root):
+		case var .syntheticRoot(root):
 			var flattenedChildren: [CategoriesNode] = []
 			for child in root.children {
 				flattenViewChildren(child, into: &flattenedChildren)
@@ -185,11 +185,11 @@ struct SingleCategoryTabView: View {
 	}
 
 	/**
-	Recursively flattens view hierarchy, keeping only View nodes
-	*/
+	 Recursively flattens view hierarchy, keeping only View nodes
+	 */
 	private func flattenViewChildren(_ node: CategoriesNode, into result: inout [CategoriesNode]) {
 		switch node {
-		case .section(let section):
+		case let .section(section):
 			if section.id == .hierarchy {
 				for child in section.children {
 					flattenViewChildren(child, into: &result)
@@ -198,7 +198,7 @@ struct SingleCategoryTabView: View {
 				result.append(node)
 			}
 
-		case .declaration(let decl):
+		case let .declaration(decl):
 			if decl.isView {
 				var mutableDecl = decl
 				var flattenedChildren: [CategoriesNode] = []
@@ -213,7 +213,7 @@ struct SingleCategoryTabView: View {
 				}
 			}
 
-		case .syntheticRoot(var root):
+		case var .syntheticRoot(root):
 			var flattenedChildren: [CategoriesNode] = []
 			for child in root.children {
 				flattenViewChildren(child, into: &flattenedChildren)
@@ -224,10 +224,10 @@ struct SingleCategoryTabView: View {
 	}
 
 	/**
-	Expands all nodes in the section on first appearance
-	*/
+	 Expands all nodes in the section on first appearance
+	 */
 	private func expandAllNodes() {
-		guard let section = section else { return }
+		guard let section else { return }
 		var idsToExpand = Set<String>()
 		collectAllExpandableIDs(from: [section], into: &idsToExpand)
 		Task { @MainActor in
@@ -236,18 +236,18 @@ struct SingleCategoryTabView: View {
 	}
 
 	/**
-	Recursively collects all expandable node IDs
-	*/
+	 Recursively collects all expandable node IDs
+	 */
 	private func collectAllExpandableIDs(from nodes: [CategoriesNode], into set: inout Set<String>) {
 		for node in nodes {
 			switch node {
-			case .section(let section):
+			case let .section(section):
 				set.insert(section.id.rawValue)
 				collectAllExpandableIDs(from: section.children, into: &set)
-			case .syntheticRoot(let root):
+			case let .syntheticRoot(root):
 				set.insert(root.id)
 				collectAllExpandableIDs(from: root.children, into: &set)
-			case .declaration(let decl):
+			case let .declaration(decl):
 				if !decl.children.isEmpty {
 					set.insert(decl.id)
 					collectAllExpandableIDs(from: decl.children, into: &set)

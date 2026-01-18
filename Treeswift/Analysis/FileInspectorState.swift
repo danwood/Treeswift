@@ -38,22 +38,22 @@ final class FileInspectorState {
 		modificationDate: Date?,
 		fileSize: Int64?
 	) {
-		self.inspectedFilePath = filePath
-		self.originalModificationDate = modificationDate
-		self.originalFileSize = fileSize
-		self.fileHasChanged = false
-		self.fileWasDeleted = false
+		inspectedFilePath = filePath
+		originalModificationDate = modificationDate
+		originalFileSize = fileSize
+		fileHasChanged = false
+		fileWasDeleted = false
 	}
 
 	/*
 	 Clears the currently inspected file
 	 */
 	func clearInspectedFile() {
-		self.inspectedFilePath = nil
-		self.originalModificationDate = nil
-		self.originalFileSize = nil
-		self.fileHasChanged = false
-		self.fileWasDeleted = false
+		inspectedFilePath = nil
+		originalModificationDate = nil
+		originalFileSize = nil
+		fileHasChanged = false
+		fileWasDeleted = false
 	}
 
 	/*

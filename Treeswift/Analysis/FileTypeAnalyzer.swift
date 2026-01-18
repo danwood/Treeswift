@@ -6,19 +6,17 @@
 //
 
 import Foundation
+import PeripheryKit
 import SourceGraph
 import SystemPackage
-import PeripheryKit
-
 
 final class FileTypeAnalyzer: Sendable {
-
 	nonisolated init() {}
 
 	nonisolated func enrichFilesWithTypeInfo(
 		fileNodes: [FileBrowserNode],
 		graph: SourceGraph,
-		scanResults: [ScanResult],
+		scanResults: [ScanResult]
 	) async -> [FileBrowserNode] {
 		// Build warning cache once for all files
 		let warningCache = TypeWarningCache.buildCache(from: scanResults)
@@ -33,7 +31,7 @@ final class FileTypeAnalyzer: Sendable {
 			switch node {
 			case .directory:
 				directoryIndices.append(idx)
-			case .file(let file):
+			case let .file(file):
 				fileWorkItems.append((index: idx, path: file.path))
 			}
 		}
@@ -54,7 +52,7 @@ final class FileTypeAnalyzer: Sendable {
 
 		// Apply analyzed results to files in-place, preserving order
 		for (idx, node) in enrichedNodes.enumerated() {
-			guard case .file(var file) = node else { continue }
+			guard case var .file(file) = node else { continue }
 			if let typeInfos = analyzedByIndex[idx] {
 				file.typeInfos = typeInfos.isEmpty ? nil : typeInfos
 				enrichedNodes[idx] = .file(file)
@@ -63,7 +61,7 @@ final class FileTypeAnalyzer: Sendable {
 
 		// Recurse into directories (sequentially to avoid excessive parallelism and preserve structure)
 		for idx in directoryIndices {
-			if case .directory(var dir) = enrichedNodes[idx] {
+			if case var .directory(dir) = enrichedNodes[idx] {
 				let enrichedChildren = await enrichFilesWithTypeInfo(
 					fileNodes: dir.children,
 					graph: graph,
@@ -85,7 +83,7 @@ final class FileTypeAnalyzer: Sendable {
 		let allDeclarations = graph.allDeclarations
 
 		/* All top-level symbol kinds we track - includes types, typealiases, free functions,
-		   global variables, operators, precedence groups, and macros. */
+		 global variables, operators, precedence groups, and macros. */
 		let topLevelSymbolKinds: Set<Declaration.Kind> = [
 			.class,
 			.struct,
@@ -111,33 +109,33 @@ final class FileTypeAnalyzer: Sendable {
 		let fileDeclarations = allDeclarations.filter { $0.location.file.path.string == targetPath }
 
 		/* Filter for top-level symbols that are accessible across files.
-		   We exclude private/fileprivate (file/scope-scoped) but include everything else
-		   (internal, public, open, package). For folder organization analysis, internal and
-		   public are treated equivalently - both can be referenced across files within the module. */
+		 We exclude private/fileprivate (file/scope-scoped) but include everything else
+		 (internal, public, open, package). For folder organization analysis, internal and
+		 public are treated equivalently - both can be referenced across files within the module. */
 		var allTopLevelSymbols: [Declaration] = []
 		for decl in fileDeclarations {
-			if topLevelSymbolKinds.contains(decl.kind) &&
-				decl.isAccessibleAcrossFiles &&
-				decl.parent == nil {
+			if topLevelSymbolKinds.contains(decl.kind),
+			   decl.isAccessibleAcrossFiles,
+			   decl.parent == nil {
 				allTopLevelSymbols.append(decl)
 			}
 		}
 
 		/* Check if this is an extension-only file. Extension members (methods, properties) have
-		   a parent type that's NOT defined in the same file. */
+		 a parent type that's NOT defined in the same file. */
 		var isExtensionOnlyFile = false
 		var extensionParentName: String?
-		if allTopLevelSymbols.isEmpty && !fileDeclarations.isEmpty {
+		if allTopLevelSymbols.isEmpty, !fileDeclarations.isEmpty {
 			// Get all parent types defined in this file (top-level types with no parent)
 			let typesDefinedInFile = Set(fileDeclarations.filter {
 				$0.parent == nil && $0.kind.isTypeKind && !$0.kind.isExtensionKind
-			}.compactMap { $0.name })
+			}.compactMap(\.name))
 
 			// Get all parent names of declarations in this file
 			let parentNames = Set(fileDeclarations.compactMap { $0.parent?.name })
 
 			// If there are extension members (parents exist) but none of those parents are defined here
-			if !parentNames.isEmpty && parentNames.isDisjoint(with: typesDefinedInFile) {
+			if !parentNames.isEmpty, parentNames.isDisjoint(with: typesDefinedInFile) {
 				isExtensionOnlyFile = true
 				extensionParentName = fileDeclarations.first?.parent?.name
 			}
@@ -148,13 +146,13 @@ final class FileTypeAnalyzer: Sendable {
 		let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
 
 		/* Build typeInfos from all top-level symbols.
-		   Process primary types first, then extensions, then other symbols. This ensures that
-		   if @Observable generates both a class and an extension with the same name, the class
-		   is processed first and the extension is skipped as a duplicate. */
+		 Process primary types first, then extensions, then other symbols. This ensures that
+		 if @Observable generates both a class and an extension with the same name, the class
+		 is processed first and the extension is skipped as a duplicate. */
 		var processedSymbolNames = Set<String>()
 		let sortedSymbols = allTopLevelSymbols.sorted(by: { getStartLine($0) < getStartLine($1) })
 		let primaryTypes = sortedSymbols.filter { $0.kind.isTypeKind && !$0.kind.isExtensionKind }
-		let extensionTypes = sortedSymbols.filter { $0.kind.isExtensionKind }
+		let extensionTypes = sortedSymbols.filter(\.kind.isExtensionKind)
 		let otherSymbols = sortedSymbols.filter { !$0.kind.isTypeKind && !$0.kind.isExtensionKind }
 
 		for decl in primaryTypes + extensionTypes + otherSymbols {
@@ -193,8 +191,8 @@ final class FileTypeAnalyzer: Sendable {
 		}
 
 		/* If this is an extension-only file with no typeInfos yet, create a synthetic
-		   extension entry so the file shows the 🧩 icon. */
-		if isExtensionOnlyFile && typeInfos.isEmpty, let parentName = extensionParentName {
+		 extension entry so the file shows the 🧩 icon. */
+		if isExtensionOnlyFile, typeInfos.isEmpty, let parentName = extensionParentName {
 			typeInfos.append(FileTypeInfo(
 				name: parentName,
 				icon: "🧩",

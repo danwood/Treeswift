@@ -9,16 +9,16 @@ import Foundation
 import SourceGraph
 
 enum DeclarationIconHelper {
-
 	nonisolated static func typeIcon(for declaration: Declaration) -> TreeIcon {
 		if isMainApp(declaration) {
-			return .emoji("🔷")
+			.emoji("🔷")
 		} else if conformsToView(declaration) {
-			return .emoji("🖼️")
-		} else if declaration.kind == .class && declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.hasPrefix("NS") == true }) {
-			return .emoji("🟤")
+			.emoji("🖼️")
+		} else if declaration.kind == .class,
+		          declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.hasPrefix("NS") == true }) {
+			.emoji("🟤")
 		} else {
-			return .emoji(declaration.kind.icon)
+			.emoji(declaration.kind.icon)
 		}
 	}
 
@@ -48,11 +48,13 @@ enum DeclarationIconHelper {
 	}
 
 	nonisolated static func isMainApp(_ declaration: Declaration) -> Bool {
-		if declaration.attributes.map(\.description).contains("main") && declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
+		if declaration.attributes.map(\.description).contains("main"),
+		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
 			return true
 		}
 
-		if let name = declaration.name, name.hasSuffix("App"), declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
+		if let name = declaration.name, name.hasSuffix("App"),
+		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
 			return true
 		}
 

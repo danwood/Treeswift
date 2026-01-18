@@ -31,7 +31,8 @@ extension FileManager {
 		}
 
 		// Get current file attributes
-		guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else {
+		guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+		else {
 			return true
 		}
 

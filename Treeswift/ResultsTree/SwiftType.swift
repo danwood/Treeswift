@@ -5,15 +5,15 @@
 //  Swift type classification with color mapping
 //
 
-import Foundation
 import AppKit
+import Foundation
 import SourceGraph
 
 enum SwiftType: String, CaseIterable, Sendable {
 	case `class` = "C"
 	case `enum` = "E"
 	case `extension` = "X"
-	case `function` = "F"
+	case function = "F"
 	case initializer = "I"
 	case parameter = "A"
 	case property = "P"

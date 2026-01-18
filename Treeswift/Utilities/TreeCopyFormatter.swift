@@ -5,14 +5,13 @@
 //  Copy formatting utilities for tree nodes
 //
 
-import Foundation
 import AppKit
-import SystemPackage
+import Foundation
 import PeripheryKit
 import SourceGraph
+import SystemPackage
 
 enum TreeCopyFormatter {
-
 	// Generate periphery-format output for TreeNode
 	static func formatForCopy(
 		node: TreeNode,
@@ -20,12 +19,12 @@ enum TreeCopyFormatter {
 		filterState: FilterState? = nil
 	) -> String {
 		switch node {
-		case .file(let file):
+		case let .file(file):
 			var lines: [String] = []
 			collectWarnings(from: .file(file), scanResults: scanResults, filterState: filterState, into: &lines)
 			return lines.joined(separator: "\n")
 
-		case .folder(let folder):
+		case let .folder(folder):
 			var lines: [String] = []
 			collectWarnings(from: .folder(folder), scanResults: scanResults, filterState: filterState, into: &lines)
 			return lines.joined(separator: "\n")
@@ -43,7 +42,7 @@ enum TreeCopyFormatter {
 		let indent = String(repeating: "\t", count: indentLevel)
 
 		switch node {
-		case .section(let section):
+		case let .section(section):
 			lines.append(indent + section.title)
 			if includeDescendants {
 				for child in section.children {
@@ -55,7 +54,7 @@ enum TreeCopyFormatter {
 				}
 			}
 
-		case .declaration(let decl):
+		case let .declaration(decl):
 			var text = ""
 			if let folderIndicator = decl.folderIndicator {
 				text += folderIndicator.asText + " "
@@ -81,7 +80,7 @@ enum TreeCopyFormatter {
 				}
 			}
 
-		case .syntheticRoot(let root):
+		case let .syntheticRoot(root):
 			lines.append(indent + root.icon.asText + " " + root.title)
 			if includeDescendants {
 				for child in root.children {
@@ -107,7 +106,7 @@ enum TreeCopyFormatter {
 		into lines: inout [String]
 	) {
 		switch node {
-		case .file(let file):
+		case let .file(file):
 			// Filter warnings for this specific file
 			let fileWarnings = scanResults
 				.compactMap { result -> (result: ScanResult, declaration: Declaration, location: Location)? in
@@ -118,7 +117,7 @@ enum TreeCopyFormatter {
 					guard location.file.path.string == file.path else { return nil }
 
 					// Apply filter state if present
-					if let filterState = filterState {
+					if let filterState {
 						guard filterState.shouldShow(result: result, declaration: declaration) else { return nil }
 					}
 
@@ -142,7 +141,7 @@ enum TreeCopyFormatter {
 				lines.append(warningLine)
 			}
 
-		case .folder(let folder):
+		case let .folder(folder):
 			// Recursively collect warnings from all children
 			for child in folder.children {
 				collectWarnings(from: child, scanResults: scanResults, filterState: filterState, into: &lines)

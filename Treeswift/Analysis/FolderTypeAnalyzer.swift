@@ -10,7 +10,6 @@ import SourceGraph
 import SystemPackage
 
 final class FolderTypeAnalyzer: Sendable {
-
 	nonisolated init() {}
 
 	nonisolated func analyzeFolders(
@@ -18,7 +17,7 @@ final class FolderTypeAnalyzer: Sendable {
 		graph: SourceGraph,
 		projectPath: String
 	) async -> [FileBrowserNode] {
-		return await analyzeFoldersRecursive(nodes: nodes, graph: graph, projectPath: projectPath)
+		await analyzeFoldersRecursive(nodes: nodes, graph: graph, projectPath: projectPath)
 	}
 
 	private nonisolated func analyzeFoldersRecursive(
@@ -32,7 +31,7 @@ final class FolderTypeAnalyzer: Sendable {
 			for (index, node) in nodes.enumerated() {
 				group.addTask { [graph] in
 					switch node {
-					case .directory(let dir):
+					case let .directory(dir):
 						let enrichedChildren = await self.analyzeFoldersRecursive(
 							nodes: dir.children,
 							graph: graph,
@@ -52,7 +51,7 @@ final class FolderTypeAnalyzer: Sendable {
 
 						// Cache whether this directory has folder-private files
 						mutableDir.hasFolderPrivateFiles = enrichedChildren.contains { child in
-							if case .file(let file) = child {
+							if case let .file(file) = child {
 								return file.statistics?.isFolderPrivate == true
 							}
 							return false
@@ -71,7 +70,7 @@ final class FolderTypeAnalyzer: Sendable {
 
 						return (index, FileBrowserNode.directory(mutableDir))
 
-					case .file(let file):
+					case let .file(file):
 						return (index, FileBrowserNode.file(file))
 					}
 				}
@@ -82,21 +81,21 @@ final class FolderTypeAnalyzer: Sendable {
 			}
 		}
 
-		return results.compactMap { $0 }
+		return results.compactMap(\.self)
 	}
 
 	/* Attaches symbol-level warnings to files that contain those symbols.
-	   Used for shared folders where individual symbols have warnings but we want to display them
-	   on the file level rather than cluttering the folder with many badges. */
+	 Used for shared folders where individual symbols have warnings but we want to display them
+	 on the file level rather than cluttering the folder with many badges. */
 	private nonisolated func attachSymbolWarningsToFiles(
 		children: [FileBrowserNode],
 		symbolWarnings: [Declaration: AnalysisWarning]
 	) -> [FileBrowserNode] {
-		return children.map { child in
+		children.map { child in
 			switch child {
-			case .file(var file):
+			case var .file(file):
 				// Find warnings for symbols in this file
-				let fileWarnings = symbolWarnings.filter { (symbol, _) in
+				let fileWarnings = symbolWarnings.filter { symbol, _ in
 					symbol.location.file.path.string == file.path
 				}
 
@@ -111,7 +110,7 @@ final class FolderTypeAnalyzer: Sendable {
 
 				return .file(file)
 
-			case .directory(let dir):
+			case let .directory(dir):
 				// Don't recurse into subdirectories - symbol warnings only apply to direct children
 				return .directory(dir)
 			}
@@ -121,7 +120,13 @@ final class FolderTypeAnalyzer: Sendable {
 	private nonisolated func analyzeFolder(
 		directory: FileBrowserDirectory,
 		graph: SourceGraph
-	) -> (folderType: FolderType, warnings: [AnalysisWarning], statistics: FolderStatistics?, symbolWarnings: [Declaration: AnalysisWarning]?) {
+	)
+		-> (
+			folderType: FolderType,
+			warnings: [AnalysisWarning],
+			statistics: FolderStatistics?,
+			symbolWarnings: [Declaration: AnalysisWarning]?
+		) {
 		let allDeclarations = graph.allDeclarations
 
 		let swiftFiles = collectSwiftFiles(in: directory)
@@ -173,7 +178,12 @@ final class FolderTypeAnalyzer: Sendable {
 			internalSymbols: internalSymbols,
 			referenceAnalysis: referenceAnalysis
 		) {
-			return (sharedFolderResult.folderType, sharedFolderResult.warnings, statistics, sharedFolderResult.symbolWarnings)
+			return (
+				sharedFolderResult.folderType,
+				sharedFolderResult.warnings,
+				statistics,
+				sharedFolderResult.symbolWarnings
+			)
 		}
 
 		let warnings = generateAmbiguousWarnings(
@@ -192,9 +202,9 @@ final class FolderTypeAnalyzer: Sendable {
 		func collectRecursive(nodes: [FileBrowserNode]) {
 			for node in nodes {
 				switch node {
-				case .file(let file):
+				case let .file(file):
 					files.append(file)
-				case .directory(let dir):
+				case let .directory(dir):
 					collectRecursive(nodes: dir.children)
 				}
 			}
@@ -208,7 +218,7 @@ final class FolderTypeAnalyzer: Sendable {
 		in files: [FileBrowserFile],
 		allDeclarations: Set<Declaration>
 	) -> [Declaration] {
-		let filePaths = Set(files.map { $0.path })
+		let filePaths = Set(files.map(\.path))
 
 		var symbols: [Declaration] = []
 		for decl in allDeclarations {
@@ -226,7 +236,7 @@ final class FolderTypeAnalyzer: Sendable {
 		folderPath: String,
 		graph: SourceGraph
 	) -> ReferenceAnalysis {
-		return ReferenceAnalysisUtility.analyzeSymbolReferences(symbols: symbols, sourcePath: folderPath, graph: graph)
+		ReferenceAnalysisUtility.analyzeSymbolReferences(symbols: symbols, sourcePath: folderPath, graph: graph)
 	}
 
 	// If possible, classify as symbol folder or its more specialized view folder
@@ -236,7 +246,6 @@ final class FolderTypeAnalyzer: Sendable {
 		internalSymbols: [Declaration],
 		referenceAnalysis: ReferenceAnalysis
 	) -> (folderType: FolderType, warnings: [AnalysisWarning])? {
-
 		// auto-detection (folder name matches file and symbol)
 		let expectedFileName = folderName + ".swift"
 		guard let mainFile = swiftFiles.first(where: { $0.name == expectedFileName }) else {
@@ -276,13 +285,12 @@ final class FolderTypeAnalyzer: Sendable {
 		referenceAnalysis: ReferenceAnalysis,
 		swiftFiles: [FileBrowserFile]
 	) -> (folderType: FolderType, warnings: [AnalysisWarning])? {
-
 		let otherSymbols = internalSymbols.filter { $0 != mainSymbol }
 		var warnings: [AnalysisWarning] = []
 
 		/* Filter out symbols that are legitimately part of the main symbol's public API.
-		   Direct members (children) of the main symbol with public/internal accessibility
-		   are expected to be used externally when the main symbol is used. */
+		 Direct members (children) of the main symbol with public/internal accessibility
+		 are expected to be used externally when the main symbol is used. */
 		let mainSymbolMembers = otherSymbols.filter { symbol in
 			// Check if this symbol's parent is the main symbol
 			guard let parent = symbol.parent else { return false }
@@ -294,8 +302,8 @@ final class FolderTypeAnalyzer: Sendable {
 		}
 
 		/* Leaked symbols are those referenced externally, excluding:
-		   1. The main symbol itself (already filtered in otherSymbols)
-		   2. Direct members of the main symbol (part of its public API) */
+		 1. The main symbol itself (already filtered in otherSymbols)
+		 2. Direct members of the main symbol (part of its public API) */
 		let leakedSymbols = otherSymbols.filter { symbol in
 			// Must be referenced externally
 			guard referenceAnalysis.symbolsWithExternalReferences.contains(symbol) else { return false }
@@ -305,7 +313,7 @@ final class FolderTypeAnalyzer: Sendable {
 		}
 
 		if !leakedSymbols.isEmpty {
-			let symbolNames = leakedSymbols.compactMap { $0.name }.sorted().joined(separator: ", ")
+			let symbolNames = leakedSymbols.compactMap(\.name).sorted().joined(separator: ", ")
 
 			var details: [String] = []
 			details.append("Leaked support symbols (\(leakedSymbols.count)):")
@@ -317,7 +325,7 @@ final class FolderTypeAnalyzer: Sendable {
 			}
 
 			let symbolsToMove = leakedSymbols.map { symbol in
-				return symbol.name ?? "unknown"
+				symbol.name ?? "unknown"
 			}
 
 			let actions: [SuggestedAction] = [
@@ -329,9 +337,12 @@ final class FolderTypeAnalyzer: Sendable {
 					)
 				),
 				.refactorToUseMainSymbol(
-					folderPath: swiftFiles.first?.path.replacingOccurrences(of: "/\(swiftFiles.first?.name ?? "")", with: "") ?? "",
+					folderPath: swiftFiles.first?.path.replacingOccurrences(
+						of: "/\(swiftFiles.first?.name ?? "")",
+						with: ""
+					) ?? "",
 					mainSymbol: mainSymbolName,
-					leakedSymbols: leakedSymbols.compactMap { $0.name }
+					leakedSymbols: leakedSymbols.compactMap(\.name)
 				)
 			]
 
@@ -365,10 +376,11 @@ final class FolderTypeAnalyzer: Sendable {
 			return nil
 		}
 
-		
-
 		if swiftFiles.count > 10 {
-			let folderPath = swiftFiles.first?.path.replacingOccurrences(of: "/\(swiftFiles.first?.name ?? "")", with: "") ?? ""
+			let folderPath = swiftFiles.first?.path.replacingOccurrences(
+				of: "/\(swiftFiles.first?.name ?? "")",
+				with: ""
+			) ?? ""
 
 			warnings.append(AnalysisWarning(
 				severity: .info,
@@ -388,7 +400,6 @@ final class FolderTypeAnalyzer: Sendable {
 	private nonisolated func tryClassifyAsUIFolder(
 		folderName: String
 	) -> (folderType: FolderType, warnings: [AnalysisWarning], symbolWarnings: [Declaration: AnalysisWarning])? {
-
 		let uiKeywords = ["ui", "views", "interface"]
 		let isNamedLikeUI = uiKeywords.contains { folderName.lowercased().contains($0) }
 
@@ -404,9 +415,9 @@ final class FolderTypeAnalyzer: Sendable {
 		referenceAnalysis: ReferenceAnalysis
 	) -> (folderType: FolderType, warnings: [AnalysisWarning], symbolWarnings: [Declaration: AnalysisWarning])? {
 		/* Folders with these names are classified as "shared folders" and held to stricter standards.
-		   Philosophy: Code in Utilities/Helpers/Shared folders should be widely reused across the codebase.
-		   If a symbol is only used in one place, it should live closer to where it's used, not in a shared folder.
-		   This prevents shared folders from becoming dumping grounds for single-purpose code. */
+		 Philosophy: Code in Utilities/Helpers/Shared folders should be widely reused across the codebase.
+		 If a symbol is only used in one place, it should live closer to where it's used, not in a shared folder.
+		 This prevents shared folders from becoming dumping grounds for single-purpose code. */
 		let sharedKeywords = ["shared", "common", "extension", "support", "utilit", "helper"]
 		let isNamedLikeShared = sharedKeywords.contains { folderName.lowercased().contains($0) }
 
@@ -421,8 +432,8 @@ final class FolderTypeAnalyzer: Sendable {
 			let refCount = referencingFiles.count
 
 			/* Orange WARNING (not just info): Symbol in shared folder used by only one file.
-			   Shared folders should contain widely-reused utilities. Single-use code should live
-			   in the folder where it's used, not in a "shared" folder. Suggest moving the symbol. */
+			 Shared folders should contain widely-reused utilities. Single-use code should live
+			 in the folder where it's used, not in a "shared" folder. Suggest moving the symbol. */
 			if refCount == 1 {
 				let symbolName = symbol.name ?? "unknown"
 				let filePath = referencingFiles.first!
@@ -451,7 +462,7 @@ final class FolderTypeAnalyzer: Sendable {
 				let inappropriateForUIFolder = isTargetUIFolder && !symbolIsView
 
 				var actions: [SuggestedAction] = []
-				if !isAncestor && !inappropriateForUIFolder {
+				if !isAncestor, !inappropriateForUIFolder {
 					actions.append(.moveSymbolsToFolder(
 						symbols: [symbolName],
 						targetFolder: FolderTarget(
@@ -470,8 +481,8 @@ final class FolderTypeAnalyzer: Sendable {
 			} else if refCount > 1 {
 				let folders = Set(referencingFiles.map { ReferenceAnalysisUtility.extractFolderPath(from: $0) })
 				/* Orange WARNING: Symbol used by multiple files, but all in the same folder.
-				   Even with multiple consumers, if they're all in one folder, the symbol belongs there.
-				   This reinforces the shared folder philosophy: only truly cross-cutting utilities belong here. */
+				 Even with multiple consumers, if they're all in one folder, the symbol belongs there.
+				 This reinforces the shared folder philosophy: only truly cross-cutting utilities belong here. */
 				if folders.count == 1 {
 					let symbolName = symbol.name ?? "unknown"
 					let targetFolderPath = folders.first!
@@ -498,7 +509,7 @@ final class FolderTypeAnalyzer: Sendable {
 					let inappropriateForUIFolder = isTargetUIFolder && !symbolIsView
 
 					var actions: [SuggestedAction] = []
-					if !isAncestor && !inappropriateForUIFolder {
+					if !isAncestor, !inappropriateForUIFolder {
 						actions.append(.moveSymbolsToFolder(
 							symbols: [symbolName],
 							targetFolder: FolderTarget(
@@ -545,9 +556,12 @@ final class FolderTypeAnalyzer: Sendable {
 		let expectedFileName = folderName + ".swift"
 		if swiftFiles.contains(where: { $0.name == expectedFileName }) {
 			/* This warning fires when a folder has a main file matching its name but failed
-			   to classify as a symbol folder. The most common reason is that support symbols
-			   within the folder are referenced externally (leaked), preventing proper encapsulation. */
-			let folderPath = swiftFiles.first?.path.replacingOccurrences(of: "/\(swiftFiles.first?.name ?? "")", with: "") ?? ""
+			 to classify as a symbol folder. The most common reason is that support symbols
+			 within the folder are referenced externally (leaked), preventing proper encapsulation. */
+			let folderPath = swiftFiles.first?.path.replacingOccurrences(
+				of: "/\(swiftFiles.first?.name ?? "")",
+				with: ""
+			) ?? ""
 
 			let mainSymbol = internalSymbols.first { $0.name == folderName }
 			let leakedSymbols = internalSymbols.filter {
@@ -555,7 +569,7 @@ final class FolderTypeAnalyzer: Sendable {
 			}
 
 			var symbolRefs: [SymbolReference] = []
-			if let mainSymbol = mainSymbol {
+			if let mainSymbol {
 				symbolRefs.append(SymbolReference(
 					symbolName: mainSymbol.name ?? "unknown",
 					icon: mainSymbol.kind.icon,
@@ -598,7 +612,10 @@ final class FolderTypeAnalyzer: Sendable {
 
 			var details: [String] = []
 
-			let symbolDetails = ReferenceAnalysisUtility.buildSymbolReferenceDetails(symbols: symbolsWithRefs, referenceAnalysis: referenceAnalysis)
+			let symbolDetails = ReferenceAnalysisUtility.buildSymbolReferenceDetails(
+				symbols: symbolsWithRefs,
+				referenceAnalysis: referenceAnalysis
+			)
 			let symbolCount = symbolDetails.consolidatedCount
 
 			details.append("Shared symbols (\(symbolCount)):")
@@ -624,7 +641,10 @@ final class FolderTypeAnalyzer: Sendable {
 				}
 			}
 
-			let currentPath = swiftFiles.first?.path.replacingOccurrences(of: "/\(swiftFiles.first?.name ?? "")", with: "") ?? ""
+			let currentPath = swiftFiles.first?.path.replacingOccurrences(
+				of: "/\(swiftFiles.first?.name ?? "")",
+				with: ""
+			) ?? ""
 
 			// Note: Cannot use inflection syntax ^[symbol](inflect: true) here because:
 			// 1. Inflection only works with string literals, not dynamically constructed strings
@@ -655,7 +675,7 @@ final class FolderTypeAnalyzer: Sendable {
 				let folderContainsViews = ReferenceAnalysisUtility.containsViewSymbols(internalSymbols)
 				let inappropriateForUIFolder = isTargetUIFolder && !folderContainsViews
 
-				if !isAncestor && !inappropriateForUIFolder {
+				if !isAncestor, !inappropriateForUIFolder {
 					actions.append(.moveFolderIntoFolder(
 						sourceFolderPath: currentPath,
 						sourceFolderName: folderName,
@@ -679,8 +699,8 @@ final class FolderTypeAnalyzer: Sendable {
 		for child in directory.children {
 			switch child {
 			case .file:
-				return true  // Any file means Swift file (scanner only includes .swift)
-			case .directory(let subdir):
+				return true // Any file means Swift file (scanner only includes .swift)
+			case let .directory(subdir):
 				if directoryContainsSwiftFiles(subdir) {
 					return true
 				}

@@ -10,21 +10,20 @@ import SourceGraph
 import SystemPackage
 
 final class FileWarningAnalyzer: Sendable {
-
-    // Shared analysis context to avoid repeated work per file
-    private struct AnalysisContext {
-        let declarationsByFile: [String: [Declaration]]
-    }
+	// Shared analysis context to avoid repeated work per file
+	private struct AnalysisContext {
+		let declarationsByFile: [String: [Declaration]]
+	}
 
 	/* Computes usage badge text for a file based on reference patterns.
-	   Priority order:
-	   1. "Folder-private" - has same-folder refs but no cross-folder refs (positive/green)
-	   2. "Unused file" - has symbols but no references at all (warning)
-	   3. "Shared (N folders)" - symbols referenced by multiple folders
-	   4. "N files use" - symbols referenced by N files (cross-folder)
-	   5. "Single consumer" - only one file references this
-	   6. "N symbols" - default fallback
-	   Returns tuple of (badgeText, isWarning, isPositive). */
+	 Priority order:
+	 1. "Folder-private" - has same-folder refs but no cross-folder refs (positive/green)
+	 2. "Unused file" - has symbols but no references at all (warning)
+	 3. "Shared (N folders)" - symbols referenced by multiple folders
+	 4. "N files use" - symbols referenced by N files (cross-folder)
+	 5. "Single consumer" - only one file references this
+	 6. "N symbols" - default fallback
+	 Returns tuple of (badgeText, isWarning, isPositive). */
 	private nonisolated static func computeUsageBadge(
 		statistics: FileStatistics
 	) -> (text: String, isWarning: Bool, isPositive: Bool) {
@@ -39,7 +38,7 @@ final class FileWarningAnalyzer: Sendable {
 		}
 
 		// Case 2: Unused file (warning - has symbols but no usage at all)
-		if hasSymbols && !hasCrossFolderRefs && !hasSameFolderRefs && !isEntryPoint {
+		if hasSymbols, !hasCrossFolderRefs, !hasSameFolderRefs, !isEntryPoint {
 			return ("Unused file", true, false)
 		}
 
@@ -80,33 +79,33 @@ final class FileWarningAnalyzer: Sendable {
 		nodes: [FileBrowserNode],
 		graph: SourceGraph
 	) async -> [FileBrowserNode] {
-        // Precompute declarations grouped by file to avoid scanning the whole graph per file
-        let declarationsByFile: [String: [Declaration]] = {
-            var dict: [String: [Declaration]] = [:]
-            for decl in graph.allDeclarations {
-                let path = decl.location.file.path.string
-                dict[path, default: []].append(decl)
-            }
-            return dict
-        }()
-        let context = AnalysisContext(declarationsByFile: declarationsByFile)
-        return await analyzeFilesRecursive(nodes: nodes, graph: graph, context: context)
+		// Precompute declarations grouped by file to avoid scanning the whole graph per file
+		let declarationsByFile: [String: [Declaration]] = {
+			var dict: [String: [Declaration]] = [:]
+			for decl in graph.allDeclarations {
+				let path = decl.location.file.path.string
+				dict[path, default: []].append(decl)
+			}
+			return dict
+		}()
+		let context = AnalysisContext(declarationsByFile: declarationsByFile)
+		return await analyzeFilesRecursive(nodes: nodes, graph: graph, context: context)
 	}
 
 	private nonisolated func analyzeFilesRecursive(
 		nodes: [FileBrowserNode],
 		graph: SourceGraph,
-        context: AnalysisContext
+		context: AnalysisContext
 	) async -> [FileBrowserNode] {
 		var analyzedNodes: [FileBrowserNode] = []
 
 		for node in nodes {
 			switch node {
-			case .directory(let dir):
+			case let .directory(dir):
 				let enrichedChildren = await analyzeFilesRecursive(
 					nodes: dir.children,
 					graph: graph,
-                    context: context
+					context: context
 				)
 
 				var mutableDir = dir
@@ -114,7 +113,7 @@ final class FileWarningAnalyzer: Sendable {
 
 				analyzedNodes.append(.directory(mutableDir))
 
-			case .file(let file):
+			case let .file(file):
 				var mutableFile = file
 				let analysisResult = analyzeFile(file: file, graph: graph, context: context)
 				mutableFile.analysisWarnings = analysisResult.warnings
@@ -153,21 +152,21 @@ final class FileWarningAnalyzer: Sendable {
 	private struct FileAnalysisResult {
 		let warnings: [AnalysisWarning]
 		let statistics: FileStatistics?
-		let symbolReferences: [String: [String]]  // symbol name -> referencing file names
+		let symbolReferences: [String: [String]] // symbol name -> referencing file names
 	}
 
 	private nonisolated func analyzeFile(
 		file: FileBrowserFile,
 		graph: SourceGraph,
-        context: AnalysisContext
+		context: AnalysisContext
 	) -> FileAnalysisResult {
 		// Get all symbols declared in this file from precomputed context
 		let fileSymbols = context.declarationsByFile[file.path] ?? []
 
-        // Commonly used path components (computed once)
-        let fileName = (file.path as NSString).lastPathComponent
-        let folderPath = (file.path as NSString).deletingLastPathComponent
-        let folderName = (folderPath as NSString).lastPathComponent
+		// Commonly used path components (computed once)
+		let fileName = (file.path as NSString).lastPathComponent
+		let folderPath = (file.path as NSString).deletingLastPathComponent
+		let folderName = (folderPath as NSString).lastPathComponent
 
 		// Handle files with no symbols
 		if fileSymbols.isEmpty {
@@ -187,14 +186,14 @@ final class FileWarningAnalyzer: Sendable {
 		// Analyze cross-folder references (excludes same-folder refs)
 		let crossFolderAnalysis = ReferenceAnalysisUtility.analyzeSymbolReferences(
 			symbols: fileSymbols,
-			sourcePath: folderPath,  // Use folder path so references from same folder are excluded
+			sourcePath: folderPath, // Use folder path so references from same folder are excluded
 			graph: graph
 		)
 
 		// Analyze all references (excludes only same-file refs)
 		let allReferencesAnalysis = ReferenceAnalysisUtility.analyzeSymbolReferences(
 			symbols: fileSymbols,
-			sourcePath: file.path,  // Use file path so only self-references are excluded
+			sourcePath: file.path, // Use file path so only self-references are excluded
 			graph: graph
 		)
 
@@ -208,8 +207,8 @@ final class FileWarningAnalyzer: Sendable {
 		}
 
 		// Calculate same-folder references: files in allReferences but not in crossFolder
-		let allExternalFiles = Set(allReferencesAnalysis.symbolReferences.values.flatMap { $0 })
-		let crossFolderFiles = Set(crossFolderAnalysis.symbolReferences.values.flatMap { $0 })
+		let allExternalFiles = Set(allReferencesAnalysis.symbolReferences.values.flatMap(\.self))
+		let crossFolderFiles = Set(crossFolderAnalysis.symbolReferences.values.flatMap(\.self))
 		let sameFolderFiles = allExternalFiles.subtracting(crossFolderFiles)
 		let sameFolderFileCount = sameFolderFiles.count
 		let sameFolderFileNames = sameFolderFiles
@@ -275,7 +274,7 @@ final class FileWarningAnalyzer: Sendable {
 		// Check for View naming warnings
 		let hasViewSymbol = fileSymbols.contains { DeclarationIconHelper.conformsToView($0) }
 
-		if fileName.hasSuffix("View.swift") && !hasViewSymbol {
+		if fileName.hasSuffix("View.swift"), !hasViewSymbol {
 			// Check if both file AND folder end with "View" (escalated severity)
 			if folderName.hasSuffix("View") {
 				warnings.append(AnalysisWarning(
@@ -326,16 +325,16 @@ final class FileWarningAnalyzer: Sendable {
 
 		// Check for unnecessarily public symbols (only top-level types)
 		let topLevelTypes = fileSymbols.filter { symbol in
-			let isTopLevelType: Bool
-			switch symbol.kind {
+			let isTopLevelType = switch symbol.kind {
 			case .class, .struct, .enum, .protocol:
-				isTopLevelType = true
+				true
 			default:
-				isTopLevelType = false
+				false
 			}
 
 			// Exclude extensions, @main entry points, and nested symbols
-			let isExtension = [.extensionClass, .extensionStruct, .extensionEnum, .extensionProtocol].contains(symbol.kind)
+			let isExtension = [.extensionClass, .extensionStruct, .extensionEnum, .extensionProtocol]
+				.contains(symbol.kind)
 			let isMain = DeclarationIconHelper.isMainApp(symbol)
 			let isNested = symbol.parent != nil
 
@@ -345,7 +344,7 @@ final class FileWarningAnalyzer: Sendable {
 		for symbol in topLevelTypes {
 			// Check if symbol is public or internal (not already private/fileprivate)
 			let isPublicOrInternal = symbol.accessibility.value == .public ||
-									 symbol.accessibility.value == .internal
+				symbol.accessibility.value == .internal
 
 			guard isPublicOrInternal else { continue }
 
@@ -383,13 +382,17 @@ final class FileWarningAnalyzer: Sendable {
 
 		let hasExternalRefs = referenceAnalysis.externalFileReferenceCount > 0
 		if hasExternalRefs {
-			let symbolDetails = ReferenceAnalysisUtility.buildSymbolReferenceDetails(symbols: symbols, referenceAnalysis: referenceAnalysis)
+			let symbolDetails = ReferenceAnalysisUtility.buildSymbolReferenceDetails(
+				symbols: symbols,
+				referenceAnalysis: referenceAnalysis
+			)
 
 			let folderCount = referenceAnalysis.folderReferenceCounts.count
 
 			let symbolCount = symbolDetails.consolidatedCount
 
-			let topFolder: (key: String, value: Int)? = referenceAnalysis.folderReferenceCounts.max(by: { $0.value < $1.value })
+			let topFolder: (key: String, value: Int)? = referenceAnalysis.folderReferenceCounts
+				.max(by: { $0.value < $1.value })
 
 			// Use manual pluralization (same pattern as folder warnings)
 			let fileCount = referenceAnalysis.externalFileReferenceCount
@@ -413,7 +416,7 @@ final class FileWarningAnalyzer: Sendable {
 				let fileContainsViews = ReferenceAnalysisUtility.containsViewSymbols(symbols)
 				let inappropriateForUIFolder = isTargetUIFolder && !fileContainsViews
 
-				if !isAncestor && !inappropriateForUIFolder {
+				if !isAncestor, !inappropriateForUIFolder {
 					let fileName = (file.path as NSString).lastPathComponent
 					actions.append(.moveFileToFolder(
 						filePath: file.path,
@@ -425,7 +428,7 @@ final class FileWarningAnalyzer: Sendable {
 
 			// Determine badge message based on specific case
 			let message: String
-			if symbolCount == 1 && folderCount == 1 && !actions.isEmpty {
+			if symbolCount == 1, folderCount == 1, !actions.isEmpty {
 				let targetFolderName = (topFolder!.key as NSString).lastPathComponent
 				message = "Move to \(targetFolderName)/"
 			} else {
@@ -442,4 +445,3 @@ final class FileWarningAnalyzer: Sendable {
 		return warnings
 	}
 }
-

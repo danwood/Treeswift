@@ -1,19 +1,18 @@
 import Foundation
 
 /**
-Utilities for finding comment lines in source code.
+ Utilities for finding comment lines in source code.
 
-Provides methods for scanning backward from a given line to find
-comment blocks, specific comment patterns, and periphery directives.
-*/
+ Provides methods for scanning backward from a given line to find
+ comment blocks, specific comment patterns, and periphery directives.
+ */
 struct CommentScanner {
-
 	/**
-	Scans backward from a line to find comment lines.
+	 Scans backward from a line to find comment lines.
 
-	Stops at blank lines or non-comment code. Returns line numbers
-	of found comments in ascending order (earliest first).
-	*/
+	 Stops at blank lines or non-comment code. Returns line numbers
+	 of found comments in ascending order (earliest first).
+	 */
 	static func findCommentLines(
 		in lines: [String],
 		backwardFrom startLine: Int,
@@ -45,13 +44,13 @@ struct CommentScanner {
 	}
 
 	/**
-	Finds a line containing a specific pattern in comments.
+	 Finds a line containing a specific pattern in comments.
 
-	Scans backward from startLine looking for a comment line that contains
-	the given pattern. Returns the 1-based line number, or nil if not found.
+	 Scans backward from startLine looking for a comment line that contains
+	 the given pattern. Returns the 1-based line number, or nil if not found.
 
-	Stops scanning at blank lines or non-comment lines.
-	*/
+	 Stops scanning at blank lines or non-comment lines.
+	 */
 	static func findCommentContaining(
 		pattern: String,
 		in lines: [String],

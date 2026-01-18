@@ -5,8 +5,8 @@
 //  Executes CLI operations (list configurations, run scans) in headless mode
 //
 
-import Foundation
 import AppKit
+import Foundation
 
 @MainActor
 final class CLIScanRunner {
@@ -126,9 +126,9 @@ enum CLIScanError: Error, CustomStringConvertible {
 
 	var description: String {
 		switch self {
-		case .configurationNotFound(let name):
+		case let .configurationNotFound(name):
 			"Configuration not found: '\(name)'\nUse --list to see available configurations"
-		case .scanFailed(let message):
+		case let .scanFailed(message):
 			"Scan failed: \(message)"
 		}
 	}

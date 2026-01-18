@@ -13,8 +13,8 @@ nonisolated enum FileBrowserNode: Identifiable, Hashable, Sendable {
 
 	var id: String {
 		switch self {
-		case .directory(let node): node.id
-		case .file(let node): node.id
+		case let .directory(node): node.id
+		case let .file(node): node.id
 		}
 	}
 
@@ -63,8 +63,16 @@ nonisolated struct FileBrowserFile: Identifiable, Hashable, Sendable {
 	var modificationDate: Date?
 	var fileSize: Int64?
 
-	init(id: String, name: String, path: String, typeInfos: [FileTypeInfo]? = nil, analysisWarnings: [AnalysisWarning] = [], statistics: FileStatistics? = nil,
-		usageBadge: UsageBadge? = nil, modificationDate: Date? = nil, fileSize: Int64? = nil
+	init(
+		id: String,
+		name: String,
+		path: String,
+		typeInfos: [FileTypeInfo]? = nil,
+		analysisWarnings: [AnalysisWarning] = [],
+		statistics: FileStatistics? = nil,
+		usageBadge: UsageBadge? = nil,
+		modificationDate: Date? = nil,
+		fileSize: Int64? = nil
 	) {
 		self.id = id
 		self.name = name
@@ -87,10 +95,9 @@ extension FileBrowserNode: NavigableTreeNode {
 	}
 
 	var childNodes: [any NavigableTreeNode] {
-		if case .directory(let dir) = self {
+		if case let .directory(dir) = self {
 			return dir.children
 		}
 		return []
 	}
-
 }

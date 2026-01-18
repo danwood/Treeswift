@@ -44,7 +44,7 @@ final class TypeWarningCache: Sendable {
 
 			// Weirdly expressed to avoid: Main actor-isolated conformance of 'ScanResult.Annotation'
 			// to 'RawRepresentable' cannot be used in nonisolated context
-			let isUnused: Bool = if case .unused = result.annotation { true } else { false }
+			let isUnused = if case .unused = result.annotation { true } else { false }
 			let isRedundantPublic = if case .redundantPublicAccessibility = result.annotation { true } else { false }
 
 			// Merge with existing status (a type can have multiple warnings)
@@ -63,6 +63,4 @@ final class TypeWarningCache: Sendable {
 
 		return cache
 	}
-
-
 }

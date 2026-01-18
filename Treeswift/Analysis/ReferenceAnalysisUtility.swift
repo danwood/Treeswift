@@ -14,7 +14,7 @@ nonisolated struct ReferenceAnalysis {
 	let externalFileReferenceCount: Int
 	let symbolsWithExternalReferences: Set<Declaration>
 	let folderReferenceCounts: [String: Int]
-	let folderReferenceFiles: [String: Set<String>]  // folder path -> file paths
+	let folderReferenceFiles: [String: Set<String>] // folder path -> file paths
 }
 
 /// Represents a consolidated reference from a source file to a target container
@@ -24,7 +24,7 @@ private nonisolated struct ConsolidatedReference: Hashable, Sendable {
 
 	nonisolated init(sourceFilePath: String, targetContainer: Declaration) {
 		self.sourceFilePath = sourceFilePath
-		self.targetContainerId = ObjectIdentifier(targetContainer)
+		targetContainerId = ObjectIdentifier(targetContainer)
 	}
 
 	nonisolated func hash(into hasher: inout Hasher) {
@@ -34,7 +34,7 @@ private nonisolated struct ConsolidatedReference: Hashable, Sendable {
 
 	nonisolated static func == (lhs: ConsolidatedReference, rhs: ConsolidatedReference) -> Bool {
 		lhs.sourceFilePath == rhs.sourceFilePath &&
-		lhs.targetContainerId == rhs.targetContainerId
+			lhs.targetContainerId == rhs.targetContainerId
 	}
 }
 
@@ -60,7 +60,7 @@ nonisolated enum ReferenceAnalysisUtility {
 				let declFilePath = declLoc.file.path.string
 
 				// Check if reference is external (different file and outside source path)
-				if refFilePath != declFilePath && !refFilePath.starts(with: sourcePath) {
+				if refFilePath != declFilePath, !refFilePath.starts(with: sourcePath) {
 					referencingFiles.insert(refFilePath)
 					allExternalFiles.insert(refFilePath)
 					symbolsWithExternal.insert(symbol)
@@ -96,12 +96,12 @@ nonisolated enum ReferenceAnalysisUtility {
 	}
 
 	static func extractFolderPath(from filePath: String) -> String {
-		return (filePath as NSString).deletingLastPathComponent
+		(filePath as NSString).deletingLastPathComponent
 	}
 
 	/* Find the top-level container (class, struct, enum, protocol) for a declaration.
-	   Walks up the parent chain to find the outermost type container.
-	   Extensions are treated as separate containers from their base types. */
+	 Walks up the parent chain to find the outermost type container.
+	 Extensions are treated as separate containers from their base types. */
 	static func findTopLevelContainer(for declaration: Declaration) -> Declaration {
 		var current = declaration
 		var topContainer = declaration
@@ -124,8 +124,8 @@ nonisolated enum ReferenceAnalysisUtility {
 	}
 
 	/* Check if target folder is an ancestor of (or same as) the source folder.
-	   Used to filter out move suggestions where the file/symbol would move "up" to a parent folder.
-	   Being in a subfolder is considered good organization, so we don't suggest moving up. */
+	 Used to filter out move suggestions where the file/symbol would move "up" to a parent folder.
+	 Being in a subfolder is considered good organization, so we don't suggest moving up. */
 	static func isTargetFolderAncestorOfSource(targetFolder: String, sourceFolder: String) -> Bool {
 		// Normalize both paths to absolute paths (remove trailing slash for comparison)
 		let normalizedTarget = (targetFolder as NSString).standardizingPath
@@ -134,12 +134,12 @@ nonisolated enum ReferenceAnalysisUtility {
 		// Source is in target if source path starts with target path followed by /
 		// or if they're exactly equal
 		return normalizedSource == normalizedTarget ||
-			   normalizedSource.hasPrefix(normalizedTarget + "/")
+			normalizedSource.hasPrefix(normalizedTarget + "/")
 	}
 
 	/* Check if a folder name suggests it's meant for view/UI files.
-	   Matches folders named with UI keywords (ui, views, interface) or view-related patterns.
-	   Used to prevent suggesting non-view files be moved into view/UI folders. */
+	 Matches folders named with UI keywords (ui, views, interface) or view-related patterns.
+	 Used to prevent suggesting non-view files be moved into view/UI folders. */
 	static func isUIOrViewFolder(folderName: String) -> Bool {
 		let uiKeywords = ["ui", "views", "interface"]
 		let lowercased = folderName.lowercased()
@@ -147,10 +147,10 @@ nonisolated enum ReferenceAnalysisUtility {
 	}
 
 	/* Check if any of the symbols conform to a view type (View, ViewModifier, etc).
-	   Used to determine if a file containing these symbols is appropriate to move into a view/UI folder.
-	   Only returns true for actual View types (struct/class), not extensions, protocols, or other declarations. */
+	 Used to determine if a file containing these symbols is appropriate to move into a view/UI folder.
+	 Only returns true for actual View types (struct/class), not extensions, protocols, or other declarations. */
 	static func containsViewSymbols(_ symbols: [Declaration]) -> Bool {
-		return symbols.contains { symbol in
+		symbols.contains { symbol in
 			// Only consider struct or class declarations (not extensions, protocols, etc.)
 			let isActualType = symbol.kind == .struct || symbol.kind == .class
 			let conformsToView = DeclarationIconHelper.conformsToView(symbol)
@@ -159,9 +159,9 @@ nonisolated enum ReferenceAnalysisUtility {
 	}
 
 	/* Build formatted detail strings for symbol references.
-	   Groups symbols by their top-level parent type and consolidates file references.
-	   Shows parent type name with consolidated file list.
-	   Returns tuple of (details array, consolidated symbol count). */
+	 Groups symbols by their top-level parent type and consolidates file references.
+	 Shows parent type name with consolidated file list.
+	 Returns tuple of (details array, consolidated symbol count). */
 	static func buildSymbolReferenceDetails(
 		symbols: [Declaration],
 		referenceAnalysis: ReferenceAnalysis

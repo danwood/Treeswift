@@ -3,26 +3,25 @@ import SourceGraph
 import SystemPackage
 
 /**
-Utilities for adjusting line numbers in SourceGraph after file modifications.
+ Utilities for adjusting line numbers in SourceGraph after file modifications.
 
-Handles updating declaration locations when lines are added or removed from source files.
-Supports both forward adjustments (during modification) and reverse adjustments (for undo).
-*/
+ Handles updating declaration locations when lines are added or removed from source files.
+ Supports both forward adjustments (during modification) and reverse adjustments (for undo).
+ */
 struct SourceGraphLineAdjuster {
-
 	/**
-	Adjusts line numbers and returns affected declaration USRs.
+	 Adjusts line numbers and returns affected declaration USRs.
 
-	This is the primary method all code should use. Combines adjustment
-	and USR tracking in one operation.
+	 This is the primary method all code should use. Combines adjustment
+	 and USR tracking in one operation.
 
-	Use negative lineDelta for deletions (lines removed), positive for insertions (lines added).
-	*/
+	 Use negative lineDelta for deletions (lines removed), positive for insertions (lines added).
+	 */
 	static func adjustAndTrack(
 		sourceGraph: SourceGraph,
 		filePath: String,
 		afterLine: Int,
-		lineDelta: Int  // negative for deletions, positive for insertions
+		lineDelta: Int // negative for deletions, positive for insertions
 	) -> [String] {
 		var adjustedUSRs: [String] = []
 
@@ -55,20 +54,20 @@ struct SourceGraphLineAdjuster {
 	}
 
 	/**
-	Adjusts line numbers for all declarations after a modified range.
+	 Adjusts line numbers for all declarations after a modified range.
 
-	Updates the location of declarations that appear after the modification,
-	shifting them by the specified adjustment amount. Returns the USRs of
-	all declarations that were modified for tracking in undo operations.
+	 Updates the location of declarations that appear after the modification,
+	 shifting them by the specified adjustment amount. Returns the USRs of
+	 all declarations that were modified for tracking in undo operations.
 
-	Note: Prefer using adjustAndTrack() instead.
-	*/
+	 Note: Prefer using adjustAndTrack() instead.
+	 */
 	@available(*, deprecated, message: "Use adjustAndTrack() instead")
 	static func adjustLineNumbers(
 		sourceGraph: SourceGraph,
 		filePath: String,
 		afterLine: Int,
-		adjustment: Int  // negative for deletions, positive for insertions
+		adjustment: Int // negative for deletions, positive for insertions
 	) -> [String] {
 		adjustAndTrack(
 			sourceGraph: sourceGraph,
@@ -79,16 +78,16 @@ struct SourceGraphLineAdjuster {
 	}
 
 	/**
-	Reverses a previous line number adjustment.
+	 Reverses a previous line number adjustment.
 
-	Used during undo operations to restore declarations to their original line numbers.
-	Only adjusts declarations whose USRs are in the provided tracking list.
-	*/
+	 Used during undo operations to restore declarations to their original line numbers.
+	 Only adjusts declarations whose USRs are in the provided tracking list.
+	 */
 	static func reverseLineAdjustment(
 		sourceGraph: SourceGraph,
 		filePath: String,
 		usrs: [String],
-		adjustment: Int  // The original adjustment (will be reversed)
+		adjustment: Int // The original adjustment (will be reversed)
 	) {
 		for declaration in sourceGraph.allDeclarations {
 			// Only adjust declarations in the same file

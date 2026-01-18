@@ -5,10 +5,10 @@
 //  Detail view for selected items in Periphery tab
 //
 
-import SwiftUI
 import AppKit
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 struct PeripheryDetailView: View {
@@ -26,9 +26,9 @@ struct PeripheryDetailView: View {
 	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			switch node {
-			case .folder(let folder):
+			case let .folder(folder):
 				folderDetailView(folder)
-			case .file(let file):
+			case let .file(file):
 				fileDetailView(file)
 			}
 		}

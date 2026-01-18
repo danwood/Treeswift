@@ -20,7 +20,7 @@ class IconCache {
 	}
 
 	func folderIcon() -> NSImage {
-		return cachedFolderIcon
+		cachedFolderIcon
 	}
 
 	func fileIcon(forPath path: String) -> NSImage {

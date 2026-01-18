@@ -19,11 +19,11 @@ import SwiftUI
 
  Usage:
    Button(action: toggle) {
-	   Text(isActive ? "Active" : "Inactive")
+ Text(isActive ? "Active" : "Inactive")
    }
    .widthPreserving {
-	   Text("Active")
-	   Text("Inactive")
+ Text("Active")
+ Text("Inactive")
    }
 
    // Or with the newer Button initializer that includes a title and system image:
@@ -61,8 +61,8 @@ extension View {
 	/// - Returns: A view that maintains a stable width across all possible content states.
 	///
 	/// - Note: The hidden views use zero spacing to ensure accurate width measurement.
-	func widthPreserving<Content: View>(
-		@ViewBuilder possibleStates: () -> Content
+	func widthPreserving(
+		@ViewBuilder possibleStates: () -> some View
 	) -> some View {
 		ZStack(alignment: .top) {
 			VStack(spacing: 0) {
@@ -75,4 +75,3 @@ extension View {
 		}
 	}
 }
-

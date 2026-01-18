@@ -5,18 +5,27 @@
 //  Created by Dan Wood on 10/10/25.
 //
 
+import Extensions
+import Foundation
+
 // @preconcurrency: SourceGraph library was written before Swift 6 concurrency
 // This suppresses warnings about Sendable conformance for types from this module
 // Note: Location and Declaration classes have been marked @unchecked Sendable in PeripherySource
 @preconcurrency import SourceGraph
 import SystemPackage
-import Foundation
 import XcodeProj
-import Extensions
 
 final class Dumper: Sendable {
-
-	nonisolated(unsafe) private let highLevelKinds: Set<Declaration.Kind> = [.class, .struct, .enum, .protocol, .extensionClass, .extensionStruct, .extensionEnum, .extensionProtocol]
+	private nonisolated(unsafe) let highLevelKinds: Set<Declaration.Kind> = [
+		.class,
+		.struct,
+		.enum,
+		.protocol,
+		.extensionClass,
+		.extensionStruct,
+		.extensionEnum,
+		.extensionProtocol
+	]
 
 	nonisolated init() {}
 
@@ -28,7 +37,7 @@ final class Dumper: Sendable {
 
 	// MARK: - Helper functions
 
-	nonisolated private func isEnvironmentRelated(_ declaration: Declaration) -> Bool {
+	private nonisolated func isEnvironmentRelated(_ declaration: Declaration) -> Bool {
 		let environmentAttributes = ["EnvironmentObject", "Environment"]
 		// Check declaration attributes
 		if declaration.attributes.contains(where: { environmentAttributes.contains($0.description) }) {
@@ -50,21 +59,21 @@ final class Dumper: Sendable {
 		return false
 	}
 
-	nonisolated private func conformsToView(_ decl: Declaration) -> Bool {
-		return DeclarationIconHelper.conformsToView(decl)
+	private nonisolated func conformsToView(_ decl: Declaration) -> Bool {
+		DeclarationIconHelper.conformsToView(decl)
 	}
 
-	nonisolated private func isSubviewPattern(parent: Declaration, child: Declaration, ref _: Reference?) -> Bool {
+	private nonisolated func isSubviewPattern(parent: Declaration, child: Declaration, ref _: Reference?) -> Bool {
 		// Return true if both parent and child conform to View
 		let isChildView = conformsToView(child)
 		let isParentView = conformsToView(parent)
-		if isParentView && isChildView {
+		if isParentView, isChildView {
 			return true
 		}
 		return false
 	}
 
-	nonisolated private func isPreview(_ decl: Declaration) -> Bool {
+	private nonisolated func isPreview(_ decl: Declaration) -> Bool {
 		guard let name = decl.name else { return false }
 		// Name-based heuristics
 		if name.contains("Preview") || name.contains("Playground") {
@@ -81,11 +90,15 @@ final class Dumper: Sendable {
 		return false
 	}
 
-	nonisolated private func isMainApp(_ decl: Declaration) -> Bool {
-		return DeclarationIconHelper.isMainApp(decl)
+	private nonisolated func isMainApp(_ decl: Declaration) -> Bool {
+		DeclarationIconHelper.isMainApp(decl)
 	}
 
-	nonisolated private func getRelationshipType(graph: SourceGraph, child: Declaration, parent: Declaration) -> RelationshipType {
+	private nonisolated func getRelationshipType(
+		graph: SourceGraph,
+		child: Declaration,
+		parent: Declaration
+	) -> RelationshipType {
 		let parentReferences = graph.references(to: child)
 
 		// Added: Scan for variableInitFunctionCall references
@@ -104,13 +117,11 @@ final class Dumper: Sendable {
 		}
 
 		if !sameFileReferences.isEmpty {
-
 			// Check if parent uses child in a constructor call or as a struct reference
 			let hasConstructorReference = sameFileReferences.contains { ref in
 				ref.kind == .functionConstructor || ref.kind == .struct
 			}
 			if hasConstructorReference {
-
 				// Check if this is a subview relationship (SwiftUI pattern)
 				let hasSubviewReference = sameFileReferences.contains { ref in
 					let isSubview = isSubviewPattern(parent: parent, child: child, ref: ref)
@@ -186,8 +197,7 @@ final class Dumper: Sendable {
 		return .ref
 	}
 
-
-	nonisolated private func getAncestorChain(_ decl: Declaration) -> Set<Declaration> {
+	private nonisolated func getAncestorChain(_ decl: Declaration) -> Set<Declaration> {
 		var ancestors = Set<Declaration>()
 		var current = decl.parent
 		while let c = current {
@@ -198,17 +208,21 @@ final class Dumper: Sendable {
 	}
 
 	// MARK: - Main Support Functions
+
 	/// Returns the filtered declarations with high-level types in the project modules, excluding previews.
-	nonisolated private func filterHighLevelDeclarations(graph: SourceGraph) -> [Declaration] {
-		let projectModules = Set(graph.indexedSourceFiles.flatMap { $0.modules })
+	private nonisolated func filterHighLevelDeclarations(graph: SourceGraph) -> [Declaration] {
+		let projectModules = Set(graph.indexedSourceFiles.flatMap(\.modules))
 		return graph.declarations(ofKinds: highLevelKinds)
 			.filter { !isPreview($0) }
 			.filter { !$0.kind.isExtensionKind || projectModules.contains($0.firstNameComponent) }
-			.sorted(by: { $0.location < $1.location })		// TEMP sort for reproducibility
+			.sorted(by: { $0.location < $1.location }) // TEMP sort for reproducibility
 	}
 
 	/// Finds orphaned types with no references and removes them from the declarations array.
-	nonisolated private func extractOrphanedTypes(from declarations: inout [Declaration], graph: SourceGraph) -> [Declaration] {
+	private nonisolated func extractOrphanedTypes(
+		from declarations: inout [Declaration],
+		graph: SourceGraph
+	) -> [Declaration] {
 		let (orphanedTypes, remaining) = declarations.partitioned { type in
 			!isMainApp(type) && graph.references(to: type).isEmpty
 		}
@@ -217,7 +231,7 @@ final class Dumper: Sendable {
 	}
 
 	/// Finds types whose only references are from getter:body and removes them from the declarations array.
-	nonisolated private func extractOnlyBodyGetterReferencedTypes(
+	private nonisolated func extractOnlyBodyGetterReferencedTypes(
 		from declarations: inout [Declaration],
 		graph: SourceGraph,
 		displayedTypes: Set<Declaration>
@@ -226,18 +240,17 @@ final class Dumper: Sendable {
 			guard !displayedTypes.contains(type), !isMainApp(type) else { return false }
 			let referencingDecls = referencingDeclarations(for: type, in: graph)
 			return !isMainApp(type) &&
-			!referencingDecls.isEmpty &&
-			referencingDecls.allSatisfy { ref in
-				ref.kind == .functionAccessorGetter && ref.name == "getter:body"
-			}
+				!referencingDecls.isEmpty &&
+				referencingDecls.allSatisfy { ref in
+					ref.kind == .functionAccessorGetter && ref.name == "getter:body"
+				}
 		}
 		declarations = remaining
 		return onlyBodyGetterTypes
 	}
 
-
 	/// Extracts preview-only types and removes them from the declarations array.
-	nonisolated private func extractPreviewOnlyTypes(
+	private nonisolated func extractPreviewOnlyTypes(
 		from declarations: inout [Declaration],
 		graph: SourceGraph,
 		displayedTypes: Set<Declaration>
@@ -256,7 +269,7 @@ final class Dumper: Sendable {
 	}
 
 	/// Given a type and a graph, returns all declarations that reference this type.
-	nonisolated private func referencingDeclarations(for type: Declaration, in graph: SourceGraph) -> [Declaration] {
+	private nonisolated func referencingDeclarations(for type: Declaration, in graph: SourceGraph) -> [Declaration] {
 		let references = graph.references(to: type).sorted { $0.location < $1.location }
 
 		// Walk up from each Reference's parent to find the nearest owning Declaration
@@ -289,16 +302,23 @@ final class Dumper: Sendable {
 	}
 
 	/// Builds a dictionary mapping each declaration to its referencers and their relation types.
-	nonisolated private func buildTypeToReferencers(from declarations: [Declaration], graph: SourceGraph) -> [Declaration: [String: Relation]] {
-
-		func findRelevantReferencingType(ref: Reference, declaration: Declaration, highLevelKinds: Set<Declaration.Kind>, graph: SourceGraph) -> Declaration? {
-			return sequence(first: ref.parent) { $0?.parent }
-				.compactMap { $0 }
-				.first{
+	private nonisolated func buildTypeToReferencers(
+		from declarations: [Declaration],
+		graph: SourceGraph
+	) -> [Declaration: [String: Relation]] {
+		func findRelevantReferencingType(
+			ref: Reference,
+			declaration: Declaration,
+			highLevelKinds: Set<Declaration.Kind>,
+			graph: SourceGraph
+		) -> Declaration? {
+			sequence(first: ref.parent) { $0?.parent }
+				.compactMap(\.self)
+				.first {
 					highLevelKinds.contains($0.kind) &&
-					$0 != declaration &&
-					!isPreview($0) &&
-					!isEnvironmentRelated($0)
+						$0 != declaration &&
+						!isPreview($0) &&
+						!isEnvironmentRelated($0)
 				}
 		}
 
@@ -307,10 +327,23 @@ final class Dumper: Sendable {
 			let references: [Reference] = graph.references(to: declaration).sorted { $0.location < $1.location }
 
 			return references.reduce(into: [String: Relation]()) { referencers, ref in
-				if let referencingType: Declaration = findRelevantReferencingType(ref: ref, declaration: declaration, highLevelKinds: highLevelKinds, graph: graph) {
+				if let referencingType: Declaration = findRelevantReferencingType(
+					ref: ref,
+					declaration: declaration,
+					highLevelKinds: highLevelKinds,
+					graph: graph
+				) {
 					if !referencingType.kind.isExtensionKind {
-						let relationshipType = getRelationshipType(graph: graph, child: declaration, parent: referencingType)
-						referencers[referencingType.name ?? ""] = Relation(relationType: relationshipType, location: ref.location, declaration: referencingType)
+						let relationshipType = getRelationshipType(
+							graph: graph,
+							child: declaration,
+							parent: referencingType
+						)
+						referencers[referencingType.name ?? ""] = Relation(
+							relationType: relationshipType,
+							location: ref.location,
+							declaration: referencingType
+						)
 					} else {
 						// Try to find the extended type and add it to referencers instead
 						if let extendedTypeName = referencingType.name {
@@ -318,8 +351,16 @@ final class Dumper: Sendable {
 								decl.name == extendedTypeName && !decl.kind.isExtensionKind
 							}
 							for extDecl in extendedTypeDeclarations {
-								let relationshipType = getRelationshipType(graph: graph, child: declaration, parent: extDecl)
-								referencers[extDecl.name ?? ""] = Relation(relationType: relationshipType, location: ref.location, declaration: extDecl)
+								let relationshipType = getRelationshipType(
+									graph: graph,
+									child: declaration,
+									parent: extDecl
+								)
+								referencers[extDecl.name ?? ""] = Relation(
+									relationType: relationshipType,
+									location: ref.location,
+									declaration: extDecl
+								)
 							}
 						}
 					}
@@ -331,18 +372,22 @@ final class Dumper: Sendable {
 			if let parent = declaration.parent, let name = parent.name {
 				// we want where embedded type is actually defined, NOT where it's used.
 				let relation = Relation(relationType: .embed, location: declaration.location, declaration: parent)
-				typeToReferencers[declaration] = [ name : relation ]
+				typeToReferencers[declaration] = [name: relation]
 			} else {
 				typeToReferencers[declaration] = buildReferencers(for: declaration, in: graph)
 			}
 		}
 	}
-	/// Finds types shared by multiple referencers without a common ancestor.
-	nonisolated private func extractSharedTypesNoCommonAncestor(typeToReferencers: [Declaration: [String: Relation]], rootDeclaration: Declaration, displayedTypes: Set<Declaration>) -> [Declaration] {
 
+	/// Finds types shared by multiple referencers without a common ancestor.
+	private nonisolated func extractSharedTypesNoCommonAncestor(
+		typeToReferencers: [Declaration: [String: Relation]],
+		rootDeclaration: Declaration,
+		displayedTypes: Set<Declaration>
+	) -> [Declaration] {
 		func hasCommonAncestors(_ referencers: [Declaration], rootDeclaration: Declaration) -> Bool {
-			for i in 0..<referencers.count {
-				for j in (i+1)..<referencers.count {
+			for i in 0 ..< referencers.count {
+				for j in (i + 1) ..< referencers.count {
 					let ancestorsA = getAncestorChain(referencers[i])
 					let ancestorsB = getAncestorChain(referencers[j])
 					let intersection = ancestorsA.intersection(ancestorsB)
@@ -359,7 +404,7 @@ final class Dumper: Sendable {
 		return typeToReferencers.reduce(into: [Declaration]()) { acc, entry in
 			let (sharedType, referencersMap) = entry
 			if referencersMap.count > 1 {
-					let referencers = referencersMap.values.map { $0.declaration }
+				let referencers = referencersMap.values.map(\.declaration)
 				if !hasCommonAncestors(referencers, rootDeclaration: rootDeclaration) {
 					if !displayedTypes.contains(sharedType) {
 						acc.append(sharedType)
@@ -368,14 +413,20 @@ final class Dumper: Sendable {
 			}
 		}
 	}
+
 	/// Finds types that are used but not attached to our types and not yet displayed.
-	nonisolated private func extractUsedButNotAttachedTypes(from declarations: inout [Declaration], displayedTypes: Set<Declaration>) -> [Declaration] {
-		let (usedButNotAttached, remaining) = declarations.partitioned { !displayedTypes.contains($0) && !isMainApp($0) }
+	private nonisolated func extractUsedButNotAttachedTypes(
+		from declarations: inout [Declaration],
+		displayedTypes: Set<Declaration>
+	) -> [Declaration] {
+		let (usedButNotAttached, remaining) = declarations
+			.partitioned { !displayedTypes.contains($0) && !isMainApp($0) }
 		declarations = remaining
 		return usedButNotAttached
 	}
+
 	/// Checks if a function embeds a ViewModifier by looking for the .modifier() pattern
-	nonisolated private func isViewModifierEmbeddingFunction(_ funcDecl: Declaration, graph _: SourceGraph) -> Bool {
+	private nonisolated func isViewModifierEmbeddingFunction(_ funcDecl: Declaration, graph _: SourceGraph) -> Bool {
 		// Look for references to "modifier" method calls within this function
 		let hasModifierCall = funcDecl.references.contains { ref in
 			ref.name == "modifier" && ref.kind == .functionMethodInstance
@@ -397,66 +448,66 @@ final class Dumper: Sendable {
 	// MARK: - Structured Tree Building Functions
 
 	/**
-	Build Categories with progressive streaming - yields each section as it completes.
+	 Build Categories with progressive streaming - yields each section as it completes.
 
-	DATA FLOW AND PARTITIONING:
+	 DATA FLOW AND PARTITIONING:
 
-	This function progressively winnows down a list of declarations through 7 categories,
-	partitioning the master list into smaller and smaller subsets:
+	 This function progressively winnows down a list of declarations through 7 categories,
+	 partitioning the master list into smaller and smaller subsets:
 
-	INITIAL STATE:
-	- Start with `filteredDeclarations`: all high-level types (classes, structs, enums, protocols)
-	  excluding previews and non-project extensions
+	 INITIAL STATE:
+	 - Start with `filteredDeclarations`: all high-level types (classes, structs, enums, protocols)
+	   excluding previews and non-project extensions
 
-	CATEGORY PROCESSING (ALL sections now extract from filteredDeclarations):
+	 CATEGORY PROCESSING (ALL sections now extract from filteredDeclarations):
 
-	1. HIERARCHICAL TREE (Section 1): REMOVES from filteredDeclarations
-	   - Builds main hierarchy starting from root app, marking declarations in `displayedTypes`
-	   - After building section, removes all `displayedTypes` from `filteredDeclarations`
-	   - List size DECREASES
+	 1. HIERARCHICAL TREE (Section 1): REMOVES from filteredDeclarations
+	    - Builds main hierarchy starting from root app, marking declarations in `displayedTypes`
+	    - After building section, removes all `displayedTypes` from `filteredDeclarations`
+	    - List size DECREASES
 
-	2. VIEW EXTENSIONS (Section 2): REMOVES from filteredDeclarations
-	   - Builds View extensions, continuing to populate `displayedTypes`
-	   - After building section, removes all `displayedTypes` from `filteredDeclarations`
-	   - List size DECREASES again
+	 2. VIEW EXTENSIONS (Section 2): REMOVES from filteredDeclarations
+	    - Builds View extensions, continuing to populate `displayedTypes`
+	    - After building section, removes all `displayedTypes` from `filteredDeclarations`
+	    - List size DECREASES again
 
-	3. SHARED TYPES (Section 3): REMOVES from filteredDeclarations
-	   - Identifies types used by multiple parents with no common ancestor
-	   - After building section, removes all `sharedTypes` from `filteredDeclarations`
-	   - List size DECREASES again
+	 3. SHARED TYPES (Section 3): REMOVES from filteredDeclarations
+	    - Identifies types used by multiple parents with no common ancestor
+	    - After building section, removes all `sharedTypes` from `filteredDeclarations`
+	    - List size DECREASES again
 
-	4. ORPHANED TYPES (Section 4): REMOVES from filteredDeclarations
-	   - Extracts declarations with NO references at all
-	   - `extractOrphanedTypes()` partitions and removes these from `filteredDeclarations`
-	   - List size DECREASES again
+	 4. ORPHANED TYPES (Section 4): REMOVES from filteredDeclarations
+	    - Extracts declarations with NO references at all
+	    - `extractOrphanedTypes()` partitions and removes these from `filteredDeclarations`
+	    - List size DECREASES again
 
-	5. PREVIEW-ONLY TYPES (Section 5): REMOVES from filteredDeclarations
-	   - Extracts declarations ONLY referenced by makePreview() methods
-	   - `extractPreviewOnlyTypes()` partitions and removes from `filteredDeclarations`
-	   - List size DECREASES again
+	 5. PREVIEW-ONLY TYPES (Section 5): REMOVES from filteredDeclarations
+	    - Extracts declarations ONLY referenced by makePreview() methods
+	    - `extractPreviewOnlyTypes()` partitions and removes from `filteredDeclarations`
+	    - List size DECREASES again
 
-	6. BODY-GETTER TYPES (Section 6): REMOVES from filteredDeclarations
-	   - Extracts declarations ONLY referenced by getter:body, not in hierarchy
-	   - `extractOnlyBodyGetterReferencedTypes()` partitions and removes from `filteredDeclarations`
-	   - List size DECREASES again
+	 6. BODY-GETTER TYPES (Section 6): REMOVES from filteredDeclarations
+	    - Extracts declarations ONLY referenced by getter:body, not in hierarchy
+	    - `extractOnlyBodyGetterReferencedTypes()` partitions and removes from `filteredDeclarations`
+	    - List size DECREASES again
 
-	7. USED BUT NOT ATTACHED (Section 7): Final partition - REMOVES from filteredDeclarations
-	   - Everything remaining that wasn't displayed in sections 1-6
-	   - `extractUsedButNotAttachedTypes()` takes all remaining items
-	   - List size goes to ZERO (should be empty after this)
+	 7. USED BUT NOT ATTACHED (Section 7): Final partition - REMOVES from filteredDeclarations
+	    - Everything remaining that wasn't displayed in sections 1-6
+	    - `extractUsedButNotAttachedTypes()` takes all remaining items
+	    - List size goes to ZERO (should be empty after this)
 
-	TRACKING MECHANISMS:
-	- `filteredDeclarations`: Master mutable list, progressively shrinks via partitioning in ALL sections
-	- `displayedTypes`: Set tracking what's been shown in sections 1-2
-	- `sharedTypes`: Array of types extracted in section 3
-	- `visited`: Set used internally during tree building
+	 TRACKING MECHANISMS:
+	 - `filteredDeclarations`: Master mutable list, progressively shrinks via partitioning in ALL sections
+	 - `displayedTypes`: Set tracking what's been shown in sections 1-2
+	 - `sharedTypes`: Array of types extracted in section 3
+	 - `visited`: Set used internally during tree building
 
-	- Parameters:
-	  - graph: Source graph to analyze
-	  - projectRootPath: Root path of the project for calculating relative paths
-	  - onSectionBuilt: Callback invoked with each completed section
-	- Returns: Complete array of all sections
-	*/
+	 - Parameters:
+	   - graph: Source graph to analyze
+	   - projectRootPath: Root path of the project for calculating relative paths
+	   - onSectionBuilt: Callback invoked with each completed section
+	 - Returns: Complete array of all sections
+	 */
 	nonisolated func buildCategoriesStreaming(
 		graph: SourceGraph,
 		projectRootPath: String? = nil,
@@ -529,7 +580,11 @@ final class Dumper: Sendable {
 		onSectionBuilt(.section(section4))
 
 		// Section 5: Preview-Only Types
-		let previewOnlyTypes = extractPreviewOnlyTypes(from: &filteredDeclarations, graph: graph, displayedTypes: Set<Declaration>())
+		let previewOnlyTypes = extractPreviewOnlyTypes(
+			from: &filteredDeclarations,
+			graph: graph,
+			displayedTypes: Set<Declaration>()
+		)
 		let section5 = buildDeclarationListSection(
 			previewOnlyTypes,
 			graph: nil,
@@ -541,7 +596,11 @@ final class Dumper: Sendable {
 		onSectionBuilt(.section(section5))
 
 		// Section 6: Body-Getter Referenced Types
-		let onlyBodyGetterTypes = extractOnlyBodyGetterReferencedTypes(from: &filteredDeclarations, graph: graph, displayedTypes: displayedTypes)
+		let onlyBodyGetterTypes = extractOnlyBodyGetterReferencedTypes(
+			from: &filteredDeclarations,
+			graph: graph,
+			displayedTypes: displayedTypes
+		)
 		let section6 = buildDeclarationListSection(
 			onlyBodyGetterTypes,
 			graph: nil,
@@ -553,7 +612,10 @@ final class Dumper: Sendable {
 		onSectionBuilt(.section(section6))
 
 		// Section 7: Used But Not Attached Types
-		let usedButNotAttachedTypes = extractUsedButNotAttachedTypes(from: &filteredDeclarations, displayedTypes: displayedTypes)
+		let usedButNotAttachedTypes = extractUsedButNotAttachedTypes(
+			from: &filteredDeclarations,
+			displayedTypes: displayedTypes
+		)
 		let section7 = buildDeclarationListSection(
 			usedButNotAttachedTypes,
 			graph: graph,
@@ -567,7 +629,7 @@ final class Dumper: Sendable {
 		return sections
 	}
 
-	nonisolated private func buildHierarchyNodes(
+	private nonisolated func buildHierarchyNodes(
 		rootDeclaration: Declaration,
 		relationToParent: RelationshipType?,
 		typeToReferencers: [Declaration: [String: Relation]],
@@ -583,7 +645,10 @@ final class Dumper: Sendable {
 			displayedTypes.insert(rootDeclaration)
 		}
 
-		let children: [Declaration] = typeToReferencers.compactMap { (childDeclaration, parentToRelation) -> (Declaration, Location)? in
+		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
+			Declaration,
+			Location
+		)? in
 			if let relation = parentToRelation[rootDeclaration.name ?? ""] {
 				if !displayedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
@@ -591,7 +656,7 @@ final class Dumper: Sendable {
 			}
 			return nil
 		}.sorted(by: { $0.1 < $1.1 })
-			.map { $0.0 }
+			.map(\.0)
 
 		let shouldDisplayThisNode = !viewsOnly || conformsToView(rootDeclaration)
 
@@ -633,7 +698,7 @@ final class Dumper: Sendable {
 		}
 	}
 
-	nonisolated private func buildHierarchySection(
+	private nonisolated func buildHierarchySection(
 		rootDeclaration: Declaration,
 		typeToReferencers: [Declaration: [String: Relation]],
 		viewsOnly: Bool,
@@ -663,7 +728,7 @@ final class Dumper: Sendable {
 		)
 	}
 
-	nonisolated private func buildViewExtensionsSection(
+	private nonisolated func buildViewExtensionsSection(
 		graph: SourceGraph,
 		typeToReferencers: [Declaration: [String: Relation]],
 		visited: inout Set<Declaration>,
@@ -687,7 +752,7 @@ final class Dumper: Sendable {
 
 			for extDecl in viewExtensions {
 				let extensionFunctions = extDecl.declarations
-					.filter { $0.kind.isFunctionKind }
+					.filter(\.kind.isFunctionKind)
 					.sorted(by: { $0.location < $1.location })
 
 				if !extensionFunctions.isEmpty {
@@ -697,7 +762,11 @@ final class Dumper: Sendable {
 						for ref in funcDecl.references {
 							if let referencedDecl = graph.declaration(withUsr: ref.usr),
 							   highLevelKinds.contains(referencedDecl.kind) {
-								let relation = Relation(relationType: .call, location: ref.location, declaration: funcDecl)
+								let relation = Relation(
+									relationType: .call,
+									location: ref.location,
+									declaration: funcDecl
+								)
 								var parents = augmentedMapping[referencedDecl] ?? [:]
 								parents[funcDecl.name ?? "function"] = relation
 								augmentedMapping[referencedDecl] = parents
@@ -708,7 +777,8 @@ final class Dumper: Sendable {
 					for funcDecl in extensionFunctions {
 						let isViewModifierEmbedder = isViewModifierEmbeddingFunction(funcDecl, graph: graph)
 						let originalName = funcDecl.name ?? "unnamed"
-						let displayName = isViewModifierEmbedder ? "\(originalName) [embeds ViewModifier]" : originalName
+						let displayName = isViewModifierEmbedder ? "\(originalName) [embeds ViewModifier]" :
+							originalName
 
 						if let functionNode = buildDeclarationNode(
 							funcDecl,
@@ -743,7 +813,7 @@ final class Dumper: Sendable {
 		)
 	}
 
-	nonisolated private func buildSharedTypesSection(
+	private nonisolated func buildSharedTypesSection(
 		_ sharedTypes: [Declaration],
 		typeToReferencers: [Declaration: [String: Relation]],
 		displayedTypes _: Set<Declaration>,
@@ -777,7 +847,7 @@ final class Dumper: Sendable {
 		)
 	}
 
-	nonisolated private func buildDeclarationListSection(
+	private nonisolated func buildDeclarationListSection(
 		_ declarations: [Declaration],
 		graph: SourceGraph?,
 		title: String,
@@ -787,10 +857,10 @@ final class Dumper: Sendable {
 		var children: [CategoriesNode] = []
 
 		for type in declarations.sorted(by: { $0.location < $1.location }) {
-			let referencerNames: [String] = if let graph = graph {
+			let referencerNames: [String] = if let graph {
 				referencingDeclarations(for: type, in: graph)
 					.filter { $0.name != "makePreview()" }
-					.map { $0.debugString }
+					.map(\.debugString)
 					.uniqued()
 			} else {
 				[]
@@ -798,7 +868,13 @@ final class Dumper: Sendable {
 
 			let typeIcon = getTypeIcon(for: type)
 			let name = type.name ?? "unnamed"
-			let locationInfo = buildLocationInfo(for: type, relationToParent: nil, parentSourceFile: nil, childrenLineCount: 0, projectRootPath: projectRootPath)
+			let locationInfo = buildLocationInfo(
+				for: type,
+				relationToParent: nil,
+				parentSourceFile: nil,
+				childrenLineCount: 0,
+				projectRootPath: projectRootPath
+			)
 
 			let folderIndicator: TreeIcon? = isViewInOwnFolder(type) ? .systemImage("folder") : nil
 
@@ -826,7 +902,7 @@ final class Dumper: Sendable {
 		)
 	}
 
-	nonisolated private func buildDeclarationNode(
+	private nonisolated func buildDeclarationNode(
 		_ declaration: Declaration,
 		relationToParent: RelationshipType?,
 		typeToReferencers: [Declaration: [String: Relation]],
@@ -843,7 +919,8 @@ final class Dumper: Sendable {
 		}
 
 		let name = customDisplayName ?? (declaration.name ?? "")
-		var conforms: String = Array(Set(declaration.immediateInheritedTypeReferences.compactMap { $0.name })).sorted().joined(separator: ", ")
+		var conforms: String = Array(Set(declaration.immediateInheritedTypeReferences.compactMap(\.name))).sorted()
+			.joined(separator: ", ")
 
 		let typeIcon = getTypeIcon(for: declaration)
 		let folderIndicator: TreeIcon? = isViewInOwnFolder(declaration) ? .systemImage("folder") : nil
@@ -852,14 +929,17 @@ final class Dumper: Sendable {
 			conforms = ""
 		}
 
-		let relationshipType: RelationshipType?
-		if conformsToView(declaration) && relationToParent == .subview || relationToParent?.rawValue == nil {
-			relationshipType = nil
+		let relationshipType: RelationshipType? = if conformsToView(declaration) && relationToParent == .subview ||
+			relationToParent?.rawValue == nil {
+			nil
 		} else {
-			relationshipType = relationToParent
+			relationToParent
 		}
 
-		let children: [Declaration] = typeToReferencers.compactMap { (childDeclaration, parentToRelation) -> (Declaration, Location)? in
+		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
+			Declaration,
+			Location
+		)? in
 			if let relation = parentToRelation[declaration.name ?? ""] {
 				if !displayedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
@@ -867,16 +947,22 @@ final class Dumper: Sendable {
 			}
 			return nil
 		}.sorted(by: { $0.1 < $1.1 })
-			.map { $0.0 }
+			.map(\.0)
 
 		let childrenLineCount = children.reduce(0) { $0 + ($1.location.endLine ?? 0) - $1.location.line + 1 }
 
-		if viewsOnly && !conformsToView(declaration) {
+		if viewsOnly, !conformsToView(declaration) {
 			visited.insert(declaration)
 			return nil
 		}
 
-		let locationInfo = buildLocationInfo(for: declaration, relationToParent: relationToParent, parentSourceFile: parentSourceFile, childrenLineCount: childrenLineCount, projectRootPath: projectRootPath)
+		let locationInfo = buildLocationInfo(
+			for: declaration,
+			relationToParent: relationToParent,
+			parentSourceFile: parentSourceFile,
+			childrenLineCount: childrenLineCount,
+			projectRootPath: projectRootPath
+		)
 
 		visited.insert(declaration)
 
@@ -916,11 +1002,11 @@ final class Dumper: Sendable {
 		)
 	}
 
-	nonisolated private func getTypeIcon(for declaration: Declaration) -> TreeIcon {
-		return DeclarationIconHelper.typeIcon(for: declaration)
+	private nonisolated func getTypeIcon(for declaration: Declaration) -> TreeIcon {
+		DeclarationIconHelper.typeIcon(for: declaration)
 	}
 
-	nonisolated private func isViewInOwnFolder(_ declaration: Declaration) -> Bool {
+	private nonisolated func isViewInOwnFolder(_ declaration: Declaration) -> Bool {
 		guard DeclarationIconHelper.conformsToView(declaration), let declName = declaration.name else {
 			return false
 		}
@@ -930,7 +1016,13 @@ final class Dumper: Sendable {
 		return declName == fileNameWithoutExt && declName == folderName
 	}
 
-	nonisolated private func buildLocationInfo(for declaration: Declaration, relationToParent: RelationshipType?, parentSourceFile: SourceFile?, childrenLineCount: Int, projectRootPath: String?) -> LocationInfo {
+	private nonisolated func buildLocationInfo(
+		for declaration: Declaration,
+		relationToParent: RelationshipType?,
+		parentSourceFile: SourceFile?,
+		childrenLineCount: Int,
+		projectRootPath: String?
+	) -> LocationInfo {
 		let lineSpan = (declaration.location.endLine ?? 0) - declaration.location.line
 		let fileName = declaration.location.file.path.lastComponent?.description
 		let line = declaration.location.line
@@ -945,22 +1037,21 @@ final class Dumper: Sendable {
 		}
 
 		let blackSquares = ["⬛", "◼", "▪", "·"]
-		let sizeIndicator: String
-		if lineSpan > 100 {
-			sizeIndicator = blackSquares[0]
+		let sizeIndicator: String = if lineSpan > 100 {
+			blackSquares[0]
 		} else if lineSpan > 75 {
-			sizeIndicator = blackSquares[1]
+			blackSquares[1]
 		} else if lineSpan > 50 {
-			sizeIndicator = blackSquares[2]
+			blackSquares[2]
 		} else if lineSpan > 25 {
-			sizeIndicator = blackSquares[3]
+			blackSquares[3]
 		} else {
-			sizeIndicator = ""
+			""
 		}
 
 		/* Priority 1: Size warnings in same file (most actionable) */
-		if relationToParent != nil && relationToParent != .embed
-		&& declaration.location.file == parentSourceFile {
+		if relationToParent != nil, relationToParent != .embed,
+		   declaration.location.file == parentSourceFile {
 			if lineSpan + childrenLineCount >= 200 {
 				return LocationInfo(
 					type: .tooBigForSameFile,
@@ -1001,8 +1092,8 @@ final class Dumper: Sendable {
 		}
 
 		/* Priority 3: Same-file semantic relationship */
-		if relationToParent != nil && relationToParent != .embed
-		&& declaration.location.file == parentSourceFile {
+		if relationToParent != nil, relationToParent != .embed,
+		   declaration.location.file == parentSourceFile {
 			return LocationInfo(
 				type: .sameFile,
 				icon: .emoji("🔼"),
@@ -1016,9 +1107,10 @@ final class Dumper: Sendable {
 		}
 
 		/* Priority 4+: Separate file logic */
-		let inSameFile: Bool = declaration.name == declaration.location.file.path.lastComponent.map { ($0.description as NSString).deletingPathExtension }
+		let inSameFile: Bool = declaration.name == declaration.location.file.path.lastComponent
+			.map { ($0.description as NSString).deletingPathExtension }
 
-		if lineSpan > 100 && inSameFile {
+		if lineSpan > 100, inSameFile {
 			return LocationInfo(
 				type: .separateFileGood,
 				icon: .emoji("✅"),
@@ -1029,7 +1121,7 @@ final class Dumper: Sendable {
 				sizeIndicator: sizeIndicator,
 				warningText: nil
 			)
-		} else if children(of: declaration).count >= 1 && inSameFile {
+		} else if children(of: declaration).count >= 1, inSameFile {
 			return LocationInfo(
 				type: .separateFileGood,
 				icon: .emoji("✅"),
@@ -1065,7 +1157,7 @@ final class Dumper: Sendable {
 		}
 	}
 
-	nonisolated private func children(of declaration: Declaration) -> [Declaration] {
+	private nonisolated func children(of declaration: Declaration) -> [Declaration] {
 		Array(declaration.declarations)
 	}
 }
@@ -1077,11 +1169,10 @@ private extension Declaration {
 }
 
 private extension Declaration {
-
 	nonisolated var locSize: String {
 		let blackSquares = ["⬛", "◼", "▪", "·"]
 		let sizeIndicator: String
-		let lineSpan = (self.location.endLine ?? 0) - self.location.line
+		let lineSpan = (location.endLine ?? 0) - location.line
 		if lineSpan > 100 {
 			sizeIndicator = " " + blackSquares[0]
 		} else if lineSpan > 75 {
@@ -1097,19 +1188,19 @@ private extension Declaration {
 	}
 
 	nonisolated func locString(includeFilename: Bool = true) -> String {
-		let fileComponent = self.location.file.path.lastComponent ?? "nil"
-		let file: String = "\(fileComponent)"
-		let line = self.location.line
-		let endLine: String = self.location.endLine.map { ":\($0)" } ?? ""
+		let fileComponent = location.file.path.lastComponent ?? "nil"
+		let file = "\(fileComponent)"
+		let line = location.line
+		let endLine: String = location.endLine.map { ":\($0)" } ?? ""
 
 		return "\(includeFilename ? file : ""):\(line)\(endLine)"
 	}
 
 	/// Returns a debug string with info (kind name [file:line])
 	nonisolated var debugString: String {
-		let name = self.name ?? ""
-		let kind = self.kind.icon
-		return "\(kind) \(name) \(self.locString())\(self.locSize)"
+		let name = name ?? ""
+		let kind = kind.icon
+		return "\(kind) \(name) \(locString())\(locSize)"
 	}
 }
 
@@ -1129,4 +1220,3 @@ private extension Sequence {
 		return (matches, nonMatches)
 	}
 }
-

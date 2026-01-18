@@ -5,8 +5,8 @@
 //  Sidebar navigation for configuration list
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 struct SidebarView: View {
@@ -78,7 +78,7 @@ struct SidebarView: View {
 
 	func deleteSelectedConfiguration() {
 		guard let selectedID = selectedConfigID,
-			  let index = configManager.configurations.firstIndex(where: { $0.id == selectedID }) else {
+		      let index = configManager.configurations.firstIndex(where: { $0.id == selectedID }) else {
 			return
 		}
 
@@ -103,9 +103,9 @@ struct SidebarView: View {
 	func handleSidebarDrop(providers: [NSItemProvider]) -> Bool {
 		guard let provider = providers.first else { return false }
 
-		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
 			guard let data = item as? Data,
-				  let url = URL(dataRepresentation: data, relativeTo: nil) else {
+			      let url = URL(dataRepresentation: data, relativeTo: nil) else {
 				return
 			}
 
@@ -120,7 +120,7 @@ struct SidebarView: View {
 					// Check for .xcodeproj first (priority)
 					if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
 					   let xcodeproj = contents.first(where: {
-						   $0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
+					   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
 					   }) {
 						projectURL = xcodeproj
 						projectType = .xcode
@@ -129,8 +129,7 @@ struct SidebarView: View {
 					else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
 						projectURL = url.appendingPathComponent("Package.swift")
 						projectType = .swiftPackage
-					}
-					else {
+					} else {
 						// No valid project found
 						projectURL = nil
 						projectType = nil
@@ -146,7 +145,7 @@ struct SidebarView: View {
 					}
 				}
 
-				guard let projectURL = projectURL, let projectType = projectType else {
+				guard let projectURL, let projectType else {
 					return
 				}
 

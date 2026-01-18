@@ -13,8 +13,8 @@ enum TreeNode: Identifiable, Hashable, Sendable {
 
 	var id: String {
 		switch self {
-		case .folder(let node): node.id
-		case .file(let node): node.id
+		case let .folder(node): node.id
+		case let .file(node): node.id
 		}
 	}
 
@@ -27,12 +27,12 @@ enum TreeNode: Identifiable, Hashable, Sendable {
 
 	private func collectDescendantIDs(into set: inout Set<String>) {
 		switch self {
-		case .folder(let folder):
+		case let .folder(folder):
 			set.insert(folder.id)
 			for child in folder.children {
 				child.collectDescendantIDs(into: &set)
 			}
-		case .file(let file):
+		case let .file(file):
 			set.insert(file.id)
 		}
 	}
@@ -63,7 +63,7 @@ extension TreeNode: NavigableTreeNode {
 
 	var childNodes: [any NavigableTreeNode] {
 		switch self {
-		case .folder(let folder): folder.children
+		case let .folder(folder): folder.children
 		case .file: []
 		}
 	}

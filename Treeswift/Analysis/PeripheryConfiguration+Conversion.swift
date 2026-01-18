@@ -5,8 +5,8 @@
 //  Extension to convert PeripheryConfiguration to Periphery's Configuration class
 //
 
-import Foundation
 import Configuration
+import Foundation
 import SystemPackage
 
 /*
@@ -37,7 +37,6 @@ import SystemPackage
  3. Change working directory to package folder (see PeripheryScanRunner.swift:167-169)
 
  This is CORRECT and requires no changes to work properly.
-
 
  Future Enhancement: Display Products/Targets
  --------------------------------------------
@@ -177,7 +176,7 @@ extension PeripheryConfiguration {
 
 		// Core Project Settings
 		// For Xcode projects, set project path. For SPM, leave nil so Periphery auto-detects from working directory
-		if projectType == .xcode, let project = project {
+		if projectType == .xcode, let project {
 			config.project = FilePath(project)
 		}
 
@@ -232,21 +231,21 @@ extension PeripheryConfiguration {
 		config.relativeResults = isRelativeResults
 
 		// File Path Settings
-		if let baseline = baseline {
+		if let baseline {
 			config.baseline = FilePath(baseline)
 		}
-		if let writeBaseline = writeBaseline {
+		if let writeBaseline {
 			config.writeBaseline = FilePath(writeBaseline)
 		}
-		if let writeResults = writeResults {
+		if let writeResults {
 			config.writeResults = FilePath(writeResults)
 		}
 
 		// Advanced Settings
-		if let jsonPackageManifestPath = jsonPackageManifestPath {
+		if let jsonPackageManifestPath {
 			config.jsonPackageManifestPath = FilePath(jsonPackageManifestPath)
 		}
-		if let genericProjectConfig = genericProjectConfig {
+		if let genericProjectConfig {
 			config.genericProjectConfig = FilePath(genericProjectConfig)
 		}
 		config.bazel = bazel

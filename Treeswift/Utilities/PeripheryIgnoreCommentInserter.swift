@@ -8,21 +8,20 @@
 import Foundation
 
 struct PeripheryIgnoreCommentInserter {
-
 	enum InsertionError: Error {
 		case readFailed
 		case writeFailed
 	}
 
 	/**
-	Inserts a `// periphery:ignore:all` comment at the appropriate location in a Swift file.
+	 Inserts a `// periphery:ignore:all` comment at the appropriate location in a Swift file.
 
-	The comment is placed using this priority order:
-	1. On a new line just before the first import statement
-	2. If no imports, at the first run of multiple line feeds with spacing
-	3. If neither, above the first non-comment, non-whitespace line
-	4. Fallback: at the very beginning of the file
-	*/
+	 The comment is placed using this priority order:
+	 1. On a new line just before the first import statement
+	 2. If no imports, at the first run of multiple line feeds with spacing
+	 3. If neither, above the first non-comment, non-whitespace line
+	 4. Fallback: at the very beginning of the file
+	 */
 	static func insertIgnoreAllComment(at filePath: String) throws -> (original: String, modified: String) {
 		// Read original contents
 		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
@@ -43,8 +42,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Determines the appropriate location to insert the ignore comment and returns modified contents.
-	*/
+	 Determines the appropriate location to insert the ignore comment and returns modified contents.
+	 */
 	private static func insertComment(in content: String) -> String {
 		let lines = content.components(separatedBy: .newlines)
 
@@ -68,8 +67,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Finds the index of the first import statement.
-	*/
+	 Finds the index of the first import statement.
+	 */
 	private static func findFirstImportLine(in lines: [String]) -> Int? {
 		for (index, line) in lines.enumerated() {
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -81,8 +80,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Finds the first occurrence of multiple consecutive empty lines.
-	*/
+	 Finds the first occurrence of multiple consecutive empty lines.
+	 */
 	private static func findFirstMultipleLineFeeds(in lines: [String]) -> Int? {
 		var consecutiveEmpty = 0
 
@@ -101,8 +100,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Finds the first line that is actual code (not a comment, not whitespace).
-	*/
+	 Finds the first line that is actual code (not a comment, not whitespace).
+	 */
 	private static func findFirstCodeLine(in lines: [String]) -> Int? {
 		var inMultilineComment = false
 
@@ -145,8 +144,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Inserts the ignore comment before the specified line index.
-	*/
+	 Inserts the ignore comment before the specified line index.
+	 */
 	private static func insertBeforeLine(_ index: Int, in lines: [String]) -> String {
 		var modifiedLines = lines
 		modifiedLines.insert("// periphery:ignore:all", at: index)
@@ -154,8 +153,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Inserts the ignore comment at a run of multiple line feeds with proper spacing.
-	*/
+	 Inserts the ignore comment at a run of multiple line feeds with proper spacing.
+	 */
 	private static func insertAtMultipleLineFeeds(_ index: Int, in lines: [String]) -> String {
 		var modifiedLines = lines
 		// Insert with blank line above and below
@@ -166,8 +165,8 @@ struct PeripheryIgnoreCommentInserter {
 	}
 
 	/**
-	Inserts the ignore comment at the very beginning of the file.
-	*/
+	 Inserts the ignore comment at the very beginning of the file.
+	 */
 	private static func insertAtBeginning(in lines: [String]) -> String {
 		var modifiedLines = lines
 		// Insert comment at beginning with a blank line after

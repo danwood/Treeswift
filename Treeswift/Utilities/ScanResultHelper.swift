@@ -7,13 +7,12 @@
 //
 
 import Foundation
-import SwiftUI
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 struct ScanResultHelper {
-
 	// Access internal properties via Mirror reflection
 
 	nonisolated static func location(from declaration: Declaration) -> Location {
@@ -44,6 +43,7 @@ struct ScanResultHelper {
 		}
 		return declaration.kind.displayName
 	}
+
 	/**
 	 Format warning in Xcode format: path:line:column: warning: description
 	 */
@@ -56,12 +56,15 @@ struct ScanResultHelper {
 		let line = location.line
 		let column = location.column
 		let descAttr: AttributedString = formatAttributedDescription(declaration: declaration, annotation: annotation)
-		let desc: String = String(descAttr.characters)
+		let desc = String(descAttr.characters)
 		return "\(path):\(line):\(column): warning: \(desc)"
 	}
-	
+
 	// Format description as AttributedString with bold symbol names
-	nonisolated static func formatAttributedDescription(declaration: Declaration, annotation: ScanResult.Annotation) -> AttributedString {
+	nonisolated static func formatAttributedDescription(
+		declaration: Declaration,
+		annotation: ScanResult.Annotation
+	) -> AttributedString {
 		let kindDisplayName = kindDisplayName(from: declaration)
 
 		var result = AttributedString()
@@ -77,18 +80,17 @@ struct ScanResultHelper {
 			result.append(boldName)
 
 			// Annotation suffix
-			let suffix: String
-			switch annotation {
+			let suffix = switch annotation {
 			case .unused:
-				suffix = " is unused"
+				" is unused"
 			case .assignOnlyProperty:
-				suffix = " is assigned, but never used"
+				" is assigned, but never used"
 			case .redundantProtocol:
-				suffix = " is redundant as it's never used as an existential type"
+				" is redundant as it's never used as an existential type"
 			case .redundantPublicAccessibility:
-				suffix = " is declared public, but not used outside of this module"
+				" is declared public, but not used outside of this module"
 			case .superfluousIgnoreCommand:
-				suffix = " has a superfluous periphery ignore command"
+				" has a superfluous periphery ignore command"
 			}
 			result.append(AttributedString(suffix))
 		} else {
@@ -99,12 +101,12 @@ struct ScanResultHelper {
 	}
 
 	/**
-	Highlight text in a line with specified background color.
+	 Highlight text in a line with specified background color.
 
-	Searches for the text near the specified column and applies highlighting.
-	Returns the line as an AttributedString with the matched text highlighted.
-	Optionally makes the entire declaration portion bold when makeDeclarationBold is true.
-	*/
+	 Searches for the text near the specified column and applies highlighting.
+	 Returns the line as an AttributedString with the matched text highlighted.
+	 Optionally makes the entire declaration portion bold when makeDeclarationBold is true.
+	 */
 	nonisolated static func highlightTextInLine(
 		line: String,
 		text: String,
@@ -195,9 +197,13 @@ struct ScanResultHelper {
 			let afterEllipsis = String(line[ellipsisRange.upperBound...])
 
 			// Now highlight the symbol in the semibold part if needed
-			if let symbolName = symbolName, !symbolName.isEmpty,
+			if let symbolName, !symbolName.isEmpty,
 			   column > beforeEllipsis.count,
-			   let symbolRange = findSymbolInLine(line: afterEllipsis, symbolName: symbolName, nearColumn: column - beforeEllipsis.count) {
+			   let symbolRange = findSymbolInLine(
+			   	line: afterEllipsis,
+			   	symbolName: symbolName,
+			   	nearColumn: column - beforeEllipsis.count
+			   ) {
 				let prefix = String(afterEllipsis[..<symbolRange.lowerBound])
 				let matchedText = String(afterEllipsis[symbolRange])
 				let suffix = String(afterEllipsis[symbolRange.upperBound...])
@@ -233,7 +239,7 @@ struct ScanResultHelper {
 			return result
 		}
 
-		guard let symbolName = symbolName, !symbolName.isEmpty else {
+		guard let symbolName, !symbolName.isEmpty else {
 			// Apply semibold to entire line by default
 			var result = AttributedString(line)
 			result.font = .system(.caption, design: .monospaced).weight(.semibold)
@@ -274,10 +280,10 @@ struct ScanResultHelper {
 	}
 
 	/**
-	Highlight the "public " keyword (including trailing whitespace) in a source line.
+	 Highlight the "public " keyword (including trailing whitespace) in a source line.
 
-	Uses a semi-transparent red background to indicate text that will be deleted.
-	*/
+	 Uses a semi-transparent red background to indicate text that will be deleted.
+	 */
 	nonisolated static func highlightRedundantPublicInLine(
 		line: String
 	) -> AttributedString {
@@ -313,7 +319,7 @@ struct ScanResultHelper {
 	}
 
 	// Find symbol name in line near the specified column
-	nonisolated private static func findSymbolInLine(
+	private nonisolated static func findSymbolInLine(
 		line: String,
 		symbolName: String,
 		nearColumn: Int
@@ -325,7 +331,7 @@ struct ScanResultHelper {
 
 		let startIndex = line.index(line.startIndex, offsetBy: startOffset)
 		let endIndex = line.index(line.startIndex, offsetBy: endOffset)
-		let searchRange = startIndex..<endIndex
+		let searchRange = startIndex ..< endIndex
 
 		return line.range(of: symbolName, range: searchRange)
 	}
@@ -334,7 +340,7 @@ struct ScanResultHelper {
 	   e.g., "matchesFilter(_:)" -> "matchesFilter"
 	         "init(from:)" -> "init"
 	 */
-	nonisolated private static func extractBaseSymbolName(from symbolName: String) -> String? {
+	private nonisolated static func extractBaseSymbolName(from symbolName: String) -> String? {
 		// Find the first opening parenthesis which indicates parameter list
 		guard let parenIndex = symbolName.firstIndex(of: "(") else {
 			return nil // No parameters found, original should have matched
@@ -346,4 +352,3 @@ struct ScanResultHelper {
 		return baseName.isEmpty ? nil : baseName
 	}
 }
-

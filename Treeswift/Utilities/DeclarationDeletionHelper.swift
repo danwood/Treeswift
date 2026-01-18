@@ -4,19 +4,18 @@ import SystemPackage
 
 // Helper for intelligently deleting declarations from source files
 struct DeclarationDeletionHelper {
-
 	/**
-	Find the first line to delete by looking backwards from the declaration.
+	 Find the first line to delete by looking backwards from the declaration.
 
-	Uses declaration metadata to know which attributes to look for, then scans
-	source to find where they appear (handles both start-of-line and mid-line).
+	 Uses declaration metadata to know which attributes to look for, then scans
+	 source to find where they appear (handles both start-of-line and mid-line).
 
-	Includes:
-	- Attribute lines containing @AttributeName (e.g., @MainActor, @FetchRequest, private @Published)
-	- Multi-line attribute continuations
-	- Adjacent comment lines (no blank lines between them and the declaration)
-	Stops at blank lines to preserve spacing between declarations.
-	*/
+	 Includes:
+	 - Attribute lines containing @AttributeName (e.g., @MainActor, @FetchRequest, private @Published)
+	 - Multi-line attribute continuations
+	 - Adjacent comment lines (no blank lines between them and the declaration)
+	 Stops at blank lines to preserve spacing between declarations.
+	 */
 	static func findDeletionStartLine(
 		lines: [String],
 		declarationLine: Int,
@@ -60,7 +59,19 @@ struct DeclarationDeletionHelper {
 
 			if containsAttribute {
 				// Check if it's a complete declaration (another var/func with this attribute)
-				let declarationKeywords = ["var ", "let ", "func ", "class ", "struct ", "enum ", "protocol ", "actor ", "init ", "deinit ", "subscript "]
+				let declarationKeywords = [
+					"var ",
+					"let ",
+					"func ",
+					"class ",
+					"struct ",
+					"enum ",
+					"protocol ",
+					"actor ",
+					"init ",
+					"deinit ",
+					"subscript "
+				]
 				let isDeclaration = declarationKeywords.contains { line.contains($0) }
 
 				if isDeclaration {
@@ -72,12 +83,13 @@ struct DeclarationDeletionHelper {
 					inMultiLineAttribute = line.contains("(") && !line.contains(")")
 					tempCheckLine -= 1
 				}
-			} else if inMultiLineAttribute || (!foundAttributeYet && (line.contains(")") || line.contains(":") || line.contains(","))) {
+			} else if inMultiLineAttribute ||
+				(!foundAttributeYet && (line.contains(")") || line.contains(":") || line.contains(","))) {
 				// Either: we're in a known multi-line attribute, OR
 				// we haven't found the attribute yet but this looks like it could be part of one
 				attributeLines.insert(tempCheckLine, at: 0)
 				// Check if this closes a paren (might complete the search area)
-				if line.contains(")") && !line.contains("(") {
+				if line.contains(")"), !line.contains("(") {
 					// This line has a closing paren, we're likely exiting an attribute
 					inMultiLineAttribute = true
 				} else if line.contains("(") {
@@ -174,16 +186,16 @@ struct DeclarationDeletionHelper {
 			: endLine
 
 		// Validate range
-		guard startLine > 0 && finalEndLine > 0 &&
-			  startLine <= lines.count && finalEndLine <= lines.count &&
-			  startLine <= finalEndLine else {
+		guard startLine > 0, finalEndLine > 0,
+		      startLine <= lines.count, finalEndLine <= lines.count,
+		      startLine <= finalEndLine else {
 			return .failure(.invalidLineRange)
 		}
 
 		// Delete the range
 		let startIndex = startLine - 1
 		let endIndex = finalEndLine - 1
-		lines.removeSubrange(startIndex...endIndex)
+		lines.removeSubrange(startIndex ... endIndex)
 
 		// Write back
 		let newContents = lines.joined(separator: "\n")

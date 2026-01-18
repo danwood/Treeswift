@@ -69,7 +69,7 @@ struct DetailWarningsSection: View {
 					if let symbolRefs = warning.symbolReferences, !symbolRefs.isEmpty {
 						VStack(alignment: .leading, spacing: 8) {
 							// Main symbols section
-							let mainSymbols = symbolRefs.filter { $0.shouldBePublic }
+							let mainSymbols = symbolRefs.filter(\.shouldBePublic)
 							if !mainSymbols.isEmpty {
 								Text("✓ Should be public/internal:")
 									.font(.caption)
@@ -85,7 +85,6 @@ struct DetailWarningsSection: View {
 											}
 											.contentShape(.rect)
 
-
 										Text(symbolRef.symbolName)
 											.font(.caption)
 											.foregroundStyle(.green)
@@ -94,7 +93,6 @@ struct DetailWarningsSection: View {
 												openFileInEditor(path: symbolRef.filePath, line: symbolRef.line)
 											}
 											.contentShape(.rect)
-
 
 										Text("(double-click to open)")
 											.font(.caption2)
@@ -121,7 +119,6 @@ struct DetailWarningsSection: View {
 											}
 											.contentShape(.rect)
 
-
 										Text(symbolRef.symbolName)
 											.font(.caption)
 											.foregroundStyle(.red)
@@ -130,7 +127,6 @@ struct DetailWarningsSection: View {
 												openFileInEditor(path: symbolRef.filePath, line: symbolRef.line)
 											}
 											.contentShape(.rect)
-
 
 										Text("(double-click to open)")
 											.font(.caption2)

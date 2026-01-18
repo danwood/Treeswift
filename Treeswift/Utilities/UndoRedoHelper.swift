@@ -1,24 +1,23 @@
-import Foundation
 import Cocoa
+import Foundation
 import SourceGraph
 
 /**
-Helper for registering undo/redo operations for file modifications.
+ Helper for registering undo/redo operations for file modifications.
 
-Handles the complex nested closure pattern required for proper undo/redo
-with source graph line number adjustments.
-*/
+ Handles the complex nested closure pattern required for proper undo/redo
+ with source graph line number adjustments.
+ */
 struct UndoRedoHelper {
-
 	/**
-	Registers undo for a file deletion with source graph updates.
+	 Registers undo for a file deletion with source graph updates.
 
-	Handles the full undo/redo cycle including:
-	- File content restoration
-	- Source graph line number adjustments using SourceGraphLineAdjuster.reverseLineAdjustment
-	- Cache invalidation
-	- State callbacks (completion/restoration)
-	*/
+	 Handles the full undo/redo cycle including:
+	 - File content restoration
+	 - Source graph line number adjustments using SourceGraphLineAdjuster.reverseLineAdjustment
+	 - Cache invalidation
+	 - State callbacks (completion/restoration)
+	 */
 	static func registerDeletionUndo(
 		undoManager: UndoManager?,
 		originalContents: String,
@@ -26,13 +25,13 @@ struct UndoRedoHelper {
 		filePath: String,
 		warningID: String,
 		adjustedUSRs: [String],
-		lineAdjustment: Int,  // positive number (will be negated for undo)
+		lineAdjustment: Int, // positive number (will be negated for undo)
 		sourceGraph: SourceGraph?,
 		actionName: String,
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) {
-		guard let undoManager = undoManager else { return }
+		guard let undoManager else { return }
 
 		// Define the undo action
 		@MainActor
@@ -41,12 +40,12 @@ struct UndoRedoHelper {
 			SourceFileReader.invalidateCache(for: filePath)
 
 			// Reverse line number adjustments using the helper
-			if let sourceGraph = sourceGraph, !adjustedUSRs.isEmpty {
+			if let sourceGraph, !adjustedUSRs.isEmpty {
 				SourceGraphLineAdjuster.reverseLineAdjustment(
 					sourceGraph: sourceGraph,
 					filePath: filePath,
 					usrs: adjustedUSRs,
-					adjustment: -lineAdjustment  // Reverse the adjustment
+					adjustment: -lineAdjustment // Reverse the adjustment
 				)
 			}
 
@@ -66,12 +65,12 @@ struct UndoRedoHelper {
 			SourceFileReader.invalidateCache(for: filePath)
 
 			// Reapply line number adjustments using the helper
-			if let sourceGraph = sourceGraph, !adjustedUSRs.isEmpty {
+			if let sourceGraph, !adjustedUSRs.isEmpty {
 				SourceGraphLineAdjuster.reverseLineAdjustment(
 					sourceGraph: sourceGraph,
 					filePath: filePath,
 					usrs: adjustedUSRs,
-					adjustment: lineAdjustment  // Reapply the adjustment
+					adjustment: lineAdjustment // Reapply the adjustment
 				)
 			}
 
@@ -92,11 +91,11 @@ struct UndoRedoHelper {
 	}
 
 	/**
-	Registers undo for a simple modification (no line number changes).
+	 Registers undo for a simple modification (no line number changes).
 
-	Used for modifications that don't add or remove lines, such as
-	removing the 'public' keyword or other in-place text replacements.
-	*/
+	 Used for modifications that don't add or remove lines, such as
+	 removing the 'public' keyword or other in-place text replacements.
+	 */
 	static func registerModificationUndo(
 		undoManager: UndoManager?,
 		modification: CodeModificationHelper.ModificationResult,
@@ -105,7 +104,7 @@ struct UndoRedoHelper {
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) {
-		guard let undoManager = undoManager else { return }
+		guard let undoManager else { return }
 
 		undoManager.registerUndo(withTarget: NSObject()) { _ in
 			try? modification.originalContents.write(
@@ -132,10 +131,10 @@ struct UndoRedoHelper {
 	}
 
 	/**
-	Registers undo for a modification that changes line numbers.
+	 Registers undo for a modification that changes line numbers.
 
-	Handles modifications that add or remove lines and require source graph updates using SourceGraphLineAdjuster.reverseLineAdjustment.
-	*/
+	 Handles modifications that add or remove lines and require source graph updates using SourceGraphLineAdjuster.reverseLineAdjustment.
+	 */
 	static func registerModificationUndoWithLineAdjustment(
 		undoManager: UndoManager?,
 		modification: CodeModificationHelper.ModificationResult,
@@ -146,7 +145,7 @@ struct UndoRedoHelper {
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) {
-		guard let undoManager = undoManager else { return }
+		guard let undoManager else { return }
 
 		// Define the undo action
 		@MainActor
@@ -160,12 +159,12 @@ struct UndoRedoHelper {
 			SourceFileReader.invalidateCache(for: modification.filePath)
 
 			// Reverse line number adjustments using the helper
-			if let sourceGraph = sourceGraph, !adjustedUSRs.isEmpty {
+			if let sourceGraph, !adjustedUSRs.isEmpty {
 				SourceGraphLineAdjuster.reverseLineAdjustment(
 					sourceGraph: sourceGraph,
 					filePath: modification.filePath,
 					usrs: adjustedUSRs,
-					adjustment: -modification.linesRemoved  // Reverse the adjustment
+					adjustment: -modification.linesRemoved // Reverse the adjustment
 				)
 			}
 
@@ -189,12 +188,12 @@ struct UndoRedoHelper {
 			SourceFileReader.invalidateCache(for: modification.filePath)
 
 			// Reapply line number adjustments using the helper
-			if let sourceGraph = sourceGraph, !adjustedUSRs.isEmpty {
+			if let sourceGraph, !adjustedUSRs.isEmpty {
 				SourceGraphLineAdjuster.reverseLineAdjustment(
 					sourceGraph: sourceGraph,
 					filePath: modification.filePath,
 					usrs: adjustedUSRs,
-					adjustment: modification.linesRemoved  // Reapply the adjustment
+					adjustment: modification.linesRemoved // Reapply the adjustment
 				)
 			}
 

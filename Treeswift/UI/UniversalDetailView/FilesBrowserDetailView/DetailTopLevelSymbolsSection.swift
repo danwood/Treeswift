@@ -55,7 +55,6 @@ struct DetailTopLevelSymbolsSection: View {
 								}
 								.contentShape(.rect)
 
-
 							Text(symbolInfo.name)
 								.font(.system(.body, design: .monospaced))
 								.foregroundStyle(symbolInfo.isUnused ? .orange : .primary)

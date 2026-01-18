@@ -11,10 +11,9 @@ import SourceGraph
 import SystemPackage
 
 extension FileNode {
-
 	/**
-	Result of removing all unused code from a file.
-	*/
+	 Result of removing all unused code from a file.
+	 */
 	struct RemovalResult {
 		let filePath: String
 		let originalContents: String
@@ -27,12 +26,12 @@ extension FileNode {
 	}
 
 	/**
-	Removes all unused code from this file.
+	 Removes all unused code from this file.
 
-	Processes warnings from bottom to top to maintain line number consistency.
-	Only removes code for warnings where canRemoveCode returns true.
-	Tracks all file modifications and line adjustments for undo/redo support.
-	*/
+	 Processes warnings from bottom to top to maintain line number consistency.
+	 Only removes code for warnings where canRemoveCode returns true.
+	 Tracks all file modifications and line adjustments for undo/redo support.
+	 */
 	func removeAllUnusedCode(
 		scanResults: [ScanResult],
 		filterState: FilterState?,
@@ -40,7 +39,11 @@ extension FileNode {
 	) -> Result<RemovalResult, Error> {
 		// Read original file contents
 		guard let originalContents = try? String(contentsOfFile: path, encoding: .utf8) else {
-			return .failure(NSError(domain: "FileNode", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot read file"]))
+			return .failure(NSError(
+				domain: "FileNode",
+				code: 1,
+				userInfo: [NSLocalizedDescriptionKey: "Cannot read file"]
+			))
 		}
 
 		// Filter and sort warnings for this file (bottom to top)
@@ -53,7 +56,7 @@ extension FileNode {
 				guard location.file.path.string == path else { return nil }
 
 				// Apply filter state if provided
-				if let filterState = filterState {
+				if let filterState {
 					guard filterState.shouldShow(result: result, declaration: declaration) else {
 						return nil
 					}
@@ -78,7 +81,11 @@ extension FileNode {
 
 		// If no warnings can be removed, return early
 		guard !fileWarnings.isEmpty else {
-			return .failure(NSError(domain: "FileNode", code: 2, userInfo: [NSLocalizedDescriptionKey: "No removable warnings found"]))
+			return .failure(NSError(
+				domain: "FileNode",
+				code: 2,
+				userInfo: [NSLocalizedDescriptionKey: "No removable warnings found"]
+			))
 		}
 
 		// Process each warning from bottom to top
@@ -101,7 +108,7 @@ extension FileNode {
 				)
 
 				switch removalResult {
-				case .success(let newContents):
+				case let .success(newContents):
 					currentContents = newContents
 					removedWarningIDs.append(warningID)
 					lineAdjustments.append(0)
@@ -210,8 +217,8 @@ extension FileNode {
 	}
 
 	/**
-	Removes redundant public keyword from a declaration.
-	*/
+	 Removes redundant public keyword from a declaration.
+	 */
 	private func removeRedundantPublic(
 		declaration: Declaration,
 		location: Location,
@@ -230,24 +237,28 @@ extension FileNode {
 		)
 
 		switch result {
-		case .success(let modification):
+		case let .success(modification):
 			return .success(modification.modifiedContents)
-		case .failure(let error):
+		case let .failure(error):
 			return .failure(error)
 		}
 	}
 
 	/**
-	Removes an import statement.
-	*/
+	 Removes an import statement.
+	 */
 	private func removeImport(
 		location: Location,
 		currentContents: String,
 		sourceGraph: SourceGraph?
 	) -> Result<(String, [String]), Error> {
 		var lines = currentContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else {
-			return .failure(NSError(domain: "FileNode", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid line number"]))
+		guard location.line > 0, location.line <= lines.count else {
+			return .failure(NSError(
+				domain: "FileNode",
+				code: 5,
+				userInfo: [NSLocalizedDescriptionKey: "Invalid line number"]
+			))
 		}
 
 		let lineIndex = location.line - 1
@@ -261,7 +272,7 @@ extension FileNode {
 				sourceGraph: $0,
 				filePath: path,
 				afterLine: location.line,
-				lineDelta: -1  // Removed one line
+				lineDelta: -1 // Removed one line
 			)
 		} ?? []
 
@@ -269,8 +280,8 @@ extension FileNode {
 	}
 
 	/**
-	Removes a superfluous periphery:ignore comment.
-	*/
+	 Removes a superfluous periphery:ignore comment.
+	 */
 	private func removeSuperfluousIgnore(
 		declaration: Declaration,
 		location: Location,
@@ -290,20 +301,20 @@ extension FileNode {
 		)
 
 		switch result {
-		case .success(let modification):
+		case let .success(modification):
 			// Use ModificationResult helper to adjust source graph
 			let adjustedUSRs = sourceGraph.map { modification.adjustSourceGraph($0) } ?? []
 
 			return .success((modification.modifiedContents, modification.linesRemoved, adjustedUSRs))
 
-		case .failure(let error):
+		case let .failure(error):
 			return .failure(error)
 		}
 	}
 
 	/**
-	Removes a declaration using DeclarationDeletionHelper.
-	*/
+	 Removes a declaration using DeclarationDeletionHelper.
+	 */
 	private func removeDeclaration(
 		declaration: Declaration,
 		currentContents: String,
@@ -320,12 +331,16 @@ extension FileNode {
 		let result = DeclarationDeletionHelper.deleteDeclaration(declaration: declaration)
 
 		switch result {
-		case .success(let deletionRange):
+		case let .success(deletionRange):
 			let linesRemoved = deletionRange.endLine - deletionRange.startLine + 1
 
 			// Read modified contents
 			guard let modifiedContents = try? String(contentsOfFile: path, encoding: .utf8) else {
-				return .failure(NSError(domain: "FileNode", code: 6, userInfo: [NSLocalizedDescriptionKey: "Cannot read modified file"]))
+				return .failure(NSError(
+					domain: "FileNode",
+					code: 6,
+					userInfo: [NSLocalizedDescriptionKey: "Cannot read modified file"]
+				))
 			}
 
 			// Track adjusted USRs for line number updates
@@ -340,7 +355,7 @@ extension FileNode {
 
 			return .success((modifiedContents, linesRemoved, adjustedUSRs))
 
-		case .failure(let error):
+		case let .failure(error):
 			return .failure(error)
 		}
 	}

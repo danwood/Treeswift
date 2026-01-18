@@ -5,9 +5,9 @@
 //  Tabbed view for displaying scan results in multiple formats
 //
 
-import SwiftUI
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 
 enum ResultsTab: String, CaseIterable, Sendable {
 	case periphery
@@ -20,7 +20,6 @@ extension EnvironmentValues {
 	@Entry var refreshFileTree: (() -> Void)? = nil
 	@Entry var peripheryFilterState: FilterState? = nil
 }
-
 
 struct ResultsTabView: View {
 	let treeNodes: [TreeNode]
@@ -59,7 +58,7 @@ struct ResultsTabView: View {
 				}
 
 				Group {
-					if treeNodes.isEmpty && !scanResults.isEmpty {
+					if treeNodes.isEmpty, !scanResults.isEmpty {
 						ProgressView("Building tree view…")
 							.frame(maxWidth: .infinity)
 							.padding()
@@ -146,7 +145,6 @@ struct ResultsTabView: View {
 				Label("Shared", systemImage: "square.stack.3d.up")
 			}
 			.tag(ResultsTab.shared)
-
 		}
 		.frame(minHeight: 400)
 	}

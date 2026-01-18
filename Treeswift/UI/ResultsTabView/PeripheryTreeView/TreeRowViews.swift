@@ -5,10 +5,10 @@
 //  Row views for folders, files, and warnings in the tree
 //
 
-import SwiftUI
 import AppKit
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 struct FolderRowView: View {
@@ -32,91 +32,91 @@ struct FileRowView: View {
 	let hiddenWarningIDs: Set<String>
 
 	private var visibleBadges: [Badge] {
-	    struct CounterKey: Hashable {
-	        let swiftType: SwiftType
-	        let isUnused: Bool
-	    }
+		struct CounterKey: Hashable {
+			let swiftType: SwiftType
+			let isUnused: Bool
+		}
 
-	    // Fixed display order
-	    let orderIndex: [SwiftType: Int] = [
-	        .struct: 0,
-	        .class: 1,
-	        .enum: 2,
-	        .typealias: 3,
-	        .extension: 4,
-	        .parameter: 5,
-	        .property: 6,
-	        .initializer: 7,
-	        .function: 8
-	    ]
+		// Fixed display order
+		let orderIndex: [SwiftType: Int] = [
+			.struct: 0,
+			.class: 1,
+			.enum: 2,
+			.typealias: 3,
+			.extension: 4,
+			.parameter: 5,
+			.property: 6,
+			.initializer: 7,
+			.function: 8
+		]
 
-	    // 1) Slice scan results to this file once
-	    let fileResults = scanResults.filter { result in
-	        let declaration = result.declaration
-	        let location = ScanResultHelper.location(from: declaration)
-	        return location.file.path.string == file.path
-	    }
+		// 1) Slice scan results to this file once
+		let fileResults = scanResults.filter { result in
+			let declaration = result.declaration
+			let location = ScanResultHelper.location(from: declaration)
+			return location.file.path.string == file.path
+		}
 
-	    // 2) Apply filter state (if present)
-	    let filteredResults: [ScanResult] = fileResults.filter { result in
-	        guard let filterState = filterState else { return true }
-	        let declaration = result.declaration
-	        return filterState.shouldShow(result: result, declaration: declaration)
-	    }
+		// 2) Apply filter state (if present)
+		let filteredResults: [ScanResult] = fileResults.filter { result in
+			guard let filterState else { return true }
+			let declaration = result.declaration
+			return filterState.shouldShow(result: result, declaration: declaration)
+		}
 
-	    // 3) Filter out hidden warnings
-	    let visibleResults = filteredResults.filter { result in
-	        let declaration = result.declaration
-	        let location = ScanResultHelper.location(from: declaration)
-	        let usr = declaration.usrs.first ?? ""
-	        let warningID = "\(location.file.path.string):\(usr)"
-	        return !hiddenWarningIDs.contains(warningID)
-	    }
+		// 3) Filter out hidden warnings
+		let visibleResults = filteredResults.filter { result in
+			let declaration = result.declaration
+			let location = ScanResultHelper.location(from: declaration)
+			let usr = declaration.usrs.first ?? ""
+			let warningID = "\(location.file.path.string):\(usr)"
+			return !hiddenWarningIDs.contains(warningID)
+		}
 
-	    // 4) Count by (SwiftType, isUnused)
-	    var counts: [CounterKey: Int] = [:]
-	    counts.reserveCapacity(visibleResults.count)
+		// 4) Count by (SwiftType, isUnused)
+		var counts: [CounterKey: Int] = [:]
+		counts.reserveCapacity(visibleResults.count)
 
-	    for result in visibleResults {
-	        let declaration = result.declaration
-	        let swiftType = SwiftType.from(declarationKind: declaration.kind)
+		for result in visibleResults {
+			let declaration = result.declaration
+			let swiftType = SwiftType.from(declarationKind: declaration.kind)
 			let key = CounterKey(swiftType: swiftType, isUnused: result.annotation == .unused)
-	        counts[key, default: 0] += 1
-	    }
+			counts[key, default: 0] += 1
+		}
 
-	    // 4) Build badges in desired order (unused first for each type)
-	    var badges: [Badge] = []
-	    badges.reserveCapacity(counts.count)
+		// 4) Build badges in desired order (unused first for each type)
+		var badges: [Badge] = []
+		badges.reserveCapacity(counts.count)
 
-	    for swiftType in SwiftType.allCases {
-	        // Unused first
-	        let unusedKey = CounterKey(swiftType: swiftType, isUnused: true)
-	        if let unusedCount = counts[unusedKey], unusedCount > 0 {
-	            badges.append(Badge(
-	                letter: swiftType.rawValue,
-	                count: unusedCount,
-	                swiftType: swiftType,
-	                isUnused: true
-	            ))
-	        }
-	        // Then other
-	        let otherKey = CounterKey(swiftType: swiftType, isUnused: false)
-	        if let otherCount = counts[otherKey], otherCount > 0 {
-	            badges.append(Badge(
-	                letter: swiftType.rawValue,
-	                count: otherCount,
-	                swiftType: swiftType,
-	                isUnused: false
-	            ))
-	        }
-	    }
+		for swiftType in SwiftType.allCases {
+			// Unused first
+			let unusedKey = CounterKey(swiftType: swiftType, isUnused: true)
+			if let unusedCount = counts[unusedKey], unusedCount > 0 {
+				badges.append(Badge(
+					letter: swiftType.rawValue,
+					count: unusedCount,
+					swiftType: swiftType,
+					isUnused: true
+				))
+			}
+			// Then other
+			let otherKey = CounterKey(swiftType: swiftType, isUnused: false)
+			if let otherCount = counts[otherKey], otherCount > 0 {
+				badges.append(Badge(
+					letter: swiftType.rawValue,
+					count: otherCount,
+					swiftType: swiftType,
+					isUnused: false
+				))
+			}
+		}
 
-	    // 5) Stable sort by order index (cheap, small array)
-	    return badges.sorted { lhs, rhs in
-	        let l = orderIndex[lhs.swiftType] ?? Int.max
-	        let r = orderIndex[rhs.swiftType] ?? Int.max
-	        return l < r
-	    }
+		// 5) Stable sort by order index (cheap, small array)
+		return badges.sorted { lhs, rhs in
+			let l = orderIndex[lhs.swiftType] ?? Int.max
+			let r = orderIndex[rhs.swiftType] ?? Int.max
+			return l < r
+		}
 	}
 
 	var body: some View {
@@ -170,4 +170,3 @@ struct FileRowView: View {
 		)
 	}
 }
-

@@ -8,7 +8,6 @@
 import Foundation
 
 final class FileSystemScanner: Sendable {
-
 	nonisolated init() {}
 
 	nonisolated func scanProject(at projectPath: String) async throws -> [FileBrowserNode] {
@@ -24,7 +23,7 @@ final class FileSystemScanner: Sendable {
 		)
 
 		switch rootNode {
-		case .directory(let dir):
+		case let .directory(dir):
 			return dir.children
 		case .file:
 			return []
@@ -74,7 +73,7 @@ final class FileSystemScanner: Sendable {
 				.replacingOccurrences(of: "*", with: ".*")
 
 			if let regex = try? NSRegularExpression(pattern: "^\(regexPattern)$") {
-				let range = NSRange(path.startIndex..<path.endIndex, in: path)
+				let range = NSRange(path.startIndex ..< path.endIndex, in: path)
 				return regex.firstMatch(in: path, range: range) != nil
 			}
 		}
@@ -107,7 +106,11 @@ final class FileSystemScanner: Sendable {
 		var children: [FileBrowserNode] = []
 
 		for itemURL in contents {
-			let resourceValues = try itemURL.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey])
+			let resourceValues = try itemURL.resourceValues(forKeys: [
+				.isDirectoryKey,
+				.contentModificationDateKey,
+				.fileSizeKey
+			])
 			let isDirectory = resourceValues.isDirectory ?? false
 
 			let itemRelativePath = itemURL.path.replacingOccurrences(of: rootURL.path + "/", with: "")
@@ -141,14 +144,14 @@ final class FileSystemScanner: Sendable {
 
 		children.sort(by: { lhs, rhs in
 			switch (lhs, rhs) {
-			case (.directory(let lhsDir), .directory(let rhsDir)):
-				return lhsDir.name.localizedStandardCompare(rhsDir.name) == .orderedAscending
-			case (.file(let lhsFile), .file(let rhsFile)):
-				return lhsFile.name.localizedStandardCompare(rhsFile.name) == .orderedAscending
+			case let (.directory(lhsDir), .directory(rhsDir)):
+				lhsDir.name.localizedStandardCompare(rhsDir.name) == .orderedAscending
+			case let (.file(lhsFile), .file(rhsFile)):
+				lhsFile.name.localizedStandardCompare(rhsFile.name) == .orderedAscending
 			case (.directory, .file):
-				return true
+				true
 			case (.file, .directory):
-				return false
+				false
 			}
 		})
 

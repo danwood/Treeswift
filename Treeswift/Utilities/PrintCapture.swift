@@ -11,15 +11,15 @@ import Foundation
 final class PrintCapture {
 	private let originalStdout: Int32
 	private let pipe: Pipe
-	nonisolated(unsafe) private var capturedOutput: String = ""
+	private nonisolated(unsafe) var capturedOutput: String = ""
 
 	// Global lock to prevent concurrent stdout redirection
 	// Multiple concurrent PrintCapture operations would interfere with each other
-	nonisolated private static let captureLock = NSLock()
+	private nonisolated static let captureLock = NSLock()
 
 	nonisolated init() {
-		self.pipe = Pipe()
-		self.originalStdout = dup(STDOUT_FILENO)
+		pipe = Pipe()
+		originalStdout = dup(STDOUT_FILENO)
 	}
 
 	nonisolated func startCapturing() {

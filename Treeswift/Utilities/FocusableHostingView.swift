@@ -5,8 +5,8 @@
 //  Invisible NSView background for tree keyboard navigation using AppKit first responder
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// Invisible NSView that can become first responder and handle keyboard events
 class FocusableNSView: NSView {
@@ -41,7 +41,7 @@ class FocusableNSView: NSView {
 struct FocusClaimingView: NSViewRepresentable {
 	@Binding var selectedID: String?
 	let visibleItems: [String]
-	var claimFocusTrigger: Binding<Bool>? = nil
+	var claimFocusTrigger: Binding<Bool>?
 
 	func makeNSView(context: Context) -> FocusableNSView {
 		let view = FocusableNSView()

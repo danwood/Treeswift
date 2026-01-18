@@ -8,12 +8,11 @@
 import PeripheryKit
 
 extension ScanResult.Annotation {
-
 	// Check if annotation is redundant public
 	public var isRedundantPublic: Bool {
 		if case .redundantPublicAccessibility = self { true } else { false }
 	}
-	
+
 	// Check if annotation is redundant protocol
 	public var isRedundantProtocol: Bool {
 		if case .redundantProtocol = self { true } else { false }
@@ -74,9 +73,8 @@ extension ScanResult.Annotation: @retroactive RawRepresentable {
 		}
 	}
 
-
 	// Decoding from a raw value is unsupported and should fail
 	public init?(rawValue: RawValue) {
-		return nil
+		nil
 	}
 }

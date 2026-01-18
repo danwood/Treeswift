@@ -5,12 +5,12 @@
 //  Filter controls for Periphery scan results
 //
 
-import SwiftUI
+import AdaptiveGrid
 import AppKit
+import Flow
 import PeripheryKit
 import SourceGraph
-import Flow
-import AdaptiveGrid
+import SwiftUI
 
 private struct TypeFilterItem: Identifiable {
 	let id: String
@@ -20,28 +20,88 @@ private struct TypeFilterItem: Identifiable {
 	let disableWhenTopLevel: Bool
 
 	/**
-	Determines if this type filter should be disabled based on current filter state.
-	Checks both top-level constraint and warning-type constraints.
-	*/
+	 Determines if this type filter should be disabled based on current filter state.
+	 Checks both top-level constraint and warning-type constraints.
+	 */
 	func isDisabled(filterState: FilterState) -> Bool {
-		if disableWhenTopLevel && filterState.topLevelOnly {
+		if disableWhenTopLevel, filterState.topLevelOnly {
 			return true
 		}
 		return !filterState.isTypeFilterEnabled(swiftType)
 	}
 
 	static let allItems: [TypeFilterItem] = [
-		TypeFilterItem(id: "struct", swiftType: .struct, label: "Struct", binding: \.showStruct, disableWhenTopLevel: false),
-		TypeFilterItem(id: "class", swiftType: .class, label: "Class", binding: \.showClass, disableWhenTopLevel: false),
+		TypeFilterItem(
+			id: "struct",
+			swiftType: .struct,
+			label: "Struct",
+			binding: \.showStruct,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "class",
+			swiftType: .class,
+			label: "Class",
+			binding: \.showClass,
+			disableWhenTopLevel: false
+		),
 		TypeFilterItem(id: "enum", swiftType: .enum, label: "Enum", binding: \.showEnum, disableWhenTopLevel: false),
-		TypeFilterItem(id: "typealias", swiftType: .typealias, label: "Typealias", binding: \.showTypealias, disableWhenTopLevel: false),
-		TypeFilterItem(id: "protocol", swiftType: .protocol, label: "Protocol", binding: \.showProtocol, disableWhenTopLevel: false),
-		TypeFilterItem(id: "extension", swiftType: .extension, label: "Extension", binding: \.showExtension, disableWhenTopLevel: false),
-		TypeFilterItem(id: "parameter", swiftType: .parameter, label: "Parameter", binding: \.showParameter, disableWhenTopLevel: true),
-		TypeFilterItem(id: "property", swiftType: .property, label: "Property", binding: \.showProperty, disableWhenTopLevel: false),
-		TypeFilterItem(id: "initializer", swiftType: .initializer, label: "Initializer", binding: \.showInitializer, disableWhenTopLevel: true),
-		TypeFilterItem(id: "function", swiftType: .function, label: "Function", binding: \.showFunction, disableWhenTopLevel: false),
-		TypeFilterItem(id: "imoport", swiftType: .import, label: "Import", binding: \.showImport, disableWhenTopLevel: false),
+		TypeFilterItem(
+			id: "typealias",
+			swiftType: .typealias,
+			label: "Typealias",
+			binding: \.showTypealias,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "protocol",
+			swiftType: .protocol,
+			label: "Protocol",
+			binding: \.showProtocol,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "extension",
+			swiftType: .extension,
+			label: "Extension",
+			binding: \.showExtension,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "parameter",
+			swiftType: .parameter,
+			label: "Parameter",
+			binding: \.showParameter,
+			disableWhenTopLevel: true
+		),
+		TypeFilterItem(
+			id: "property",
+			swiftType: .property,
+			label: "Property",
+			binding: \.showProperty,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "initializer",
+			swiftType: .initializer,
+			label: "Initializer",
+			binding: \.showInitializer,
+			disableWhenTopLevel: true
+		),
+		TypeFilterItem(
+			id: "function",
+			swiftType: .function,
+			label: "Function",
+			binding: \.showFunction,
+			disableWhenTopLevel: false
+		),
+		TypeFilterItem(
+			id: "imoport",
+			swiftType: .import,
+			label: "Import",
+			binding: \.showImport,
+			disableWhenTopLevel: false
+		)
 	]
 }
 
@@ -55,7 +115,7 @@ struct FilterBarView: View {
 			let declaration = result.declaration
 
 			// Apply top-level filter if enabled
-			if filterState.topLevelOnly && declaration.parent != nil {
+			if filterState.topLevelOnly, declaration.parent != nil {
 				continue
 			}
 
@@ -71,7 +131,7 @@ struct FilterBarView: View {
 			let declaration = result.declaration
 
 			// Apply top-level filter if enabled
-			if filterState.topLevelOnly && declaration.parent != nil {
+			if filterState.topLevelOnly, declaration.parent != nil {
 				continue
 			}
 
@@ -148,8 +208,10 @@ struct FilterBarView: View {
 					) {
 						HStack(spacing: 4) {
 							Text("Redundant Protocol")
-							Text("(\(annotationCounts[ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue] ?? 0))")
-								.foregroundStyle(.secondary)
+							Text(
+								"(\(annotationCounts[ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue] ?? 0))"
+							)
+							.foregroundStyle(.secondary)
 						}
 					}
 
@@ -159,8 +221,10 @@ struct FilterBarView: View {
 					) {
 						HStack(spacing: 4) {
 							Text("Redundant Public")
-							Text("(\(annotationCounts[ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue] ?? 0))")
-								.foregroundStyle(.secondary)
+							Text(
+								"(\(annotationCounts[ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue] ?? 0))"
+							)
+							.foregroundStyle(.secondary)
 						}
 					}
 
@@ -170,8 +234,10 @@ struct FilterBarView: View {
 					) {
 						HStack(spacing: 4) {
 							Text("Superflous Ignore")
-							Text("(\(annotationCounts[ScanResult.Annotation.superfluousIgnoreCommand.stringValue] ?? 0))")
-								.foregroundStyle(.secondary)
+							Text(
+								"(\(annotationCounts[ScanResult.Annotation.superfluousIgnoreCommand.stringValue] ?? 0))"
+							)
+							.foregroundStyle(.secondary)
 						}
 					}
 				}

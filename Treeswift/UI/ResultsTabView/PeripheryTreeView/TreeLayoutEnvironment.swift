@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
-Observable object holding tree layout constants for real-time adjustment
-*/
+ Observable object holding tree layout constants for real-time adjustment
+ */
 @Observable
 final class TreeLayoutSettings: Sendable {
 	var indentPerLevel: CGFloat
@@ -21,7 +21,7 @@ final class TreeLayoutSettings: Sendable {
 		indentPerLevel: CGFloat = 20,
 		leafNodeOffset: CGFloat = 20,
 		rowVerticalPadding: CGFloat = 4,
-		chevronWidth: CGFloat = 13,
+		chevronWidth: CGFloat = 13
 	) {
 		self.indentPerLevel = indentPerLevel
 		self.leafNodeOffset = leafNodeOffset

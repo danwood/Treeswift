@@ -20,21 +20,21 @@ extension Declaration.Kind {
 	/// Returns the appropriate icon for this declaration kind.
 	nonisolated var icon: String {
 		switch self {
-		case .struct: return "🟦"
-		case .class: return "🔵"
-		case .enum: return "🚦"
-		case .protocol: return "📜"
-		case .extensionStruct, .extensionClass, .extensionEnum, .extensionProtocol, .extension: return "🧩"
-		case .typealias: return "🏷️"
-		case .macro: return "🔮"
-		case .precedenceGroup: return "⚖️"
+		case .struct: "🟦"
+		case .class: "🔵"
+		case .enum: "🚦"
+		case .protocol: "📜"
+		case .extensionStruct, .extensionClass, .extensionEnum, .extensionProtocol, .extension: "🧩"
+		case .typealias: "🏷️"
+		case .macro: "🔮"
+		case .precedenceGroup: "⚖️"
 		default:
-			if self.rawValue.hasPrefix("function") {
-				return "⚡️"
-			} else if self.rawValue.hasPrefix("var") {
-				return "📦"
+			if rawValue.hasPrefix("function") {
+				"⚡️"
+			} else if rawValue.hasPrefix("var") {
+				"📦"
 			} else {
-				return "⬜️"
+				"⬜️"
 			}
 		}
 	}
@@ -43,7 +43,7 @@ extension Declaration.Kind {
 	nonisolated var isTypeKind: Bool {
 		switch self {
 		case .class, .struct, .enum, .protocol,
-			.extensionClass, .extensionStruct, .extensionEnum, .extensionProtocol, .extension:
+		     .extensionClass, .extensionStruct, .extensionEnum, .extensionProtocol, .extension:
 			true
 		default:
 			false

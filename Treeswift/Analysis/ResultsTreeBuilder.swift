@@ -5,14 +5,13 @@
 //  Builds hierarchical tree structure from ScanResults
 //
 
-import Foundation
 import AppKit
+import Foundation
 import PeripheryKit
 import SourceGraph
 import SystemPackage
 
 struct ResultsTreeBuilder {
-
 	nonisolated static func buildTree(from results: [ScanResult], projectRoot: String) -> [TreeNode] {
 		// Group results by file location
 		var fileGroups: [String: [(result: ScanResult, declaration: Declaration, location: Location)]] = [:]
@@ -28,12 +27,11 @@ struct ResultsTreeBuilder {
 		var fileNodes: [(path: String, node: FileNode)] = []
 
 		for (filePath, _) in fileGroups {
-
 			let fileName = URL(fileURLWithPath: filePath).lastPathComponent
 			let fileNode = FileNode(
 				id: filePath,
 				name: fileName,
-				path: filePath,
+				path: filePath
 			)
 
 			fileNodes.append((path: filePath, node: fileNode))
@@ -42,7 +40,8 @@ struct ResultsTreeBuilder {
 		// Build folder hierarchy
 		return buildFolderHierarchy(fileNodes: fileNodes, projectRoot: projectRoot)
 	}
-	nonisolated private static func buildFolderHierarchy(
+
+	private nonisolated static func buildFolderHierarchy(
 		fileNodes: [(path: String, node: FileNode)],
 		projectRoot: String
 	) -> [TreeNode] {
@@ -79,14 +78,14 @@ struct ResultsTreeBuilder {
 			// Sort children within this folder (folders before files, then alphabetically)
 			folder.children.sort { lhs, rhs in
 				switch (lhs, rhs) {
-				case (.folder(let a), .folder(let b)):
-					return a.name < b.name
-				case (.file(let a), .file(let b)):
-					return a.name < b.name
+				case let (.folder(a), .folder(b)):
+					a.name < b.name
+				case let (.file(a), .file(b)):
+					a.name < b.name
 				case (.folder, .file):
-					return true
+					true
 				case (.file, .folder):
-					return false
+					false
 				}
 			}
 			folders[path] = folder
@@ -125,19 +124,19 @@ struct ResultsTreeBuilder {
 
 		return rootNodes.sorted { lhs, rhs in
 			switch (lhs, rhs) {
-			case (.folder(let a), .folder(let b)):
-				return a.name < b.name
-			case (.file(let a), .file(let b)):
-				return a.name < b.name
+			case let (.folder(a), .folder(b)):
+				a.name < b.name
+			case let (.file(a), .file(b)):
+				a.name < b.name
 			case (.folder, .file):
-				return true
+				true
 			case (.file, .folder):
-				return false
+				false
 			}
 		}
 	}
 
-	nonisolated private static func createFolderPathIfNeeded(
+	private nonisolated static func createFolderPathIfNeeded(
 		_ path: String,
 		in folders: inout [String: FolderNode],
 		projectRoot: String
@@ -163,4 +162,3 @@ struct ResultsTreeBuilder {
 		createFolderPathIfNeeded(parentPath, in: &folders, projectRoot: projectRoot)
 	}
 }
-

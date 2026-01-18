@@ -1,5 +1,5 @@
 //
-//  CategoriesModels.swift
+//  CodeTreeModels.swift
 //  Treeswift
 //
 //  Data models for Categories visualization (from Dumper analysis)
@@ -8,8 +8,8 @@
 import Foundation
 
 /**
-Type-safe enum for identifying category sections
-*/
+ Type-safe enum for identifying category sections
+ */
 enum CategorySection: String, CaseIterable, Sendable {
 	case hierarchy = "section-hierarchy"
 	case viewExtensions = "section-view-extensions"
@@ -27,9 +27,9 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 
 	var id: String {
 		switch self {
-		case .section(let node): node.id.rawValue
-		case .declaration(let node): node.id
-		case .syntheticRoot(let node): node.id
+		case let .section(node): node.id.rawValue
+		case let .declaration(node): node.id
+		case let .syntheticRoot(node): node.id
 		}
 	}
 
@@ -42,17 +42,17 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 
 	private func collectDescendantIDs(into set: inout Set<String>) {
 		switch self {
-		case .section(let section):
+		case let .section(section):
 			set.insert(section.id.rawValue)
 			for child in section.children {
 				child.collectDescendantIDs(into: &set)
 			}
-		case .declaration(let decl):
+		case let .declaration(decl):
 			set.insert(decl.id)
 			for child in decl.children {
 				child.collectDescendantIDs(into: &set)
 			}
-		case .syntheticRoot(let root):
+		case let .syntheticRoot(root):
 			set.insert(root.id)
 			for child in root.children {
 				child.collectDescendantIDs(into: &set)
@@ -140,17 +140,17 @@ extension CategoriesNode: NavigableTreeNode {
 
 	var isExpandable: Bool {
 		switch self {
-		case .section(let section): !section.children.isEmpty
-		case .declaration(let decl): !decl.children.isEmpty
-		case .syntheticRoot(let root): !root.children.isEmpty
+		case let .section(section): !section.children.isEmpty
+		case let .declaration(decl): !decl.children.isEmpty
+		case let .syntheticRoot(root): !root.children.isEmpty
 		}
 	}
 
 	var childNodes: [any NavigableTreeNode] {
 		switch self {
-		case .section(let section): section.children
-		case .declaration(let decl): decl.children
-		case .syntheticRoot(let root): root.children
+		case let .section(section): section.children
+		case let .declaration(decl): decl.children
+		case let .syntheticRoot(root): root.children
 		}
 	}
 }
@@ -178,8 +178,8 @@ struct LocationInfo: Hashable, Sendable {
 	var displayText: String {
 		var parts: [String] = []
 
-		if let fileName = fileName {
-			let lineRange = if let endLine = endLine {
+		if let fileName {
+			let lineRange = if let endLine {
 				"\(line):\(endLine)"
 			} else {
 				"\(line)"
@@ -189,7 +189,7 @@ struct LocationInfo: Hashable, Sendable {
 
 		parts.append(icon.asText)
 
-		if let warningText = warningText {
+		if let warningText {
 			parts.append(warningText)
 		}
 

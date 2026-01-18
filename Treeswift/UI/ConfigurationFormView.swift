@@ -6,9 +6,9 @@
 //  Following macOS layout guidelines from https://marioaguzman.github.io/design/layoutguidelines/
 //
 
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-import AppKit
 
 struct ConfigurationFormView: View {
 	@Binding var configuration: PeripheryConfiguration
@@ -24,6 +24,7 @@ struct ConfigurationFormView: View {
 	var body: some View {
 		Form {
 			// MARK: - Project Section
+
 			LabeledContent {
 				HStack(spacing: 8) {
 					Spacer()
@@ -94,6 +95,7 @@ struct ConfigurationFormView: View {
 			}
 
 			// MARK: - Schemes Section
+
 			if configuration.projectType == .xcode {
 				LabeledContent {
 					SchemePopoverButton(
@@ -107,6 +109,7 @@ struct ConfigurationFormView: View {
 			}
 
 			// MARK: - Build Arguments Section
+
 			LabeledContent {
 				TextField("Build arguments", text: buildArgumentsBinding)
 					.textFieldStyle(.roundedBorder)
@@ -118,14 +121,16 @@ struct ConfigurationFormView: View {
 			}
 
 			// MARK: - Options Section
+
 			optionsDisclosureGroup
 
 			// MARK: - Tree Layout Section
+
 			// ONLY USE IF I AM TWEAKING LAYOUT
 			// layoutDisclosureGroup
 		}
 		.formStyle(.grouped)
-		.onChange(of: configuration.project) { oldValue, newValue in
+		.onChange(of: configuration.project) { _, _ in
 			loadSchemesSynchronously()
 		}
 		.task(id: configuration.project) {
@@ -144,10 +149,10 @@ struct ConfigurationFormView: View {
 
 	private var hasOptionsEnabled: Bool {
 		configuration.excludeTests ||
-		configuration.skipBuild ||
-		configuration.cleanBuild ||
-		configuration.isVerbose ||
-		configuration.shouldLogToConsole
+			configuration.skipBuild ||
+			configuration.cleanBuild ||
+			configuration.isVerbose ||
+			configuration.shouldLogToConsole
 	}
 
 	private var optionsSummary: String {
@@ -180,10 +185,10 @@ struct ConfigurationFormView: View {
 	// MARK: - View Components
 
 	/**
-	Disclosure group for periphery scan options.
-	Displays a collapsible section with toggles for exclude tests, skip build, clean build,
-	verbose mode, and console logging. Shows a summary of enabled options when collapsed.
-	*/
+	 Disclosure group for periphery scan options.
+	 Displays a collapsible section with toggles for exclude tests, skip build, clean build,
+	 verbose mode, and console logging. Shows a summary of enabled options when collapsed.
+	 */
 	private var optionsDisclosureGroup: some View {
 		DisclosureGroup(
 			isExpanded: $isOptionsExpanded,
@@ -214,10 +219,10 @@ struct ConfigurationFormView: View {
 	}
 
 	/**
-	Disclosure group for tree layout settings.
-	Provides sliders to adjust visual parameters of the tree view including indent per level,
-	leaf node offset, row padding, and chevron width.
-	*/
+	 Disclosure group for tree layout settings.
+	 Provides sliders to adjust visual parameters of the tree view including indent per level,
+	 leaf node offset, row padding, and chevron width.
+	 */
 	// periphery:ignore
 	private var layoutDisclosureGroup: some View {
 		DisclosureGroup(
@@ -228,28 +233,28 @@ struct ConfigurationFormView: View {
 						Text("Indent Per Level: \(Int(layoutSettings.indentPerLevel))")
 							.font(.caption)
 							.foregroundStyle(.secondary)
-						Slider(value: $layoutSettings.indentPerLevel, in: 0...40, step: 1)
+						Slider(value: $layoutSettings.indentPerLevel, in: 0 ... 40, step: 1)
 					}
 
 					VStack(alignment: .leading, spacing: 4) {
 						Text("Leaf Node Offset: \(Int(layoutSettings.leafNodeOffset))")
 							.font(.caption)
 							.foregroundStyle(.secondary)
-						Slider(value: $layoutSettings.leafNodeOffset, in: 0...30, step: 1)
+						Slider(value: $layoutSettings.leafNodeOffset, in: 0 ... 30, step: 1)
 					}
 
 					VStack(alignment: .leading, spacing: 4) {
 						Text("Row Vertical Padding: \(Int(layoutSettings.rowVerticalPadding))")
 							.font(.caption)
 							.foregroundStyle(.secondary)
-						Slider(value: $layoutSettings.rowVerticalPadding, in: 0...12, step: 1)
+						Slider(value: $layoutSettings.rowVerticalPadding, in: 0 ... 12, step: 1)
 					}
 
 					VStack(alignment: .leading, spacing: 4) {
 						Text("Chevron Width: \(Int(layoutSettings.chevronWidth))")
 							.font(.caption)
 							.foregroundStyle(.secondary)
-						Slider(value: $layoutSettings.chevronWidth, in: 8...20, step: 1)
+						Slider(value: $layoutSettings.chevronWidth, in: 8 ... 20, step: 1)
 					}
 				}
 				.padding(.leading, 20)
@@ -331,13 +336,13 @@ struct ConfigurationFormView: View {
 	private func handleDrop(providers: [NSItemProvider]) -> Bool {
 		guard let provider = providers.first else { return false }
 
-		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
 			guard let data = item as? Data,
-				  let url = URL(dataRepresentation: data, relativeTo: nil) else {
+			      let url = URL(dataRepresentation: data, relativeTo: nil) else {
 				return
 			}
 
-				Task { @MainActor in
+			Task { @MainActor in
 				let projectURL: URL?
 				let projectType: ProjectType?
 
@@ -348,7 +353,7 @@ struct ConfigurationFormView: View {
 					// Check for .xcodeproj first (priority)
 					if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
 					   let xcodeproj = contents.first(where: {
-						   $0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
+					   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
 					   }) {
 						projectURL = xcodeproj
 						projectType = .xcode
@@ -357,8 +362,7 @@ struct ConfigurationFormView: View {
 					else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
 						projectURL = url.appendingPathComponent("Package.swift")
 						projectType = .swiftPackage
-					}
-					else {
+					} else {
 						// No valid project found
 						projectURL = nil
 						projectType = nil
@@ -374,7 +378,7 @@ struct ConfigurationFormView: View {
 					}
 				}
 
-				guard let projectURL = projectURL, let projectType = projectType else {
+				guard let projectURL, let projectType else {
 					return
 				}
 
@@ -389,8 +393,8 @@ struct ConfigurationFormView: View {
 	}
 
 	private func handleFileSelection(_ result: Result<[URL], Error>) {
-		guard case .success(let urls) = result,
-			  let url = urls.first else {
+		guard case let .success(urls) = result,
+		      let url = urls.first else {
 			return
 		}
 
@@ -404,7 +408,7 @@ struct ConfigurationFormView: View {
 			// Check for .xcodeproj first (priority)
 			if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
 			   let xcodeproj = contents.first(where: {
-				   $0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
+			   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
 			   }) {
 				projectURL = xcodeproj
 				projectType = .xcode
@@ -413,8 +417,7 @@ struct ConfigurationFormView: View {
 			else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
 				projectURL = url.appendingPathComponent("Package.swift")
 				projectType = .swiftPackage
-			}
-			else {
+			} else {
 				// No valid project found
 				projectURL = nil
 				projectType = nil
@@ -430,7 +433,7 @@ struct ConfigurationFormView: View {
 			}
 		}
 
-		guard let projectURL = projectURL, let projectType = projectType else {
+		guard let projectURL, let projectType else {
 			return
 		}
 
@@ -487,23 +490,22 @@ struct ConfigurationFormView: View {
 
 @MainActor
 private struct MainActorConfigurationFormPreview: View {
-    @State var config = PeripheryConfiguration.demo()
-    @State var isLoading = false
-    @FocusState var focusedField: ContentColumnView.FocusableField?
-    @State var layoutSettings = TreeLayoutSettings()
+	@State var config = PeripheryConfiguration.demo()
+	@State var isLoading = false
+	@FocusState var focusedField: ContentColumnView.FocusableField?
+	@State var layoutSettings = TreeLayoutSettings()
 
-    var body: some View {
-        ConfigurationFormView(
-            configuration: $config,
-            isLoadingSchemes: $isLoading,
-            focusedField: $focusedField,
-            layoutSettings: $layoutSettings
-        )
-        .frame(width: 600)
-    }
+	var body: some View {
+		ConfigurationFormView(
+			configuration: $config,
+			isLoadingSchemes: $isLoading,
+			focusedField: $focusedField,
+			layoutSettings: $layoutSettings
+		)
+		.frame(width: 600)
+	}
 }
 
 #Preview {
-    MainActorConfigurationFormPreview()
+	MainActorConfigurationFormPreview()
 }
-

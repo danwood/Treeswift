@@ -8,7 +8,6 @@
 import Foundation
 
 enum TreeNodeFinder {
-
 	// Find TreeNode by ID in Periphery results tree
 	static func findTreeNode(withID id: String, in nodes: [TreeNode]) -> TreeNode? {
 		for node in nodes {
@@ -16,7 +15,7 @@ enum TreeNodeFinder {
 				return node
 			}
 			switch node {
-			case .folder(let folder):
+			case let .folder(folder):
 				if let found = findTreeNode(withID: id, in: folder.children) {
 					return found
 				}
@@ -35,15 +34,15 @@ enum TreeNodeFinder {
 				return node
 			}
 			switch node {
-			case .section(let section):
+			case let .section(section):
 				if let found = findCategoriesNode(withID: id, in: section.children) {
 					return found
 				}
-			case .declaration(let decl):
+			case let .declaration(decl):
 				if let found = findCategoriesNode(withID: id, in: decl.children) {
 					return found
 				}
-			case .syntheticRoot(let root):
+			case let .syntheticRoot(root):
 				if let found = findCategoriesNode(withID: id, in: root.children) {
 					return found
 				}

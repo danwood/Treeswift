@@ -5,8 +5,8 @@
 //  Detail view for selected items in Categories tab
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct CategoriesDetailView: View {
 	let node: CategoriesNode
@@ -14,11 +14,11 @@ struct CategoriesDetailView: View {
 	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			switch node {
-			case .section(let section):
+			case let .section(section):
 				sectionDetailView(section)
-			case .declaration(let declaration):
+			case let .declaration(declaration):
 				declarationDetailView(declaration)
-			case .syntheticRoot(let root):
+			case let .syntheticRoot(root):
 				rootDetailView(root)
 			}
 		}
@@ -68,7 +68,6 @@ struct CategoriesDetailView: View {
 				Divider()
 			}
 
-
 			// Conformances
 			if !declaration.conformances.isEmpty {
 				VStack(alignment: .leading, spacing: 4) {
@@ -94,7 +93,6 @@ struct CategoriesDetailView: View {
 				}
 			}
 
-
 			// Location info
 			VStack(alignment: .leading, spacing: 8) {
 				Text("Location")
@@ -102,7 +100,8 @@ struct CategoriesDetailView: View {
 
 				HStack(spacing: 4) {
 					declaration.locationInfo.icon.view(size: 14)
-					let displayFileName = declaration.locationInfo.fileName ?? extractFileName(from: declaration.locationInfo.relativePath)
+					let displayFileName = declaration.locationInfo
+						.fileName ?? extractFileName(from: declaration.locationInfo.relativePath)
 					if let fileName = displayFileName {
 						Text(fileName)
 							.font(.system(.caption, design: .monospaced))
@@ -178,7 +177,7 @@ struct CategoriesDetailView: View {
 	}
 
 	private func typeIconExplanation(_ icon: TreeIcon) -> String? {
-		guard case .emoji(let emoji) = icon else { return nil }
+		guard case let .emoji(emoji) = icon else { return nil }
 		switch emoji {
 		case "🔷": return "Main App entry point (@main)"
 		case "🖼️": return "SwiftUI View"
@@ -195,7 +194,7 @@ struct CategoriesDetailView: View {
 	}
 
 	private func locationIconExplanation(_ icon: TreeIcon) -> String? {
-		guard case .emoji(let emoji) = icon else { return nil }
+		guard case let .emoji(emoji) = icon else { return nil }
 		switch emoji {
 		case "🆘": return "Declaration is too large for its current file"
 		case "📎": return "Swift-nested type (defined inside another type)"
@@ -228,8 +227,8 @@ struct CategoriesDetailView: View {
 	private func openDeclarationInEditor(_ declaration: DeclarationNode) {
 		guard declaration.locationInfo.fileName != nil else { return }
 		/* The DeclarationNode only stores the file name, not the full path.
-		   Opening by file name alone would require searching for the file.
-		   For now, just open Xcode and let the user navigate. */
+		 Opening by file name alone would require searching for the file.
+		 For now, just open Xcode and let the user navigate. */
 		NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Xcode.app"))
 	}
 

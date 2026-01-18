@@ -22,7 +22,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 
 	var project: String?
 	var schemes: [String]
-	var outputFormat: String  // "xcode", "json", "csv", "checkstyle", "codeclimate", "github-actions"
+	var outputFormat: String // "xcode", "json", "csv", "checkstyle", "codeclimate", "github-actions"
 
 	// MARK: - Exclusion Settings
 
@@ -168,11 +168,11 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.externalEncodableProtocols = externalEncodableProtocols
 		self.externalCodableProtocols = externalCodableProtocols
 		self.externalTestCaseClasses = externalTestCaseClasses
-		self.isVerbose = verbose
-		self.shouldLogToConsole = logToConsole
-		self.isQuiet = quiet
-		self.isStrict = strict
-		self.isRelativeResults = relativeResults
+		isVerbose = verbose
+		shouldLogToConsole = logToConsole
+		isQuiet = quiet
+		isStrict = strict
+		isRelativeResults = relativeResults
 		self.baseline = baseline
 		self.writeBaseline = writeBaseline
 		self.writeResults = writeResults
@@ -189,7 +189,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 	/// For Xcode projects, returns the project path itself
 	/// For Swift Package projects, returns the directory containing Package.swift
 	var projectDirectory: String? {
-		guard let project = project else { return nil }
+		guard let project else { return nil }
 
 		switch projectType {
 		case .xcode:

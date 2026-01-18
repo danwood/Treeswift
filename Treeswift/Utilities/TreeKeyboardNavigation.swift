@@ -16,7 +16,6 @@ protocol NavigableTreeNode {
 
 /// Builds a flat list of visible node IDs for keyboard navigation
 enum TreeKeyboardNavigation {
-
 	/// Returns ordered list of visible node IDs based on expansion state
 	static func buildVisibleItemList<T: NavigableTreeNode>(
 		nodes: [T],
@@ -50,7 +49,7 @@ enum TreeKeyboardNavigation {
 			if node.isExpandable, !showAllFolders {
 				// Skip folders without Swift files
 				if case let browserNode as FileBrowserNode = node,
-				   case .directory(let dir) = browserNode,
+				   case let .directory(dir) = browserNode,
 				   !dir.containsSwiftFiles {
 					continue
 				}
@@ -64,7 +63,7 @@ enum TreeKeyboardNavigation {
 			list.append(node.navigationID)
 
 			// If this node is expandable and expanded, recurse into children
-			if node.isExpandable && expandedIDs.contains(node.navigationID) {
+			if node.isExpandable, expandedIDs.contains(node.navigationID) {
 				collectVisibleIDs(
 					from: node.childNodes as! [T],
 					expandedIDs: expandedIDs,
@@ -85,7 +84,7 @@ enum TreeKeyboardNavigation {
 		guard !visibleItems.isEmpty else { return nil }
 
 		guard let current = currentSelection,
-			  let currentIndex = visibleItems.firstIndex(of: current) else {
+		      let currentIndex = visibleItems.firstIndex(of: current) else {
 			// No selection or invalid selection - select last item
 			return visibleItems.last
 		}
@@ -104,7 +103,7 @@ enum TreeKeyboardNavigation {
 		guard !visibleItems.isEmpty else { return nil }
 
 		guard let current = currentSelection,
-			  let currentIndex = visibleItems.firstIndex(of: current) else {
+		      let currentIndex = visibleItems.firstIndex(of: current) else {
 			// No selection or invalid selection - select first item
 			return visibleItems.first
 		}

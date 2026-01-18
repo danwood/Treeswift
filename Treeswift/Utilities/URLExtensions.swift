@@ -12,7 +12,7 @@ extension URL {
 	var isValidProjectFile: Bool {
 		let ext = pathExtension
 		return ext == "xcodeproj" || ext == "xcworkspace" ||
-			   lastPathComponent == "Package.swift"
+			lastPathComponent == "Package.swift"
 	}
 
 	/// Detects the project type from the URL

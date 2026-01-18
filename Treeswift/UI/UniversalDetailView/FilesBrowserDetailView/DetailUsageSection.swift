@@ -42,7 +42,9 @@ struct DetailUsageSection: View {
 				// Usage badge summary
 				if let badge = usageBadge {
 					HStack(spacing: 6) {
-						Image(systemName: badge.isPositive ? "checkmark.circle.fill" : (badge.isWarning ? "exclamationmark.triangle.fill" : "info.circle.fill"))
+						Image(systemName: badge
+							.isPositive ? "checkmark.circle.fill" :
+							(badge.isWarning ? "exclamationmark.triangle.fill" : "info.circle.fill"))
 							.foregroundStyle(badge.isPositive ? .green : (badge.isWarning ? .orange : .secondary))
 						Text(badge.text)
 							.foregroundStyle(badge.isPositive ? .green : (badge.isWarning ? .orange : .secondary))
@@ -104,11 +106,11 @@ struct DetailUsageSection: View {
 
 	private var crossFolderSummaryText: String {
 		if statistics.folderReferenceCount >= 2 {
-			return "Cross-folder: \(statistics.folderReferenceCount) folders"
+			"Cross-folder: \(statistics.folderReferenceCount) folders"
 		} else if statistics.externalFileCount > 1 {
-			return "Cross-folder: \(statistics.externalFileCount) files"
+			"Cross-folder: \(statistics.externalFileCount) files"
 		} else {
-			return "Cross-folder: 1 file"
+			"Cross-folder: 1 file"
 		}
 	}
 

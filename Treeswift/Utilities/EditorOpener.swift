@@ -5,8 +5,8 @@
 //  Utility for opening files in Xcode or default editor
 //
 
-import Foundation
 import AppKit
+import Foundation
 
 /// Opens a file in Xcode (xed) at an optional line number, with fallback to system default
 func openFileInEditor(path: String, line: Int? = nil) {
@@ -17,7 +17,7 @@ func openFileInEditor(path: String, line: Int? = nil) {
 		let process = Process()
 		process.executableURL = URL(fileURLWithPath: xedPath)
 
-		if let line = line {
+		if let line {
 			process.arguments = ["--line", "\(line)", path]
 		} else {
 			process.arguments = [path]

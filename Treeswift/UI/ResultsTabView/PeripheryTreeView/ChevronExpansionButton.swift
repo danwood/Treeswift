@@ -24,7 +24,6 @@ struct ChevronExpansionButton: View {
 			.frame(width: layoutSettings.chevronWidth)
 			.padding(4)
 			.contentShape(.rect)
-
 			.simultaneousGesture(
 				TapGesture(count: 1)
 					.modifiers(.option)

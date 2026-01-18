@@ -28,7 +28,7 @@ struct ContentView: View {
 	@Environment(FileInspectorState.self) private var inspectorState
 
 	init() {
-		self._scanStateManager = State(initialValue: ScanStateManager())
+		_scanStateManager = State(initialValue: ScanStateManager())
 	}
 
 	private var selectedConfigID: Binding<UUID?> {
@@ -49,13 +49,13 @@ struct ContentView: View {
 
 	private var selectedPeripheryNode: TreeNode? {
 		guard let selectedID = peripheryTabSelectedID,
-			  let scanState = currentScanState else { return nil }
+		      let scanState = currentScanState else { return nil }
 		return findPeripheryNode(withID: selectedID, in: scanState.treeNodes)
 	}
 
 	private var selectedFilesNode: FileBrowserNode? {
 		guard let selectedID = filesTabSelectedID,
-			  let scanState = currentScanState else { return nil }
+		      let scanState = currentScanState else { return nil }
 		return scanState.fileNodesLookup[selectedID]
 	}
 
@@ -89,7 +89,11 @@ struct ContentView: View {
 				scanStateManager: scanStateManager,
 				selectedConfigID: selectedConfigID
 			)
-			.navigationSplitViewColumnWidth(min: LayoutConstants.sidebarMinWidth, ideal: LayoutConstants.sidebarIdealWidth, max: LayoutConstants.sidebarMaxWidth)
+			.navigationSplitViewColumnWidth(
+				min: LayoutConstants.sidebarMinWidth,
+				ideal: LayoutConstants.sidebarIdealWidth,
+				max: LayoutConstants.sidebarMaxWidth
+			)
 			.navigationTitle("Configurations")
 		} content: {
 			if let selectedID = selectedConfigID.wrappedValue,
@@ -112,7 +116,11 @@ struct ContentView: View {
 					bodyGetterTabSelectedID: $bodyGetterTabSelectedID,
 					unattachedTabSelectedID: $unattachedTabSelectedID
 				)
-				.navigationSplitViewColumnWidth(min: LayoutConstants.contentColumnMinWidth, ideal: LayoutConstants.contentColumnIdealWidth, max: LayoutConstants.contentColumnMaxWidth)
+				.navigationSplitViewColumnWidth(
+					min: LayoutConstants.contentColumnMinWidth,
+					ideal: LayoutConstants.contentColumnIdealWidth,
+					max: LayoutConstants.contentColumnMaxWidth
+				)
 			}
 		} detail: {
 			if let scanState = currentScanState {
@@ -127,7 +135,11 @@ struct ContentView: View {
 					sourceGraph: scanState.sourceGraph,
 					filterState: $filterState
 				)
-				.navigationSplitViewColumnWidth(min: LayoutConstants.detailColumnMinWidth, ideal: LayoutConstants.detailColumnIdealWidth, max: LayoutConstants.detailColumnMaxWidth)
+				.navigationSplitViewColumnWidth(
+					min: LayoutConstants.detailColumnMinWidth,
+					ideal: LayoutConstants.detailColumnIdealWidth,
+					max: LayoutConstants.detailColumnMaxWidth
+				)
 			} else {
 				UniversalDetailView(
 					selectedTab: selectedTab,
@@ -140,7 +152,11 @@ struct ContentView: View {
 					sourceGraph: nil,
 					filterState: $filterState
 				)
-				.navigationSplitViewColumnWidth(min: LayoutConstants.detailColumnMinWidth, ideal: LayoutConstants.detailColumnIdealWidth, max: LayoutConstants.detailColumnMaxWidth)
+				.navigationSplitViewColumnWidth(
+					min: LayoutConstants.detailColumnMinWidth,
+					ideal: LayoutConstants.detailColumnIdealWidth,
+					max: LayoutConstants.detailColumnMaxWidth
+				)
 			}
 		}
 		.environment(\.treeLayoutSettings, layoutSettings)
@@ -152,7 +168,7 @@ struct ContentView: View {
 
 			// Check for --scan launch argument
 			let launchMode = LaunchArgumentsHandler.parseLaunchMode()
-			if case .gui(scanConfiguration: let configName?) = launchMode {
+			if case let .gui(scanConfiguration: configName?) = launchMode {
 				handleScanArgument(configName: configName)
 			}
 		}
@@ -169,7 +185,6 @@ struct ContentView: View {
 	 then starting a scan.
 	 */
 	private func handleScanArgument(configName: String) {
-
 		// Find configuration matching the display name
 		var foundConfig: PeripheryConfiguration?
 		for config in configManager.configurations {
@@ -177,12 +192,11 @@ struct ContentView: View {
 
 			// Use same display name logic as --list
 			let url = URL(fileURLWithPath: projectPath)
-			let displayName: String
-			switch config.projectType {
+			let displayName: String = switch config.projectType {
 			case .xcode:
-				displayName = url.deletingPathExtension().lastPathComponent
+				url.deletingPathExtension().lastPathComponent
 			case .swiftPackage:
-				displayName = url.deletingLastPathComponent().lastPathComponent
+				url.deletingLastPathComponent().lastPathComponent
 			}
 
 			if displayName == configName {
@@ -216,9 +230,9 @@ struct ContentView: View {
 	 Updates the inspector state when a file is selected in the Files tab
 	 */
 	private func updateInspectorState(forFilesSelection selectedID: String?) {
-		guard let selectedID = selectedID,
-			  let scanState = currentScanState,
-			  case .file(let file) = scanState.fileNodesLookup[selectedID] else {
+		guard let selectedID,
+		      let scanState = currentScanState,
+		      case let .file(file) = scanState.fileNodesLookup[selectedID] else {
 			inspectorState.clearInspectedFile()
 			return
 		}
@@ -234,16 +248,16 @@ struct ContentView: View {
 	 Updates the inspector state when a file is selected in the Periphery tab
 	 */
 	private func updateInspectorState(forPeripherySelection selectedID: String?) {
-		guard let selectedID = selectedID,
-			  let scanState = currentScanState,
-			  let node = findPeripheryNode(withID: selectedID, in: scanState.treeNodes),
-			  case .file(let file) = node else {
+		guard let selectedID,
+		      let scanState = currentScanState,
+		      let node = findPeripheryNode(withID: selectedID, in: scanState.treeNodes),
+		      case let .file(file) = node else {
 			inspectorState.clearInspectedFile()
 			return
 		}
 
 		// Get file metadata from fileNodesLookup if available
-		if case .file(let browserFile) = scanState.fileNodesLookup[file.path] {
+		if case let .file(browserFile) = scanState.fileNodesLookup[file.path] {
 			inspectorState.setInspectedFile(
 				filePath: file.path,
 				modificationDate: browserFile.modificationDate,
@@ -262,10 +276,10 @@ struct ContentView: View {
 	private func findPeripheryNode(withID id: String, in nodes: [TreeNode]) -> TreeNode? {
 		for node in nodes {
 			switch node {
-			case .folder(let folder):
+			case let .folder(folder):
 				if folder.id == id { return node }
 				if let found = findPeripheryNode(withID: id, in: folder.children) { return found }
-			case .file(let file):
+			case let .file(file):
 				if file.id == id { return node }
 			}
 		}
@@ -275,13 +289,13 @@ struct ContentView: View {
 	private func findCategoriesNode(withID id: String, in nodes: [CategoriesNode]) -> CategoriesNode? {
 		for node in nodes {
 			switch node {
-			case .section(let section):
+			case let .section(section):
 				if section.id.rawValue == id { return node }
 				if let found = findCategoriesNode(withID: id, in: section.children) { return found }
-			case .declaration(let decl):
+			case let .declaration(decl):
 				if decl.id == id { return node }
 				if let found = findCategoriesNode(withID: id, in: decl.children) { return found }
-			case .syntheticRoot(let root):
+			case let .syntheticRoot(root):
 				if root.id == id { return node }
 				if let found = findCategoriesNode(withID: id, in: root.children) { return found }
 			}

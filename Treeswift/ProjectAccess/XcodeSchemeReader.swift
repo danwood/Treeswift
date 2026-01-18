@@ -21,7 +21,6 @@ private nonisolated struct WorkspaceDetails: Codable, Sendable {
 }
 
 class XcodeSchemeReader {
-
 	/// Get cached schemes synchronously if available and valid
 	/// - Parameter path: Full path to .xcodeproj or .xcworkspace
 	/// - Returns: Cached schemes if valid, nil if cache miss or stale

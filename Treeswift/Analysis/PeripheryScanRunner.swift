@@ -6,19 +6,19 @@
 //	Core logic extracted from ScanCommand.run() for GUI use
 //
 
-import Foundation
 import Configuration
+import Extensions
+import FilenameMatcher
+import Foundation
+import FrontendLib
 import Logger
-import Shared
 import PeripheryKit
+import Shared
 import SourceGraph
 import SystemPackage
-import FilenameMatcher
-import Extensions
-import FrontendLib
 
 // Custom Shell that ensures PATH includes developer tools
-fileprivate final class GUIShell: Shell {
+private final class GUIShell: Shell {
 	@discardableResult
 	func exec(_ args: [String]) throws -> String {
 		let (status, stdout, stderr) = try execute(args)
@@ -87,7 +87,7 @@ fileprivate final class GUIShell: Shell {
 		return (process.terminationStatus, standardOutput, standardError)
 	}
 
-	nonisolated required init(logger: Logger) {
+	required nonisolated init(logger: Logger) {
 		// GUI apps don't inherit the full PATH from the shell
 		// Add common locations for Xcode and developer tools
 		var path = ProcessInfo.processInfo.environment["PATH"] ?? ""
@@ -137,7 +137,6 @@ enum ScanProgress: Sendable {
 /// **Usage:**
 /// Only call from background tasks (Task.detached) - never from MainActor context
 final class PeripheryScanRunner: Sendable {
-
 	// Internal class to bridge progress callbacks
 	// Must be nonisolated to work with nonisolated scan methods
 	private final class ProgressBridge: ScanProgressDelegate, @unchecked Sendable {
@@ -168,11 +167,14 @@ final class PeripheryScanRunner: Sendable {
 
 	/// Run a scan with full Periphery configuration
 	/// This API matches ScanCommand.run() functionality
-	nonisolated func runScan(configuration: Configuration, progressHandler: (@Sendable (String) -> Void)? = nil) async throws -> ([ScanResult], SourceGraph) {
+	nonisolated func runScan(
+		configuration: Configuration,
+		progressHandler: (@Sendable (String) -> Void)? = nil
+	) async throws -> ([ScanResult], SourceGraph) {
 		progressHandler?("Starting scan…")
 
 		// Run directly in the Task context so Task.checkCancellation() works
-		let (result, graph) = try self.executePeripheryScan(
+		let (result, graph) = try executePeripheryScan(
 			configuration: configuration,
 			progressHandler: progressHandler
 		)
@@ -251,9 +253,10 @@ final class PeripheryScanRunner: Sendable {
 					// Phase 2: Post-processing with streaming
 					// Categories: Sequential streaming (7 sections)
 					let categoriesTask = Task {
-						_ = Dumper().buildCategoriesStreaming(graph: sourceGraph, projectRootPath: projectRootPath) { section in
-							continuation.yield(.categoriesSectionAdded(section))
-						}
+						_ = Dumper()
+							.buildCategoriesStreaming(graph: sourceGraph, projectRootPath: projectRootPath) { section in
+								continuation.yield(.categoriesSectionAdded(section))
+							}
 						if let data = "* ✓ Categories streaming complete\n".data(using: .utf8) {
 							try? FileHandle.standardError.write(contentsOf: data)
 						}
@@ -261,12 +264,12 @@ final class PeripheryScanRunner: Sendable {
 						/* TODO: Integrate this logic here, roughly:
 
 						 if logToConsole {
-							Task.detached(priority: .utility) {
-								let output = PrintCapture.capture {
-									dumper.printHighLevelTypesAndReferences(graph: graph)
-								}
-								"=== Categories Output ===\n\(output)".logToConsole()
-							}
+						 Task.detached(priority: .utility) {
+						 let output = PrintCapture.capture {
+						 dumper.printHighLevelTypesAndReferences(graph: graph)
+						 }
+						 "=== Categories Output ===\n\(output)".logToConsole()
+						 }
 						 }
 						 */
 					}
@@ -292,7 +295,10 @@ final class PeripheryScanRunner: Sendable {
 
 	// MARK: - Core Scan Logic (extracted from ScanCommand.run())
 
-	nonisolated private func executePeripheryScan(configuration: Configuration, progressHandler: (@Sendable (String) -> Void)?) throws -> ([ScanResult], SourceGraph) {
+	private nonisolated func executePeripheryScan(
+		configuration: Configuration,
+		progressHandler: (@Sendable (String) -> Void)?
+	) throws -> ([ScanResult], SourceGraph) {
 		// Create progress delegate if handler provided
 		let progressDelegate = progressHandler.map { ProgressBridge(callback: $0) }
 
@@ -327,7 +333,10 @@ final class PeripheryScanRunner: Sendable {
 
 		// Swift 6.1 workaround (from ScanCommand.run():216-219)
 		if swiftVersion.version.isVersion(equalTo: "6.1"), !configuration.retainAssignOnlyProperties {
-			logger.warn("Assign-only property analysis is disabled with Swift 6.1 due to a Swift bug: https://github.com/swiftlang/swift/issues/80394.")
+			logger
+				.warn(
+					"Assign-only property analysis is disabled with Swift 6.1 due to a Swift bug: https://github.com/swiftlang/swift/issues/80394."
+				)
 			configuration.retainAssignOnlyProperties = true
 		}
 

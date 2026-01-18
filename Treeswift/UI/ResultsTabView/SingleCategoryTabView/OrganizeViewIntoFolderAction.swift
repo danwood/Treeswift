@@ -5,8 +5,8 @@
 //  Context menu action to organize a view and its children into a dedicated folder
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct OrganizeViewIntoFolderAction: View {
 	let declaration: DeclarationNode
@@ -63,7 +63,7 @@ struct OrganizeViewIntoFolderAction: View {
 	private func collectItemsToMove(from children: [CategoriesNode], into items: inout [OrganizeItem]) {
 		for child in children {
 			switch child {
-			case .declaration(let decl):
+			case let .declaration(decl):
 				if let relativePath = decl.locationInfo.relativePath {
 					// Check if this is already in its own folder
 					let isFolder = decl.folderIndicator != nil
@@ -117,7 +117,7 @@ struct OrganizeViewIntoFolderAction: View {
 
 	private func executeOrganization() {
 		guard let projectRoot = projectRootPath,
-			  let relativePath = declaration.locationInfo.relativePath else {
+		      let relativePath = declaration.locationInfo.relativePath else {
 			showErrorAlert(message: "Cannot determine project root path")
 			return
 		}

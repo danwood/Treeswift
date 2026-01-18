@@ -18,14 +18,35 @@ struct CategoriesNodeView: View {
 
 	var body: some View {
 		switch node {
-		case .section(let section):
-			SectionRowView(section: section, expandedIDs: $expandedIDs, selectedID: $selectedID, showOnlyViews: $showOnlyViews, indentLevel: indentLevel, projectRootPath: projectRootPath)
+		case let .section(section):
+			SectionRowView(
+				section: section,
+				expandedIDs: $expandedIDs,
+				selectedID: $selectedID,
+				showOnlyViews: $showOnlyViews,
+				indentLevel: indentLevel,
+				projectRootPath: projectRootPath
+			)
 
-		case .declaration(let decl):
-			DeclarationRowView(declaration: decl, expandedIDs: $expandedIDs, selectedID: $selectedID, showOnlyViews: $showOnlyViews, indentLevel: indentLevel, projectRootPath: projectRootPath)
+		case let .declaration(decl):
+			DeclarationRowView(
+				declaration: decl,
+				expandedIDs: $expandedIDs,
+				selectedID: $selectedID,
+				showOnlyViews: $showOnlyViews,
+				indentLevel: indentLevel,
+				projectRootPath: projectRootPath
+			)
 
-		case .syntheticRoot(let root):
-			SyntheticRootRowView(root: root, expandedIDs: $expandedIDs, selectedID: $selectedID, showOnlyViews: $showOnlyViews, indentLevel: indentLevel, projectRootPath: projectRootPath)
+		case let .syntheticRoot(root):
+			SyntheticRootRowView(
+				root: root,
+				expandedIDs: $expandedIDs,
+				selectedID: $selectedID,
+				showOnlyViews: $showOnlyViews,
+				indentLevel: indentLevel,
+				projectRootPath: projectRootPath
+			)
 		}
 	}
 }

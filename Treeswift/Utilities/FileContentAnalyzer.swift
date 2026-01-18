@@ -11,17 +11,17 @@ import SystemPackage
 
 enum FileContentAnalyzer {
 	/**
-	Determines whether a file should be deleted after unused code removal.
+	 Determines whether a file should be deleted after unused code removal.
 
-	Returns a tuple indicating:
-	- shouldDelete: true if file should be moved to trash
-	- shouldRemoveImports: true if file should be kept but imports removed
+	 Returns a tuple indicating:
+	 - shouldDelete: true if file should be moved to trash
+	 - shouldRemoveImports: true if file should be kept but imports removed
 
-	Decision logic:
-	1. If any non-import declarations remain → keep file as-is
-	2. If no declarations remain but >5 meaningful comments → keep file, remove imports
-	3. Otherwise → delete file
-	*/
+	 Decision logic:
+	 1. If any non-import declarations remain → keep file as-is
+	 2. If no declarations remain but >5 meaningful comments → keep file, remove imports
+	 3. Otherwise → delete file
+	 */
 	static func shouldDeleteFile(
 		filePath: String,
 		modifiedContents: String,
@@ -51,11 +51,11 @@ enum FileContentAnalyzer {
 	}
 
 	/**
-	Checks if the file has any non-import declarations remaining after removal.
+	 Checks if the file has any non-import declarations remaining after removal.
 
-	Uses SourceGraph to find all declarations in the file, excludes removed declarations,
-	and checks if any remaining declarations are not imports (kind != .module).
-	*/
+	 Uses SourceGraph to find all declarations in the file, excludes removed declarations,
+	 and checks if any remaining declarations are not imports (kind != .module).
+	 */
 	static func hasNonImportDeclarations(
 		filePath: String,
 		sourceGraph: SourceGraph,
@@ -85,10 +85,10 @@ enum FileContentAnalyzer {
 	}
 
 	/**
-	Counts meaningful comment lines in the file, excluding copyright headers.
+	 Counts meaningful comment lines in the file, excluding copyright headers.
 
-	Copyright headers are comments that appear before the first import statement.
-	*/
+	 Copyright headers are comments that appear before the first import statement.
+	 */
 	static func countMeaningfulComments(in contents: String) -> Int {
 		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
 
@@ -106,7 +106,7 @@ enum FileContentAnalyzer {
 		var commentCount = 0
 		let startIndex = (firstImportIndex ?? -1) + 1
 
-		for index in startIndex..<lines.count {
+		for index in startIndex ..< lines.count {
 			let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
 
 			// Check for single-line comment
@@ -137,10 +137,10 @@ enum FileContentAnalyzer {
 	}
 
 	/**
-	Removes all import statements from file contents.
+	 Removes all import statements from file contents.
 
-	Used when keeping a file only for its comments.
-	*/
+	 Used when keeping a file only for its comments.
+	 */
 	static func removeImportStatements(from contents: String) -> String {
 		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
 		var result: [Substring] = []

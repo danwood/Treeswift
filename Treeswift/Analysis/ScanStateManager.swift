@@ -13,8 +13,7 @@ import Foundation
 final class ScanStateManager {
 	private var states: [UUID: ScanState] = [:]
 
-	init() {
-	}
+	init() {}
 
 	/// Get or create scan state for a configuration
 	///

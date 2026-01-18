@@ -5,9 +5,9 @@
 //  Detail section showing Periphery scan warnings for a file
 //
 
-import SwiftUI
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 struct DetailPeripheryWarningsSection: View {
@@ -47,7 +47,7 @@ struct DetailPeripheryWarningsSection: View {
 				guard location.file.path.string == filePath else { return nil }
 
 				// Apply filter state if provided
-				if let filterState = filterState {
+				if let filterState {
 					guard filterState.shouldShow(result: result, declaration: declaration) else {
 						return nil
 					}
@@ -103,19 +103,21 @@ struct DetailPeripheryWarningsSection: View {
 				.id(refreshTrigger)
 			}
 			.padding(.vertical, 4)
-			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
-				// Remove specific warning from completed actions
-				if let warningID = notification.object as? String {
-					completedActions.remove(warningID)
-					refreshTrigger += 1
-				}
+			.onReceive(NotificationCenter.default
+				.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
+					// Remove specific warning from completed actions
+					if let warningID = notification.object as? String {
+						completedActions.remove(warningID)
+						refreshTrigger += 1
+					}
 			}
-			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
-				// Add specific warning to completed actions
-				if let warningID = notification.object as? String {
-					completedActions.insert(warningID)
-					refreshTrigger += 1
-				}
+			.onReceive(NotificationCenter.default
+				.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
+					// Add specific warning to completed actions
+					if let warningID = notification.object as? String {
+						completedActions.insert(warningID)
+						refreshTrigger += 1
+					}
 			}
 		}
 	}
@@ -151,7 +153,7 @@ struct PeripheryWarningRow: View {
 	}
 
 	private var warningText: AttributedString {
-		return ScanResultHelper.formatAttributedDescription(
+		ScanResultHelper.formatAttributedDescription(
 			declaration: declaration,
 			annotation: result.annotation
 		)
@@ -181,7 +183,7 @@ struct PeripheryWarningRow: View {
 			if startLine < location.line {
 				// First, check if the declaration line itself has a @ modifier
 				let declarationLineIndex = location.line - 1
-				if declarationLineIndex >= 0 && declarationLineIndex < lines.count {
+				if declarationLineIndex >= 0, declarationLineIndex < lines.count {
 					let declarationFullLine = lines[declarationLineIndex]
 
 					// If declaration line has @ modifier, format with secondary styling
@@ -196,12 +198,12 @@ struct PeripheryWarningRow: View {
 							let char = declarationFullLine[idx]
 							if char == "(" {
 								foundParen = true
-							} else if foundParen && char == ")" {
+							} else if foundParen, char == ")" {
 								// Move past closing paren, but don't skip whitespace
 								idx = declarationFullLine.index(after: idx)
 								modifierEndIndex = idx
 								break
-							} else if !foundParen && char.isWhitespace {
+							} else if !foundParen, char.isWhitespace {
 								// Found end of simple @Modifier (don't include the whitespace)
 								modifierEndIndex = idx
 								break
@@ -210,7 +212,7 @@ struct PeripheryWarningRow: View {
 						}
 
 						// Split line into modifier and declaration parts
-						let modifierPart = String(declarationFullLine[atIndex..<modifierEndIndex])
+						let modifierPart = String(declarationFullLine[atIndex ..< modifierEndIndex])
 						let declarationPart = String(declarationFullLine[modifierEndIndex...])
 
 						// Build attributed string with secondary styling for modifier
@@ -255,9 +257,9 @@ struct PeripheryWarningRow: View {
 				}
 
 				// If no @ modifier on declaration line, look in lines before
-				for lineNum in startLine..<location.line {
+				for lineNum in startLine ..< location.line {
 					let lineIndex = lineNum - 1
-					guard lineIndex >= 0 && lineIndex < lines.count else { continue }
+					guard lineIndex >= 0, lineIndex < lines.count else { continue }
 					let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
 
 					// Find @ modifier
@@ -307,7 +309,7 @@ struct PeripheryWarningRow: View {
 		let usr = declaration.usrs.first ?? ""
 		return "\(location.file.path.string):\(usr)"
 	}
-	
+
 	// Check if location has full range info for deletion
 	private var hasFullRange: Bool {
 		location.endLine != nil && location.endColumn != nil
@@ -359,8 +361,8 @@ struct PeripheryWarningRow: View {
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return nil }
 
 		let lines = fileContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else { return nil }
-		guard endLine > 0 && endLine <= lines.count else { return nil }
+		guard location.line > 0, location.line <= lines.count else { return nil }
+		guard endLine > 0, endLine <= lines.count else { return nil }
 
 		// Find actual start line including attributes and comments
 		let startLine = DeclarationDeletionHelper.findDeletionStartLine(
@@ -371,7 +373,7 @@ struct PeripheryWarningRow: View {
 
 		let startIndex = startLine - 1
 		let endIndex = endLine - 1
-		let relevantLines = lines[startIndex...endIndex]
+		let relevantLines = lines[startIndex ... endIndex]
 
 		return relevantLines.joined(separator: "\n")
 	}
@@ -389,9 +391,9 @@ struct PeripheryWarningRow: View {
 
 			let result: Result<Void, Error>
 
-			// Special case for imports (single line deletion)
-			if isImport {
-				result = DeletionOperationExecutor.executeImportDeletion(
+				// Special case for imports (single line deletion)
+				= if isImport {
+				DeletionOperationExecutor.executeImportDeletion(
 					location: location,
 					sourceGraph: sourceGraph,
 					undoManager: undoManager,
@@ -413,8 +415,8 @@ struct PeripheryWarningRow: View {
 				)
 			}
 			// Use enhanced deletion with sourceGraph if available
-			else if let sourceGraph = self.sourceGraph, hasFullRange {
-				result = DeletionOperationExecutor.executeDeclarationDeletion(
+			else if let sourceGraph, hasFullRange {
+				DeletionOperationExecutor.executeDeclarationDeletion(
 					declaration: declaration,
 					location: location,
 					sourceGraph: sourceGraph,
@@ -437,7 +439,7 @@ struct PeripheryWarningRow: View {
 				)
 			} else {
 				// Fallback to simple deletion when sourceGraph is missing
-				result = DeletionOperationExecutor.executeSimpleDeclarationDeletion(
+				DeletionOperationExecutor.executeSimpleDeclarationDeletion(
 					declaration: declaration,
 					location: location,
 					sourceGraph: sourceGraph,
@@ -461,13 +463,12 @@ struct PeripheryWarningRow: View {
 			}
 
 			// Handle errors
-			if case .failure(let error) = result {
+			if case let .failure(error) = result {
 				print("Deletion failed: \(error.localizedDescription)")
 				removingWarnings.remove(warningID)
 			}
 		}
 	}
-
 
 	/**
 	 Inserts a periphery:ignore comment above the declaration.
@@ -513,20 +514,20 @@ struct PeripheryWarningRow: View {
 			)
 
 			// Handle errors
-			if case .failure(let error) = result {
+			if case let .failure(error) = result {
 				print("Insert ignore directive failed: \(error.localizedDescription)")
 				removingWarnings.remove(warningID)
 				ignoringWarnings.remove(warningID)
 			}
 		}
 	}
-	
-	/**
-	Removes superfluous periphery:ignore comment.
 
-	Scans backwards from declaration to find and remove the ignore directive.
-	Handles all Periphery ignore formats and removes trailing blank lines.
-	*/
+	/**
+	 Removes superfluous periphery:ignore comment.
+
+	 Scans backwards from declaration to find and remove the ignore directive.
+	 Handles all Periphery ignore formats and removes trailing blank lines.
+	 */
 	private func fixSuperfluousIgnoreCommand() {
 		let result = CodeModificationHelper.removeSuperfluousIgnoreComment(
 			declaration: declaration,
@@ -534,7 +535,7 @@ struct PeripheryWarningRow: View {
 		)
 
 		switch result {
-		case .success(let modification):
+		case let .success(modification):
 			// Invalidate cache
 			SourceFileReader.invalidateCache(for: modification.filePath)
 
@@ -555,11 +556,10 @@ struct PeripheryWarningRow: View {
 			// Mark completed and notify
 			completeWarning()
 
-		case .failure(let error):
+		case let .failure(error):
 			print("Failed to remove ignore command: \(error.localizedDescription)")
 		}
 	}
-	
 
 	// Fix redundant public by removing the keyword (internal is default)
 	private func fixRedundantPublic() {
@@ -569,7 +569,7 @@ struct PeripheryWarningRow: View {
 		)
 
 		switch result {
-		case .success(let modification):
+		case let .success(modification):
 			// Invalidate cache
 			SourceFileReader.invalidateCache(for: modification.filePath)
 
@@ -579,14 +579,14 @@ struct PeripheryWarningRow: View {
 			// Mark completed and notify
 			completeWarning()
 
-		case .failure(let error):
+		case let .failure(error):
 			print("Failed to remove redundant public: \(error.localizedDescription)")
 		}
 	}
 
 	/**
-	Registers undo for a simple modification (no line number adjustments).
-	*/
+	 Registers undo for a simple modification (no line number adjustments).
+	 */
 	private func registerModificationUndo(
 		modification: CodeModificationHelper.ModificationResult,
 		actionName: String
@@ -614,8 +614,8 @@ struct PeripheryWarningRow: View {
 	}
 
 	/**
-	Registers undo for a modification that includes line number adjustments.
-	*/
+	 Registers undo for a modification that includes line number adjustments.
+	 */
 	private func registerModificationUndoWithLineAdjustment(
 		modification: CodeModificationHelper.ModificationResult,
 		adjustedUSRs: [String],
@@ -646,8 +646,8 @@ struct PeripheryWarningRow: View {
 	}
 
 	/**
-	Marks a warning as completed and posts notification.
-	*/
+	 Marks a warning as completed and posts notification.
+	 */
 	private func completeWarning() {
 		WarningStateManager.completeWarning(
 			warningID: warningID,
@@ -657,9 +657,9 @@ struct PeripheryWarningRow: View {
 	}
 
 	private func DeleteButton() -> some View {
-		let label = switch(result.annotation) {
+		let label = switch result.annotation {
 		case .unused: "Delete declaration"
-		case .redundantPublicAccessibility(_): "Remove public keyword"
+		case .redundantPublicAccessibility: "Remove public keyword"
 		case .superfluousIgnoreCommand: "Delete Periphery Ignore command"
 		default: ""
 		}
@@ -736,7 +736,7 @@ struct PeripheryWarningRow: View {
 				}
 				.frame(maxWidth: .infinity, alignment: .leading)
 				.background(Color.secondary.opacity(0.1))
-				.clipShape(.rect(cornerRadius:4))
+				.clipShape(.rect(cornerRadius: 4))
 			} else {
 				// Single line preview
 				Text(sourceLine)
@@ -758,7 +758,7 @@ struct PeripheryWarningRow: View {
 
 	var body: some View {
 		// Cache warningID to avoid multiple accesses to declaration properties
-		let warningID = self.warningID
+		let warningID = warningID
 		let isExpanded = expandedWarnings.contains(warningID)
 		let isRemoving = removingWarnings.contains(warningID)
 		let isIgnoring = ignoringWarnings.contains(warningID)
@@ -801,10 +801,15 @@ struct PeripheryWarningRow: View {
 				}
 				.opacity(isRemoving ? 0.5 : 1.0)
 			}
-		GridRow {
-			// Disclosure button for full source preview (only if multi-line and not completed)
-			if !completedActions.contains(warningID) && (result.annotation == .unused || result.annotation.isRedundantProtocol) && hasFullRange && hasMultiLineSource {
-					Button(isExpanded ? "Hide full source" : "Show full source", systemImage: isExpanded ? "chevron.down" : "chevron.right") {
+			GridRow {
+				// Disclosure button for full source preview (only if multi-line and not completed)
+				if !completedActions.contains(warningID),
+				   result.annotation == .unused || result.annotation.isRedundantProtocol, hasFullRange,
+				   hasMultiLineSource {
+					Button(
+						isExpanded ? "Hide full source" : "Show full source",
+						systemImage: isExpanded ? "chevron.down" : "chevron.right"
+					) {
 						if isExpanded {
 							expandedWarnings.remove(warningID)
 						} else {
@@ -822,17 +827,18 @@ struct PeripheryWarningRow: View {
 					.help(isExpanded ? "Hide full source" : "Show full source")
 					.gridColumnAlignment(.trailing)
 				} else {
-					Text("")		// Placeholder for grid
+					Text("") // Placeholder for grid
 				}
 				VStack(alignment: .leading, spacing: 0) {
-					if !completedActions.contains(warningID), let sourceLine = sourceLine {
+					if !completedActions.contains(warningID), let sourceLine {
 						source(sourceLine)
 					}
 					// Show assignment locations for assignOnlyProperty warnings
 					if case ScanResult.Annotation.assignOnlyProperty = result.annotation, let sourceGraph {
 						VStack(alignment: .leading, spacing: 0) {
 							// Get the setter accessor to find assignment references
-							if let setter = declaration.declarations.first(where: { $0.kind == .functionAccessorSetter }) {
+							if let setter = declaration.declarations
+								.first(where: { $0.kind == .functionAccessorSetter }) {
 								let assignments = sourceGraph.references(to: setter).sorted()
 								ForEach(Array(assignments.enumerated()), id: \.offset) { _, assignment in
 									AssignmentLocationRow(assignment: assignment)
@@ -840,7 +846,7 @@ struct PeripheryWarningRow: View {
 							}
 						}
 					}
-					
+
 					// Show usage information for redundant protocol warnings
 					if case let ScanResult.Annotation.redundantProtocol(references, inherited) = result.annotation {
 						VStack(alignment: .leading, spacing: 0) {
@@ -858,14 +864,16 @@ struct PeripheryWarningRow: View {
 									}
 								}
 							}
-							
+
 							// Show protocol usage locations
 							if !references.isEmpty {
 								VStack(alignment: .leading, spacing: 4) {
-									Text("Used as constraint in \(references.count) \(references.count == 1 ? "location" : "locations"):")
-										.font(.caption)
-										.foregroundStyle(.secondary)
-									
+									Text(
+										"Used as constraint in \(references.count) \(references.count == 1 ? "location" : "locations"):"
+									)
+									.font(.caption)
+									.foregroundStyle(.secondary)
+
 									let sortedReferences = references.sorted()
 									ForEach(Array(sortedReferences.enumerated()), id: \.offset) { _, reference in
 										ProtocolReferenceRow(reference: reference)
@@ -875,7 +883,6 @@ struct PeripheryWarningRow: View {
 						}
 						.padding(.top, 4)
 					}
-					
 				}
 			}
 		}
@@ -978,5 +985,3 @@ private struct ProtocolReferenceRow: View {
 		}
 	}
 }
-
-

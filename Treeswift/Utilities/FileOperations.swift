@@ -5,8 +5,8 @@
 //  Utilities for file system operations (move, rename)
 //
 
-import Foundation
 import AppKit
+import Foundation
 
 private enum FileOperationError: LocalizedError, Sendable {
 	case sourceNotFound(String)
@@ -16,14 +16,14 @@ private enum FileOperationError: LocalizedError, Sendable {
 
 	var errorDescription: String? {
 		switch self {
-		case .sourceNotFound(let path):
-			return "Source not found: \(path)"
-		case .targetAlreadyExists(let path):
-			return "Target already exists: \(path)"
-		case .invalidPath(let path):
-			return "Invalid path: \(path)"
-		case .operationFailed(let operation, let error):
-			return "\(operation) failed: \(error.localizedDescription)"
+		case let .sourceNotFound(path):
+			"Source not found: \(path)"
+		case let .targetAlreadyExists(path):
+			"Target already exists: \(path)"
+		case let .invalidPath(path):
+			"Invalid path: \(path)"
+		case let .operationFailed(operation, error):
+			"\(operation) failed: \(error.localizedDescription)"
 		}
 	}
 }
@@ -112,7 +112,11 @@ func organizeViewIntoFolder(
 						let originalFolder = (originalPath as NSString).deletingLastPathComponent
 						// Ensure original folder exists
 						if !fileManager.fileExists(atPath: originalFolder) {
-							try fileManager.createDirectory(atPath: originalFolder, withIntermediateDirectories: true, attributes: nil)
+							try fileManager.createDirectory(
+								atPath: originalFolder,
+								withIntermediateDirectories: true,
+								attributes: nil
+							)
 						}
 						try fileManager.moveItem(atPath: newPath, toPath: originalPath)
 					}
