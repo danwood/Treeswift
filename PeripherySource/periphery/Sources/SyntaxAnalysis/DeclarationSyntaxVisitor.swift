@@ -311,6 +311,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         variableInitExpr: ExprSyntax? = nil,
         typeInitializerClause: TypeInitializerClauseSyntax? = nil,
         at position: AbsolutePosition
+		,
+        endPosition: AbsolutePosition? = nil
     ) {
         let modifierNames = modifiers?.map(\.name.text) ?? []
         let accessibility = modifierNames.mapFirst { Accessibility(rawValue: $0) }
@@ -328,7 +330,9 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             }
         }
 
-        let location = sourceLocationBuilder.location(at: position)
+		let location = endPosition != nil ?
+			sourceLocationBuilder.location(from: position, to: endPosition!) :
+			sourceLocationBuilder.location(at: position)
         let returnClauseTypeLocations = typeNameLocations(for: returnClause)
         let parameterClauseTypes = parameterClause?.parameters.map(\.type) ?? []
         let closureParameterClauseTypes = closureParameterClause?.parameters.compactMap(\.type) ?? []

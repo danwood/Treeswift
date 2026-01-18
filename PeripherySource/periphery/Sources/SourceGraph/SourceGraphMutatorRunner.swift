@@ -67,6 +67,7 @@ public final class SourceGraphMutatorRunner {
 
     public func perform() throws {
         for mutator in mutators {
+            try Task.checkCancellation()
             let elapsed = try Benchmark.measure {
                 let interval = logger.beginInterval("mutator:run")
                 try mutator.init(graph: graph, configuration: configuration, swiftVersion: swiftVersion).mutate()

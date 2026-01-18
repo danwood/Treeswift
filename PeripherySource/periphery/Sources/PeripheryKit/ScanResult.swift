@@ -2,6 +2,7 @@ import Foundation
 import SourceGraph
 
 public struct ScanResult {
+    public
     enum Annotation {
         case unused
         case assignOnlyProperty
@@ -10,7 +11,9 @@ public struct ScanResult {
         case superfluousIgnoreCommand
     }
 
+    public
     let declaration: Declaration
+    public
     let annotation: Annotation
 
     public var usrs: Set<String> {

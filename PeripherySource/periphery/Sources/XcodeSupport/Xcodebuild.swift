@@ -33,14 +33,15 @@ public final class Xcodebuild {
     }
 
     @discardableResult
-    public func build(project: XcodeProjectlike, scheme: String, allSchemes: [String], additionalArguments: [String] = []) throws -> String {
+    public func build(project: XcodeProjectlike, scheme: String, allSchemes: [String], additionalArguments: [String] = [], excludeTests: Bool = false) throws -> String {
+        let buildAction = excludeTests ? "build" : "build-for-testing"
         let args = try [
             "-\(project.type)", "\"\(project.path.lexicallyNormalized().string.withEscapedQuotes)\"",
             "-scheme", "\"\(scheme.withEscapedQuotes)\"",
             "-parallelizeTargets",
             "-derivedDataPath", "'\(derivedDataPath(for: project, schemes: allSchemes).string)'",
             "-quiet",
-            "build-for-testing",
+            buildAction,
         ]
         let envs = [
             "CODE_SIGNING_ALLOWED=\"NO\"",

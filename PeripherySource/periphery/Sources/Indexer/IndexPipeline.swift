@@ -20,6 +20,7 @@ public struct IndexPipeline {
     }
 
     public func perform() throws {
+        try Task.checkCancellation()
         try SwiftIndexer(
             sourceFiles: plan.sourceFiles,
             graph: graph,
@@ -28,6 +29,7 @@ public struct IndexPipeline {
             swiftVersion: swiftVersion
         ).perform()
 
+        try Task.checkCancellation()
         if !plan.plistPaths.isEmpty {
             try InfoPlistIndexer(
                 infoPlistFiles: plan.plistPaths,
@@ -37,6 +39,7 @@ public struct IndexPipeline {
             ).perform()
         }
 
+        try Task.checkCancellation()
         if !plan.xibPaths.isEmpty {
             try XibIndexer(
                 xibFiles: plan.xibPaths,
@@ -46,6 +49,7 @@ public struct IndexPipeline {
             ).perform()
         }
 
+        try Task.checkCancellation()
         if !plan.xcDataModelPaths.isEmpty {
             try XCDataModelIndexer(
                 files: plan.xcDataModelPaths,
@@ -55,6 +59,7 @@ public struct IndexPipeline {
             ).perform()
         }
 
+        try Task.checkCancellation()
         if !plan.xcMappingModelPaths.isEmpty {
             try XCMappingModelIndexer(
                 files: plan.xcMappingModelPaths,
