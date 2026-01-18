@@ -22,31 +22,8 @@ extension FileNode {
 		let removedWarningIDs: [String]
 		let adjustedUSRs: [String]
 		let lineAdjustments: [Int]
-	}
-
-	/**
-	Determines if a warning can have its code removed.
-
-	Returns true for:
-	- .unused annotations (with full range info or imports)
-	- .redundantPublicAccessibility annotations
-
-	Returns false for:
-	- .assignOnlyProperty (no code removal)
-	- .redundantProtocol (no code removal)
-	*/
-	static func canRemoveCode(for annotation: ScanResult.Annotation, hasFullRange: Bool, isImport: Bool) -> Bool {
-		switch annotation {
-		case .unused:
-			hasFullRange || isImport
-		case .redundantPublicAccessibility:
-			true
-		case .assignOnlyProperty, .redundantProtocol:
-			false
-		case .superfluousIgnoreCommand:
-			false
-			// FIXME: Should be able to remove this!
-		}
+		let shouldDeleteFile: Bool
+		let shouldRemoveImports: Bool
 	}
 
 	/**
@@ -85,7 +62,7 @@ extension FileNode {
 				// Check if code can be removed for this warning
 				let hasFullRange = location.endLine != nil && location.endColumn != nil
 				let isImport = declaration.kind == .module
-				guard FileNode.canRemoveCode(for: result.annotation, hasFullRange: hasFullRange, isImport: isImport) else {
+				guard result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) else {
 					return nil
 				}
 
@@ -131,6 +108,26 @@ extension FileNode {
 				case .failure:
 					continue
 				}
+			} else if result.annotation == .superfluousIgnoreCommand {
+				// Handle superfluous ignore comment deletion
+				let removalResult = removeSuperfluousIgnore(
+					declaration: declaration,
+					location: location,
+					currentContents: currentContents,
+					sourceGraph: sourceGraph
+				)
+
+				switch removalResult {
+				case .success(let (newContents, linesRemoved, adjustedUSR)):
+					currentContents = newContents
+					removedWarningIDs.append(warningID)
+					if !adjustedUSR.isEmpty {
+						adjustedUSRs.append(contentsOf: adjustedUSR)
+					}
+					lineAdjustments.append(linesRemoved)
+				case .failure:
+					continue
+				}
 			} else if declaration.kind == .module {
 				// Handle import deletion
 				let removalResult = removeImport(
@@ -172,9 +169,30 @@ extension FileNode {
 			}
 		}
 
+		// Determine if file should be deleted or if imports should be removed
+		var shouldDeleteFile = false
+		var shouldRemoveImports = false
+		var finalContents = currentContents
+
+		if let graph = sourceGraph {
+			let analysisResult = FileContentAnalyzer.shouldDeleteFile(
+				filePath: path,
+				modifiedContents: currentContents,
+				sourceGraph: graph,
+				removedWarningIDs: removedWarningIDs
+			)
+			shouldDeleteFile = analysisResult.shouldDelete
+			shouldRemoveImports = analysisResult.shouldRemoveImports
+
+			// If keeping file only for comments, remove imports
+			if shouldRemoveImports {
+				finalContents = FileContentAnalyzer.removeImportStatements(from: currentContents)
+			}
+		}
+
 		// Write modified contents to file
 		do {
-			try currentContents.write(toFile: path, atomically: true, encoding: .utf8)
+			try finalContents.write(toFile: path, atomically: true, encoding: .utf8)
 		} catch {
 			return .failure(error)
 		}
@@ -182,10 +200,12 @@ extension FileNode {
 		return .success(RemovalResult(
 			filePath: path,
 			originalContents: originalContents,
-			modifiedContents: currentContents,
+			modifiedContents: finalContents,
 			removedWarningIDs: removedWarningIDs,
 			adjustedUSRs: adjustedUSRs,
-			lineAdjustments: lineAdjustments
+			lineAdjustments: lineAdjustments,
+			shouldDeleteFile: shouldDeleteFile,
+			shouldRemoveImports: shouldRemoveImports
 		))
 	}
 
@@ -197,32 +217,24 @@ extension FileNode {
 		location: Location,
 		currentContents: String
 	) -> Result<String, Error> {
-		guard declaration.modifiers.contains("public") else {
-			return .failure(NSError(domain: "FileNode", code: 3, userInfo: [NSLocalizedDescriptionKey: "No public modifier found"]))
+		// Write current contents to file temporarily (for CodeModificationHelper)
+		do {
+			try currentContents.write(toFile: path, atomically: true, encoding: .utf8)
+		} catch {
+			return .failure(error)
 		}
 
-		var lines = currentContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else {
-			return .failure(NSError(domain: "FileNode", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid line number"]))
+		let result = CodeModificationHelper.removeRedundantPublic(
+			declaration: declaration,
+			location: location
+		)
+
+		switch result {
+		case .success(let modification):
+			return .success(modification.modifiedContents)
+		case .failure(let error):
+			return .failure(error)
 		}
-
-		let lineIndex = location.line - 1
-		let originalLine = lines[lineIndex]
-
-		// Match "public" followed by any whitespace
-		let pattern = #"public\s+"#
-		if let regex = try? NSRegularExpression(pattern: pattern) {
-			let range = NSRange(originalLine.startIndex..., in: originalLine)
-			let newLine = regex.stringByReplacingMatches(
-				in: originalLine,
-				range: range,
-				withTemplate: ""
-			)
-			lines[lineIndex] = newLine
-		}
-
-		let newContents = lines.joined(separator: "\n")
-		return .success(newContents)
 	}
 
 	/**
@@ -244,19 +256,49 @@ extension FileNode {
 		let newContents = lines.joined(separator: "\n")
 
 		// Track adjusted USRs for line number updates
-		var adjustedUSRs: [String] = []
-		if let sourceGraph = sourceGraph {
-			for declaration in sourceGraph.allDeclarations {
-				guard declaration.location.file.path.string == path else { continue }
-				guard declaration.location.line > location.line else { continue }
-
-				if let usr = declaration.usrs.first {
-					adjustedUSRs.append(usr)
-				}
-			}
-		}
+		let adjustedUSRs = sourceGraph.map {
+			SourceGraphLineAdjuster.adjustAndTrack(
+				sourceGraph: $0,
+				filePath: path,
+				afterLine: location.line,
+				lineDelta: -1  // Removed one line
+			)
+		} ?? []
 
 		return .success((newContents, adjustedUSRs))
+	}
+
+	/**
+	Removes a superfluous periphery:ignore comment.
+	*/
+	private func removeSuperfluousIgnore(
+		declaration: Declaration,
+		location: Location,
+		currentContents: String,
+		sourceGraph: SourceGraph?
+	) -> Result<(String, Int, [String]), Error> {
+		// Write current contents to file temporarily
+		do {
+			try currentContents.write(toFile: path, atomically: true, encoding: .utf8)
+		} catch {
+			return .failure(error)
+		}
+
+		let result = CodeModificationHelper.removeSuperfluousIgnoreComment(
+			declaration: declaration,
+			location: location
+		)
+
+		switch result {
+		case .success(let modification):
+			// Use ModificationResult helper to adjust source graph
+			let adjustedUSRs = sourceGraph.map { modification.adjustSourceGraph($0) } ?? []
+
+			return .success((modification.modifiedContents, modification.linesRemoved, adjustedUSRs))
+
+		case .failure(let error):
+			return .failure(error)
+		}
 	}
 
 	/**
@@ -287,17 +329,14 @@ extension FileNode {
 			}
 
 			// Track adjusted USRs for line number updates
-			var adjustedUSRs: [String] = []
-			if let sourceGraph = sourceGraph {
-				for decl in sourceGraph.allDeclarations {
-					guard decl.location.file.path.string == path else { continue }
-					guard decl.location.line > deletionRange.endLine else { continue }
-
-					if let usr = decl.usrs.first {
-						adjustedUSRs.append(usr)
-					}
-				}
-			}
+			let adjustedUSRs = sourceGraph.map {
+				SourceGraphLineAdjuster.adjustAndTrack(
+					sourceGraph: $0,
+					filePath: path,
+					afterLine: deletionRange.endLine,
+					lineDelta: -linesRemoved
+				)
+			} ?? []
 
 			return .success((modifiedContents, linesRemoved, adjustedUSRs))
 

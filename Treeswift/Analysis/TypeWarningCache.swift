@@ -29,10 +29,12 @@ struct TypeWarningStatus: Sendable {
 	let isRedundantPublic: Bool
 }
 
+// periphery:ignore
 final class TypeWarningCache: Sendable {
 	nonisolated static func buildCache(from scanResults: [ScanResult]) -> [TypeWarningKey: TypeWarningStatus] {
 		var cache: [TypeWarningKey: TypeWarningStatus] = [:]
 
+		// periphery:ignore
 		for result in scanResults {
 			let decl = result.declaration
 			guard let typeName = decl.name else { continue }
@@ -40,8 +42,10 @@ final class TypeWarningCache: Sendable {
 			let filePath = decl.location.file.path.string
 			let key = TypeWarningKey(typeName: typeName, filePath: filePath)
 
-			let isUnused = isUnusedAnnotation(result.annotation)
-			let isRedundantPublic = isRedundantPublicAnnotation(result.annotation)
+			// Weirdly expressed to avoid: Main actor-isolated conformance of 'ScanResult.Annotation'
+			// to 'RawRepresentable' cannot be used in nonisolated context
+			let isUnused: Bool = if case .unused = result.annotation { true } else { false }
+			let isRedundantPublic = if case .redundantPublicAccessibility = result.annotation { true } else { false }
 
 			// Merge with existing status (a type can have multiple warnings)
 			if let existing = cache[key] {
@@ -60,21 +64,5 @@ final class TypeWarningCache: Sendable {
 		return cache
 	}
 
-	nonisolated private static func isUnusedAnnotation(_ annotation: ScanResult.Annotation) -> Bool {
-		switch annotation {
-		case .unused:
-			return true
-		default:
-			return false
-		}
-	}
 
-	nonisolated private static func isRedundantPublicAnnotation(_ annotation: ScanResult.Annotation) -> Bool {
-		switch annotation {
-		case .redundantPublicAccessibility:
-			return true
-		default:
-			return false
-		}
-	}
 }

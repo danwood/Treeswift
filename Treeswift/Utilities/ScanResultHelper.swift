@@ -22,7 +22,7 @@ struct ScanResultHelper {
 			if case let .override(overrides) = command {
 				for override in overrides {
 					if case let .location(file, line, column) = override {
-						let sourceFile = SourceFile(path: FilePath(String(file)), modules: [])
+						let sourceFile = SourceFile(path: file, modules: [])
 						return Location(file: sourceFile, line: line, column: column)
 					}
 				}
@@ -55,43 +55,10 @@ struct ScanResultHelper {
 		let path = location.file.path.string
 		let line = location.line
 		let column = location.column
-		let description = formatPlainTextDescription(declaration: declaration, annotation: annotation)
-		return "\(path):\(line):\(column): warning: \(description)"
+		let descAttr: AttributedString = formatAttributedDescription(declaration: declaration, annotation: annotation)
+		let desc: String = String(descAttr.characters)
+		return "\(path):\(line):\(column): warning: \(desc)"
 	}
-
-	/**
-	 Format plain text description without AttributedString formatting
-	 */
-	nonisolated private static func formatPlainTextDescription(
-		declaration: Declaration,
-		annotation: ScanResult.Annotation
-	) -> String {
-		let kindDisplayName = kindDisplayName(from: declaration)
-
-		if let name = declaration.name {
-			let prefix = "\(kindDisplayName.first?.uppercased() ?? "")\(kindDisplayName.dropFirst())"
-
-			let suffix: String
-			switch annotation {
-			case .unused:
-				suffix = "is unused"
-			case .assignOnlyProperty:
-				suffix = "is assigned, but never used"
-			case .redundantProtocol:
-				suffix = "is redundant as it's never used as an existential type"
-			case .redundantPublicAccessibility:
-				suffix = "is declared public, but not used outside of this module"
-			case .superfluousIgnoreCommand:
-				suffix = "is a superfluous periphery ignore command"
-			}
-
-			return "\(prefix) '\(name)' \(suffix)"
-		} else {
-			return "unused"
-		}
-	}
-
-	// FIXME: Can these two functions be consolidated?
 	
 	// Format description as AttributedString with bold symbol names
 	nonisolated static func formatAttributedDescription(declaration: Declaration, annotation: ScanResult.Annotation) -> AttributedString {
@@ -121,7 +88,7 @@ struct ScanResultHelper {
 			case .redundantPublicAccessibility:
 				suffix = " is declared public, but not used outside of this module"
 			case .superfluousIgnoreCommand:
-				suffix = "is a superfluous periphery ignore command"
+				suffix = " has a superfluous periphery ignore command"
 			}
 			result.append(AttributedString(suffix))
 		} else {
@@ -379,3 +346,4 @@ struct ScanResultHelper {
 		return baseName.isEmpty ? nil : baseName
 	}
 }
+

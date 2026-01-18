@@ -80,7 +80,7 @@ struct FileRowView: View {
 	    for result in visibleResults {
 	        let declaration = result.declaration
 	        let swiftType = SwiftType.from(declarationKind: declaration.kind)
-	        let key = CounterKey(swiftType: swiftType, isUnused: result.annotation.isUnused)
+			let key = CounterKey(swiftType: swiftType, isUnused: result.annotation == .unused)
 	        counts[key, default: 0] += 1
 	    }
 

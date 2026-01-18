@@ -49,6 +49,12 @@ final class FilterState {
 			filterChangeCounter += 1
 		}
 	}
+	var showSuperfluousIgnoreCommand: Bool = true {
+		didSet {
+			Self.defaults.set(showSuperfluousIgnoreCommand, forKey: "filterState.showSuperfluousIgnoreCommand")
+			filterChangeCounter += 1
+		}
+	}
 
 	// Swift type filters
 	var showClass: Bool = true {
@@ -177,7 +183,8 @@ final class FilterState {
 		ScanResult.Annotation.unused.stringValue: \.showUnused,
 		ScanResult.Annotation.assignOnlyProperty.stringValue: \.showAssignOnly,
 		ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue: \.showRedundantProtocol,
-		ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue: \.showRedundantPublic
+		ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue: \.showRedundantPublic,
+		ScanResult.Annotation.superfluousIgnoreCommand.stringValue: \.showSuperfluousIgnoreCommand
 	]
 
 	private let typeFilterMap: [SwiftType: WritableKeyPath<FilterState, Bool>] = [
@@ -193,11 +200,13 @@ final class FilterState {
 		.typealias: \.showTypealias
 	]
 
+	// Generally tracks ScanResult.Annotation but may be consolidated or simplified
 	enum WarningType {
 		case unused
 		case assignOnly
 		case redundantProtocol
 		case redundantPublic
+		case superfluousIgnoreCommand
 	}
 
 	/**

@@ -14,6 +14,7 @@ import SystemPackage
 struct PeripheryTreeView: View {
 	let rootNodes: [TreeNode]
 	let scanResults: [ScanResult]
+	let sourceGraph: SourceGraph?
 	let filterState: FilterState?
 	@Binding var selectedID: String?
 	@State private var expandedIDs: Set<String> = []
@@ -499,13 +500,29 @@ struct PeripheryTreeView: View {
 		let result = file.removeAllUnusedCode(
 			scanResults: scanResults,
 			filterState: filterState,
-			sourceGraph: nil
+			sourceGraph: sourceGraph
 		)
 
 		switch result {
 		case .success(let removalResult):
 			// Invalidate file cache
 			SourceFileReader.invalidateCache(for: file.path)
+
+			// Check if file should be deleted
+			var fileWasDeleted = false
+			if removalResult.shouldDeleteFile {
+				fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
+
+				if fileWasDeleted {
+					// Hide file from tree
+					hiddenFileIDs.insert(file.id)
+					// Hide empty ancestor folders
+					let emptyFolderIDs = findEmptyAncestorIDs(for: file.id, in: rootNodes)
+					for folderID in emptyFolderIDs {
+						hiddenFileIDs.insert(folderID)
+					}
+				}
+			}
 
 			// Hide all removed warnings with animation
 			for warningID in removalResult.removedWarningIDs {
@@ -519,7 +536,9 @@ struct PeripheryTreeView: View {
 				filePath: removalResult.filePath,
 				originalContents: removalResult.originalContents,
 				modifiedContents: removalResult.modifiedContents,
-				removedWarningIDs: removalResult.removedWarningIDs
+				removedWarningIDs: removalResult.removedWarningIDs,
+				fileWasDeleted: fileWasDeleted,
+				fileID: file.id
 			)
 
 			// Post notifications for each removed warning
@@ -542,16 +561,19 @@ struct PeripheryTreeView: View {
 		filePath: String,
 		originalContents: String,
 		modifiedContents: String,
-		removedWarningIDs: [String]
+		removedWarningIDs: [String],
+		fileWasDeleted: Bool,
+		fileID: String
 	) {
 		// Define undo action
 		@MainActor
 		func performUndo() {
-			do {
-				try originalContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-			} catch {
-				print("Failed to restore file during undo: \(error)")
-				return
+			// Restore file (works for both deleted and modified files)
+			_ = FileDeletionHandler.restoreFile(filePath: filePath, contents: originalContents)
+
+			// If file was deleted, unhide it from tree
+			if fileWasDeleted {
+				hiddenFileIDs.remove(fileID)
 			}
 
 			SourceFileReader.invalidateCache(for: filePath)
@@ -578,11 +600,18 @@ struct PeripheryTreeView: View {
 		// Define redo action
 		@MainActor
 		func performRedo() {
-			do {
-				try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-			} catch {
-				print("Failed to write file during redo: \(error)")
-				return
+			// If file was deleted originally, delete it again
+			if fileWasDeleted {
+				_ = FileDeletionHandler.moveToTrash(filePath: filePath)
+				hiddenFileIDs.insert(fileID)
+			} else {
+				// Otherwise just write modified contents
+				do {
+					try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
+				} catch {
+					print("Failed to write file during redo: \(error)")
+					return
+				}
 			}
 
 			SourceFileReader.invalidateCache(for: filePath)
@@ -737,7 +766,14 @@ struct PeripheryTreeView: View {
 			}
 
 			// Process each file with progress tracking
-			var fileModifications: [(path: String, original: String, modified: String, warningIDs: [String])] = []
+			var fileModifications: [(
+				path: String,
+				original: String,
+				modified: String,
+				warningIDs: [String],
+				wasDeleted: Bool,
+				fileID: String
+			)] = []
 			var allRemovedWarningIDs: [String] = []
 
 			await processFilesWithProgress(filesToProcess) { file in
@@ -745,18 +781,31 @@ struct PeripheryTreeView: View {
 				let result = file.removeAllUnusedCode(
 					scanResults: scanResults,
 					filterState: filterState,
-					sourceGraph: nil
+					sourceGraph: sourceGraph
 				)
 
 				switch result {
 				case .success(let removalResult):
 					SourceFileReader.invalidateCache(for: file.path)
 
+					// Check if file should be deleted
+					var fileWasDeleted = false
+					if removalResult.shouldDeleteFile {
+						fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
+
+						if fileWasDeleted {
+							// Hide file from tree
+							hiddenFileIDs.insert(file.id)
+						}
+					}
+
 					fileModifications.append((
 						removalResult.filePath,
 						removalResult.originalContents,
 						removalResult.modifiedContents,
-						removalResult.removedWarningIDs
+						removalResult.removedWarningIDs,
+						fileWasDeleted,
+						file.id
 					))
 
 					allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
@@ -802,17 +851,25 @@ struct PeripheryTreeView: View {
 	Registers undo/redo for removing all unused code in a folder.
 	*/
 	private func registerRemoveAllInFolderUndo(
-		fileModifications: [(path: String, original: String, modified: String, warningIDs: [String])]
+		fileModifications: [(
+			path: String,
+			original: String,
+			modified: String,
+			warningIDs: [String],
+			wasDeleted: Bool,
+			fileID: String
+		)]
 	) {
 		// Define undo action
 		@MainActor
 		func performUndo() {
 			for modification in fileModifications {
-				do {
-					try modification.original.write(toFile: modification.path, atomically: true, encoding: .utf8)
-				} catch {
-					print("Failed to restore file during undo: \(error)")
-					continue
+				// Restore file (works for both deleted and modified files)
+				_ = FileDeletionHandler.restoreFile(filePath: modification.path, contents: modification.original)
+
+				// If file was deleted, unhide it from tree
+				if modification.wasDeleted {
+					hiddenFileIDs.remove(modification.fileID)
 				}
 
 				SourceFileReader.invalidateCache(for: modification.path)
@@ -840,11 +897,18 @@ struct PeripheryTreeView: View {
 		@MainActor
 		func performRedo() {
 			for modification in fileModifications {
-				do {
-					try modification.modified.write(toFile: modification.path, atomically: true, encoding: .utf8)
-				} catch {
-					print("Failed to write file during redo: \(error)")
-					continue
+				// If file was deleted originally, delete it again
+				if modification.wasDeleted {
+					_ = FileDeletionHandler.moveToTrash(filePath: modification.path)
+					hiddenFileIDs.insert(modification.fileID)
+				} else {
+					// Otherwise just write modified contents
+					do {
+						try modification.modified.write(toFile: modification.path, atomically: true, encoding: .utf8)
+					} catch {
+						print("Failed to write file during redo: \(error)")
+						continue
+					}
 				}
 
 				SourceFileReader.invalidateCache(for: modification.path)

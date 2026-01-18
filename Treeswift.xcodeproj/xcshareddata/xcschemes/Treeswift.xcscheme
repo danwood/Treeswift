@@ -52,7 +52,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "--scan liveshowhub"
+            argument = "--scan Treeswift"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -77,6 +77,7 @@ struct ContentColumnView: View {
 					ResultsTabView(
 						treeNodes: scanState.treeNodes,
 						scanResults: scanState.scanResults,
+						sourceGraph: scanState.sourceGraph,
 						treeSection: scanState.treeSection,
 						viewExtensionsSection: scanState.viewExtensionsSection,
 						sharedSection: scanState.sharedSection,

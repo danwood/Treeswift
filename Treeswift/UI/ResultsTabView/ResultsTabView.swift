@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PeripheryKit
+import SourceGraph
 
 enum ResultsTab: String, CaseIterable, Sendable {
 	case periphery
@@ -24,6 +25,7 @@ extension EnvironmentValues {
 struct ResultsTabView: View {
 	let treeNodes: [TreeNode]
 	let scanResults: [ScanResult]
+	let sourceGraph: SourceGraph?
 	let treeSection: CategoriesNode?
 	let viewExtensionsSection: CategoriesNode?
 	let sharedSection: CategoriesNode?
@@ -65,6 +67,7 @@ struct ResultsTabView: View {
 						PeripheryTreeView(
 							rootNodes: treeNodes,
 							scanResults: scanResults,
+							sourceGraph: sourceGraph,
 							filterState: filterState,
 							selectedID: $peripheryTabSelectedID
 						)

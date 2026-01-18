@@ -4,15 +4,6 @@
 //
 //  Unified icon type for tree views supporting SF Symbols, emojis, and image resources
 //
-//  NOTE: Swift 6 Concurrency Warning
-//  Despite explicit nonisolated Hashable conformance and separation of @MainActor methods
-//  into their own extension, Swift 6 still emits one global warning:
-//  "main actor-isolated conformance of 'TreeIcon' to 'Hashable' cannot be used in nonisolated context"
-//  This appears to be a Swift compiler limitation when combining @MainActor extensions with
-//  nonisolated protocol conformances. The warning is benign - TreeIcon works correctly in all
-//  nonisolated Sendable contexts. The @unchecked Sendable conformance is safe because all
-//  associated values are Sendable (String, CGFloat).
-//
 
 import SwiftUI
 
@@ -36,9 +27,7 @@ enum TreeIcon: @unchecked Sendable {
 	}
 }
 
-// Main-actor-isolated view building methods in separate extension
-// to prevent isolation from affecting Hashable conformance
-@MainActor
+// View building methods
 extension TreeIcon {
 	@ViewBuilder
 	func view(size: CGFloat = 16) -> some View {
@@ -75,7 +64,7 @@ extension TreeIcon {
 		}
 	}
 
-	private func emojiTooltip(for icon: String) -> String {
+	nonisolated private func emojiTooltip(for icon: String) -> String {
 		switch icon {
 		case "🔷": "Main App entry point (@main)"
 		case "🖼️": "SwiftUI View"

@@ -9,11 +9,14 @@ import PeripheryKit
 
 extension ScanResult.Annotation {
 
-	var isUnused: Bool {
-		switch self {
-		case .unused: true
-		default: false
-		}
+	// Check if annotation is redundant public
+	public var isRedundantPublic: Bool {
+		if case .redundantPublicAccessibility = self { true } else { false }
+	}
+	
+	// Check if annotation is redundant protocol
+	public var isRedundantProtocol: Bool {
+		if case .redundantProtocol = self { true } else { false }
 	}
 
 	/**
@@ -34,6 +37,25 @@ extension ScanResult.Annotation {
 		case .redundantProtocol: "redundantProtocol"
 		case .redundantPublicAccessibility: "redundantPublicAccessibility"
 		case .superfluousIgnoreCommand: "superfluousIgnoreCommand"
+		}
+	}
+
+	/**
+	 Determines whether code can be removed for this annotation.
+
+	 This method evaluates whether a declaration with this annotation can be safely removed
+	 from source code based on the annotation type and available location information.
+	 */
+	func canRemoveCode(hasFullRange: Bool, isImport: Bool) -> Bool {
+		switch self {
+		case .unused:
+			hasFullRange || isImport
+		case .redundantPublicAccessibility:
+			true
+		case .assignOnlyProperty, .redundantProtocol:
+			false
+		case .superfluousIgnoreCommand:
+			true
 		}
 	}
 }

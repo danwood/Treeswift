@@ -146,7 +146,7 @@ struct PeripheryWarningRow: View {
 			letter: swiftType.rawValue,
 			count: 1,
 			swiftType: swiftType,
-			isUnused: result.annotation.isUnused
+			isUnused: result.annotation == .unused
 		)
 	}
 
@@ -282,8 +282,17 @@ struct PeripheryWarningRow: View {
 		}
 
 		// For redundant public warnings, highlight the "public " keyword instead of the symbol
-		if isRedundantPublic {
+		if result.annotation.isRedundantPublic {
 			return ScanResultHelper.highlightRedundantPublicInLine(line: lineText)
+		}
+
+		// For superfluous ignore commands, show entire line in secondary color (no highlighting)
+		// since we're removing the comment, not the declaration
+		if result.annotation == .superfluousIgnoreCommand {
+			var result = AttributedString(lineText)
+			result.font = .system(.caption, design: .monospaced)
+			result.foregroundColor = Color.secondary
+			return result
 		}
 
 		return ScanResultHelper.highlightSymbolInSourceLine(
@@ -298,18 +307,7 @@ struct PeripheryWarningRow: View {
 		let usr = declaration.usrs.first ?? ""
 		return "\(location.file.path.string):\(usr)"
 	}
-
-
-	// Check if annotation is redundant public
-	private var isRedundantPublic: Bool {
-		if case ScanResult.Annotation.redundantPublicAccessibility = result.annotation { true } else { false }
-	}
-
-	// Check if annotation is redundant protocol
-	private var isRedundantProtocol: Bool {
-		if case ScanResult.Annotation.redundantProtocol = result.annotation { true } else { false }
-	}
-
+	
 	// Check if location has full range info for deletion
 	private var hasFullRange: Bool {
 		location.endLine != nil && location.endColumn != nil
@@ -389,475 +387,87 @@ struct PeripheryWarningRow: View {
 		Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(300))
 
+			let result: Result<Void, Error>
+
 			// Special case for imports (single line deletion)
 			if isImport {
-				deleteImportStatementImpl()
-				return
+				result = DeletionOperationExecutor.executeImportDeletion(
+					location: location,
+					sourceGraph: sourceGraph,
+					undoManager: undoManager,
+					warningID: warningID,
+					onComplete: { [self] in
+						WarningStateManager.completeWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
+						)
+					},
+					onRestore: { [self] in
+						WarningStateManager.restoreWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
+						)
+					}
+				)
 			}
-
 			// Use enhanced deletion with sourceGraph if available
-			if let sourceGraph = self.sourceGraph, hasFullRange {
-				deleteDeclarationImpl(sourceGraph: sourceGraph)
+			else if let sourceGraph = self.sourceGraph, hasFullRange {
+				result = DeletionOperationExecutor.executeDeclarationDeletion(
+					declaration: declaration,
+					location: location,
+					sourceGraph: sourceGraph,
+					undoManager: undoManager,
+					warningID: warningID,
+					onComplete: { [self] in
+						WarningStateManager.completeWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
+						)
+					},
+					onRestore: { [self] in
+						WarningStateManager.restoreWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
+						)
+					}
+				)
 			} else {
 				// Fallback to simple deletion when sourceGraph is missing
-				simpleDeleteDeclarationImpl()
-			}
-		}
-	}
-
-	// Implementation of delete declaration (extracted from deleteDeclaration)
-	private func deleteDeclarationImpl(sourceGraph: SourceGraph) {
-		let filePath = location.file.path.string
-		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-		// Use helper for smart deletion
-		let result = DeclarationDeletionHelper.deleteDeclaration(declaration: declaration)
-
-		switch result {
-		case .success(let deletionRange):
-				// Invalidate source file cache so preview shows updated content
-				SourceFileReader.invalidateCache(for: filePath)
-
-				// Adjust line numbers and track which declarations were adjusted
-				let linesRemoved = deletionRange.endLine - deletionRange.startLine + 1
-				let afterLine = deletionRange.endLine
-				var adjustedUSRs: [String] = []
-
-				for declaration in sourceGraph.allDeclarations {
-					guard declaration.location.file.path.string == filePath else { continue }
-					guard declaration.location.line > afterLine else { continue }
-
-					let newLine = declaration.location.line - linesRemoved
-					let newEndLine = declaration.location.endLine.map { $0 - linesRemoved }
-					declaration.location = Location(
-						file: declaration.location.file,
-						line: newLine,
-						column: declaration.location.column,
-						endLine: newEndLine,
-						endColumn: declaration.location.endColumn
-					)
-
-					// Track which declarations were adjusted
-					if let usr = declaration.usrs.first {
-						adjustedUSRs.append(usr)
-					}
-				}
-
-				// Get modified contents after deletion
-				guard let modifiedContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-				// Register undo with closure-based redo support
-				if let undoManager = undoManager {
-					let capturedOriginal = originalContents
-					let capturedModified = modifiedContents
-					let capturedPath = filePath
-					let capturedWarningID = warningID
-					let capturedAdjustedUSRs = adjustedUSRs
-					let capturedLineAdjustment = linesRemoved
-
-					// Define the undo action
-					@MainActor
-			func performUndo() {
-						try? capturedOriginal.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-						SourceFileReader.invalidateCache(for: capturedPath)
-
-						// Reverse line number adjustments
-						for declaration in sourceGraph.allDeclarations {
-							guard declaration.location.file.path.string == capturedPath else { continue }
-							guard let declUSR = declaration.usrs.first else { continue }
-							guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-							let newLine = declaration.location.line + capturedLineAdjustment
-							let newEndLine = declaration.location.endLine.map { $0 + capturedLineAdjustment }
-							declaration.location = Location(
-								file: declaration.location.file,
-								line: newLine,
-								column: declaration.location.column,
-								endLine: newEndLine,
-								endColumn: declaration.location.endColumn
-							)
-						}
-
-
-					// Remove from removal state
-					removingWarnings.remove(capturedWarningID)
-						NotificationCenter.default.post(
-							name: Notification.Name("PeripheryWarningRestored"),
-							object: capturedWarningID
+				result = DeletionOperationExecutor.executeSimpleDeclarationDeletion(
+					declaration: declaration,
+					location: location,
+					sourceGraph: sourceGraph,
+					undoManager: undoManager,
+					warningID: warningID,
+					onComplete: { [self] in
+						WarningStateManager.completeWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
 						)
-
-						// Register redo
-						undoManager.registerUndo(withTarget: NSObject()) { _ in
-							performRedo()
-						}
-						undoManager.setActionName("Delete Declaration")
-					}
-
-					// Define the redo action
-					@MainActor
-			func performRedo() {
-						try? capturedModified.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-						SourceFileReader.invalidateCache(for: capturedPath)
-
-						// Reapply line number adjustments
-						for declaration in sourceGraph.allDeclarations {
-							guard declaration.location.file.path.string == capturedPath else { continue }
-							guard let declUSR = declaration.usrs.first else { continue }
-							guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-							let newLine = declaration.location.line - capturedLineAdjustment
-							let newEndLine = declaration.location.endLine.map { $0 - capturedLineAdjustment }
-							declaration.location = Location(
-								file: declaration.location.file,
-								line: newLine,
-								column: declaration.location.column,
-								endLine: newEndLine,
-								endColumn: declaration.location.endColumn
-							)
-						}
-
-					// Mark as removed again
-					removingWarnings.insert(capturedWarningID)
-
-						NotificationCenter.default.post(
-							name: Notification.Name("PeripheryWarningCompleted"),
-							object: capturedWarningID
+					},
+					onRestore: { [self] in
+						WarningStateManager.restoreWarning(
+							warningID: warningID,
+							completedActions: &completedActions,
+							removingWarnings: &removingWarnings
 						)
-
-						// Register undo
-						undoManager.registerUndo(withTarget: NSObject()) { _ in
-							performUndo()
-						}
-						undoManager.setActionName("Delete Declaration")
 					}
-
-					// Register initial undo
-					undoManager.registerUndo(withTarget: NSObject()) { _ in
-						performUndo()
-					}
-					undoManager.setActionName("Delete Declaration")
-				}
-
-				// Mark action as completed
-				completedActions.insert(warningID)
-				removingWarnings.remove(warningID)
-
-				// Notify that warning was completed
-				NotificationCenter.default.post(
-					name: Notification.Name("PeripheryWarningCompleted"),
-					object: warningID
 				)
-			case .failure(let error):
+			}
+
+			// Handle errors
+			if case .failure(let error) = result {
 				print("Deletion failed: \(error.localizedDescription)")
+				removingWarnings.remove(warningID)
 			}
+		}
 	}
 
-	// Simple deletion without smart boundary detection
-	private func simpleDeleteDeclarationImpl() {
-		guard let endLine = location.endLine, let _ = location.endColumn else { return }
-
-		let filePath = location.file.path.string
-		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-		// Delete the declaration range
-		var lines = originalContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else { return }
-		guard endLine > 0 && endLine <= lines.count else { return }
-
-		// Remove lines from startLine to endLine (inclusive)
-		let startIndex = location.line - 1
-		let endIndex = endLine - 1
-		lines.removeSubrange(startIndex...endIndex)
-
-		// Write back to file
-		let newContents = lines.joined(separator: "\n")
-		try? newContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-
-		// Invalidate source file cache so preview shows updated content
-		SourceFileReader.invalidateCache(for: filePath)
-
-		// Adjust line numbers and track which declarations were adjusted
-		let linesRemoved = endLine - location.line + 1
-		let afterLine = endLine
-		var adjustedUSRs: [String] = []
-
-		if let sourceGraph = sourceGraph {
-			for declaration in sourceGraph.allDeclarations {
-				guard declaration.location.file.path.string == filePath else { continue }
-				guard declaration.location.line > afterLine else { continue }
-
-				let newLine = declaration.location.line - linesRemoved
-				let newEndLine = declaration.location.endLine.map { $0 - linesRemoved }
-				declaration.location = Location(
-					file: declaration.location.file,
-					line: newLine,
-					column: declaration.location.column,
-					endLine: newEndLine,
-					endColumn: declaration.location.endColumn
-				)
-
-				// Track which declarations were adjusted
-				if let usr = declaration.usrs.first {
-					adjustedUSRs.append(usr)
-				}
-			}
-		}
-
-		// Register undo with closure-based redo support
-		if let undoManager = undoManager {
-			let capturedOriginal = originalContents
-			let capturedModified = newContents
-			let capturedPath = filePath
-			let capturedWarningID = warningID
-			let capturedAdjustedUSRs = adjustedUSRs
-			let capturedLineAdjustment = linesRemoved
-			let capturedSourceGraph = sourceGraph
-
-			// Define the undo action
-			@MainActor
-			func performUndo() {
-				try? capturedOriginal.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-				SourceFileReader.invalidateCache(for: capturedPath)
-
-				// Reverse line number adjustments
-				if let sourceGraph = capturedSourceGraph {
-					for declaration in sourceGraph.allDeclarations {
-						guard declaration.location.file.path.string == capturedPath else { continue }
-						guard let declUSR = declaration.usrs.first else { continue }
-						guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-						let newLine = declaration.location.line + capturedLineAdjustment
-						let newEndLine = declaration.location.endLine.map { $0 + capturedLineAdjustment }
-						declaration.location = Location(
-							file: declaration.location.file,
-							line: newLine,
-							column: declaration.location.column,
-							endLine: newEndLine,
-							endColumn: declaration.location.endColumn
-						)
-					}
-				}
-
-				NotificationCenter.default.post(
-					name: Notification.Name("PeripheryWarningRestored"),
-					object: capturedWarningID
-				)
-
-				// Register redo
-				undoManager.registerUndo(withTarget: NSObject()) { _ in
-					performRedo()
-				}
-				undoManager.setActionName("Delete Declaration")
-			}
-
-			// Define the redo action
-			@MainActor
-			func performRedo() {
-				try? capturedModified.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-				SourceFileReader.invalidateCache(for: capturedPath)
-
-				// Reapply line number adjustments
-				if let sourceGraph = capturedSourceGraph {
-					for declaration in sourceGraph.allDeclarations {
-						guard declaration.location.file.path.string == capturedPath else { continue }
-						guard let declUSR = declaration.usrs.first else { continue }
-						guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-						let newLine = declaration.location.line - capturedLineAdjustment
-						let newEndLine = declaration.location.endLine.map { $0 - capturedLineAdjustment }
-						declaration.location = Location(
-							file: declaration.location.file,
-							line: newLine,
-							column: declaration.location.column,
-							endLine: newEndLine,
-							endColumn: declaration.location.endColumn
-						)
-					}
-				}
-
-				NotificationCenter.default.post(
-					name: Notification.Name("PeripheryWarningCompleted"),
-					object: capturedWarningID
-				)
-
-				// Register undo
-				undoManager.registerUndo(withTarget: NSObject()) { _ in
-					performUndo()
-				}
-				undoManager.setActionName("Delete Declaration")
-			}
-
-			// Register initial undo
-			undoManager.registerUndo(withTarget: NSObject()) { _ in
-				performUndo()
-			}
-			undoManager.setActionName("Delete Declaration")
-		}
-
-		// Mark action as completed
-		completedActions.insert(warningID)
-		removingWarnings.remove(warningID)
-
-		// Notify that warning was completed
-		NotificationCenter.default.post(
-			name: Notification.Name("PeripheryWarningCompleted"),
-			object: warningID
-		)
-	}
-
-	// Delete import statement (single line only)
-	private func deleteImportStatementImpl() {
-		let filePath = location.file.path.string
-		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-		// Delete the single import line
-		var lines = originalContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else { return }
-
-		// Remove the import line
-		let lineIndex = location.line - 1
-		lines.remove(at: lineIndex)
-
-		// Write back to file
-		let newContents = lines.joined(separator: "\n")
-		try? newContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-
-		// Invalidate source file cache so preview shows updated content
-		SourceFileReader.invalidateCache(for: filePath)
-
-		// Adjust line numbers and track which declarations were adjusted
-		let afterLine = location.line
-		var adjustedUSRs: [String] = []
-
-		if let sourceGraph = sourceGraph {
-			for declaration in sourceGraph.allDeclarations {
-				guard declaration.location.file.path.string == filePath else { continue }
-				guard declaration.location.line > afterLine else { continue }
-
-				let newLine = declaration.location.line - 1
-				let newEndLine = declaration.location.endLine.map { $0 - 1 }
-				declaration.location = Location(
-					file: declaration.location.file,
-					line: newLine,
-					column: declaration.location.column,
-					endLine: newEndLine,
-					endColumn: declaration.location.endColumn
-				)
-
-				// Track which declarations were adjusted
-				if let usr = declaration.usrs.first {
-					adjustedUSRs.append(usr)
-				}
-			}
-		}
-
-		// Register undo with closure-based redo support
-		if let undoManager = undoManager {
-			let capturedOriginal = originalContents
-			let capturedModified = newContents
-			let capturedPath = filePath
-			let capturedWarningID = warningID
-			let capturedAdjustedUSRs = adjustedUSRs
-			let capturedLineAdjustment = 1
-			let capturedSourceGraph = sourceGraph
-
-			// Define the undo action
-			@MainActor
-			func performUndo() {
-				try? capturedOriginal.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-				SourceFileReader.invalidateCache(for: capturedPath)
-
-				// Reverse line number adjustments
-				if let sourceGraph = capturedSourceGraph {
-					for declaration in sourceGraph.allDeclarations {
-						guard declaration.location.file.path.string == capturedPath else { continue }
-						guard let declUSR = declaration.usrs.first else { continue }
-						guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-						let newLine = declaration.location.line + capturedLineAdjustment
-						let newEndLine = declaration.location.endLine.map { $0 + capturedLineAdjustment }
-						declaration.location = Location(
-							file: declaration.location.file,
-							line: newLine,
-							column: declaration.location.column,
-							endLine: newEndLine,
-							endColumn: declaration.location.endColumn
-						)
-					}
-				}
-
-				// Remove from removal state
-				removingWarnings.remove(capturedWarningID)
-
-				NotificationCenter.default.post(
-					name: Notification.Name("PeripheryWarningRestored"),
-					object: capturedWarningID
-				)
-
-				// Register redo
-				undoManager.registerUndo(withTarget: NSObject()) { _ in
-					performRedo()
-				}
-				undoManager.setActionName("Delete Import")
-			}
-
-			// Define the redo action
-			@MainActor
-			func performRedo() {
-				try? capturedModified.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-				SourceFileReader.invalidateCache(for: capturedPath)
-
-				// Reapply line number adjustments
-				if let sourceGraph = capturedSourceGraph {
-					for declaration in sourceGraph.allDeclarations {
-						guard declaration.location.file.path.string == capturedPath else { continue }
-						guard let declUSR = declaration.usrs.first else { continue }
-						guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-						let newLine = declaration.location.line - capturedLineAdjustment
-						let newEndLine = declaration.location.endLine.map { $0 - capturedLineAdjustment }
-						declaration.location = Location(
-							file: declaration.location.file,
-							line: newLine,
-							column: declaration.location.column,
-							endLine: newEndLine,
-							endColumn: declaration.location.endColumn
-						)
-					}
-				}
-
-				NotificationCenter.default.post(
-					name: Notification.Name("PeripheryWarningCompleted"),
-					object: capturedWarningID
-				)
-
-				// Register undo
-				undoManager.registerUndo(withTarget: NSObject()) { _ in
-					performUndo()
-				}
-				undoManager.setActionName("Delete Import")
-			}
-
-			// Register initial undo
-			undoManager.registerUndo(withTarget: NSObject()) { _ in
-				performUndo()
-			}
-			undoManager.setActionName("Delete Import")
-		}
-
-		// Mark action as completed
-		completedActions.insert(warningID)
-
-		// Remove from removing state to allow row to hide
-		// (row shows while: !isCompleted OR isRemoving, so need to clear both)
-		removingWarnings.remove(warningID)
-
-		// Notify that warning was completed
-		NotificationCenter.default.post(
-			name: Notification.Name("PeripheryWarningCompleted"),
-			object: warningID
-		)
-	}
 
 	/**
 	 Inserts a periphery:ignore comment above the declaration.
@@ -876,242 +486,194 @@ struct PeripheryWarningRow: View {
 		Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(300))
 
-			let filePath = location.file.path.string
-			guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-			var lines = originalContents.components(separatedBy: .newlines)
-			guard location.line > 0 && location.line <= lines.count else { return }
-
-			// Find the insertion line (same as deletion start line logic)
-			let insertionLine = DeclarationDeletionHelper.findDeletionStartLine(
-				lines: lines,
-				declarationLine: location.line,
-				attributes: declaration.attributes
+			let result = DeletionOperationExecutor.executeIgnoreDirectiveInsertion(
+				declaration: declaration,
+				location: location,
+				sourceGraph: sourceGraph,
+				undoManager: undoManager,
+				warningID: warningID,
+				onComplete: { [self] in
+					// Mark action as completed
+					WarningStateManager.completeWarning(
+						warningID: warningID,
+						completedActions: &completedActions,
+						removingWarnings: &removingWarnings
+					)
+					ignoringWarnings.remove(warningID)
+				},
+				onRestore: { [self] in
+					// Restore the warning
+					WarningStateManager.restoreWarning(
+						warningID: warningID,
+						completedActions: &completedActions,
+						removingWarnings: &removingWarnings
+					)
+					ignoringWarnings.remove(warningID)
+				}
 			)
 
-			// Insert the ignore directive
-			let insertIndex = insertionLine - 1
-			lines.insert("// periphery:ignore", at: insertIndex)
+			// Handle errors
+			if case .failure(let error) = result {
+				print("Insert ignore directive failed: \(error.localizedDescription)")
+				removingWarnings.remove(warningID)
+				ignoringWarnings.remove(warningID)
+			}
+		}
+	}
+	
+	/**
+	Removes superfluous periphery:ignore comment.
 
-			// Write back to file
-			let modifiedContents = lines.joined(separator: "\n")
-			try? modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
+	Scans backwards from declaration to find and remove the ignore directive.
+	Handles all Periphery ignore formats and removes trailing blank lines.
+	*/
+	private func fixSuperfluousIgnoreCommand() {
+		let result = CodeModificationHelper.removeSuperfluousIgnoreComment(
+			declaration: declaration,
+			location: location
+		)
 
+		switch result {
+		case .success(let modification):
 			// Invalidate cache
-			SourceFileReader.invalidateCache(for: filePath)
+			SourceFileReader.invalidateCache(for: modification.filePath)
 
-			// Adjust line numbers for declarations after this one
-			var adjustedUSRs: [String] = []
-			if let sourceGraph = sourceGraph {
-				for declaration in sourceGraph.allDeclarations {
-					guard declaration.location.file.path.string == filePath else { continue }
-					guard declaration.location.line >= insertionLine else { continue }
+			// Adjust line numbers if lines were removed
+			let adjustedUSRs = sourceGraph.map { modification.adjustSourceGraph($0) } ?? []
 
-					let newLine = declaration.location.line + 1
-					let newEndLine = declaration.location.endLine.map { $0 + 1 }
-					declaration.location = Location(
-						file: declaration.location.file,
-						line: newLine,
-						column: declaration.location.column,
-						endLine: newEndLine,
-						endColumn: declaration.location.endColumn
-					)
-
-					// Track which declarations were adjusted
-					if let usr = declaration.usrs.first {
-						adjustedUSRs.append(usr)
-					}
-				}
+			if !adjustedUSRs.isEmpty {
+				// Register undo with source graph reversal
+				registerModificationUndoWithLineAdjustment(
+					modification: modification,
+					adjustedUSRs: adjustedUSRs,
+					actionName: "Delete Ignore Comment"
+				)
+			} else {
+				registerModificationUndo(modification: modification, actionName: "Delete Ignore Comment")
 			}
 
-			// Register undo with closure-based redo support
-			if let undoManager = undoManager {
-				let capturedOriginal = originalContents
-				let capturedModified = modifiedContents
-				let capturedPath = filePath
-				let capturedWarningID = warningID
-				let capturedAdjustedUSRs = adjustedUSRs
-				let capturedSourceGraph = sourceGraph
+			// Mark completed and notify
+			completeWarning()
 
-				// Define the undo action
-				let performUndo: @MainActor () -> Void = {
-					try? capturedOriginal.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-					SourceFileReader.invalidateCache(for: capturedPath)
+		case .failure(let error):
+			print("Failed to remove ignore command: \(error.localizedDescription)")
+		}
+	}
+	
 
-					// Reverse line number adjustments
-					if let sourceGraph = capturedSourceGraph {
-						for declaration in sourceGraph.allDeclarations {
-							guard declaration.location.file.path.string == capturedPath else { continue }
-							guard let declUSR = declaration.usrs.first else { continue }
-							guard capturedAdjustedUSRs.contains(declUSR) else { continue }
+	// Fix redundant public by removing the keyword (internal is default)
+	private func fixRedundantPublic() {
+		let result = CodeModificationHelper.removeRedundantPublic(
+			declaration: declaration,
+			location: location
+		)
 
-							let newLine = declaration.location.line - 1
-							let newEndLine = declaration.location.endLine.map { $0 - 1 }
-							declaration.location = Location(
-								file: declaration.location.file,
-								line: newLine,
-								column: declaration.location.column,
-								endLine: newEndLine,
-								endColumn: declaration.location.endColumn
-							)
-						}
-					}
+		switch result {
+		case .success(let modification):
+			// Invalidate cache
+			SourceFileReader.invalidateCache(for: modification.filePath)
 
-					// Remove from removal/completed state to restore the warning
-					removingWarnings.remove(capturedWarningID)
-					ignoringWarnings.remove(capturedWarningID)
-					completedActions.remove(capturedWarningID)
+			// Register undo
+			registerModificationUndo(modification: modification, actionName: "Fix Redundant Public")
 
-					NotificationCenter.default.post(
-						name: Notification.Name("PeripheryWarningRestored"),
-						object: capturedWarningID
-					)
-				}
+			// Mark completed and notify
+			completeWarning()
 
-				// Define the redo action
-				let performRedo: @MainActor () -> Void = {
-					try? capturedModified.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-					SourceFileReader.invalidateCache(for: capturedPath)
-
-					// Reapply line number adjustments
-					if let sourceGraph = capturedSourceGraph {
-						for declaration in sourceGraph.allDeclarations {
-							guard declaration.location.file.path.string == capturedPath else { continue }
-							guard let declUSR = declaration.usrs.first else { continue }
-							guard capturedAdjustedUSRs.contains(declUSR) else { continue }
-
-							let newLine = declaration.location.line + 1
-							let newEndLine = declaration.location.endLine.map { $0 + 1 }
-							declaration.location = Location(
-								file: declaration.location.file,
-								line: newLine,
-								column: declaration.location.column,
-								endLine: newEndLine,
-								endColumn: declaration.location.endColumn
-							)
-						}
-					}
-
-					// Mark as removed and completed again
-					removingWarnings.insert(capturedWarningID)
-					ignoringWarnings.insert(capturedWarningID)
-					completedActions.insert(capturedWarningID)
-
-					NotificationCenter.default.post(
-						name: Notification.Name("PeripheryWarningCompleted"),
-						object: capturedWarningID
-					)
-				}
-
-				// Register initial undo using block-based API
-				undoManager.registerUndo(withTarget: undoManager) { undoMgr in
-					Task { @MainActor in
-						performUndo()
-						undoMgr.registerUndo(withTarget: undoMgr) { redoUndoMgr in
-							Task { @MainActor in
-								performRedo()
-								redoUndoMgr.registerUndo(withTarget: redoUndoMgr) { _ in
-									Task { @MainActor in
-										performUndo()
-									}
-								}
-								redoUndoMgr.setActionName("Insert Ignore Directive")
-							}
-						}
-						undoMgr.setActionName("Insert Ignore Directive")
-					}
-				}
-				undoManager.setActionName("Insert Ignore Directive")
-			}
-
-			// Mark action as completed (this will hide the warning from the list)
-			completedActions.insert(warningID)
-			removingWarnings.remove(warningID)
-			ignoringWarnings.remove(warningID)
-
-			// Notify that warning was completed
-			NotificationCenter.default.post(
-				name: Notification.Name("PeripheryWarningCompleted"),
-				object: warningID
-			)
+		case .failure(let error):
+			print("Failed to remove redundant public: \(error.localizedDescription)")
 		}
 	}
 
 	/**
-	 Adjusts line numbers for declarations after a file modification.
-
-	 Updates the location of all declarations in the sourceGraph that come after
-	 the modified range, accounting for added or removed lines.
-	 */
-	// Fix redundant public by removing the keyword (internal is default)
-	private func fixRedundantPublic() {
-		// Verify structural confirmation that 'public' modifier exists
-		guard declaration.modifiers.contains("public") else {
-			print("Warning: Expected 'public' in modifiers but not found for \(declaration.name ?? "unknown") at \(location.file.path.string):\(location.line)")
-			return
-		}
-
-		let filePath = location.file.path.string
-		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-
-		// Register undo
-		if let undoManager = undoManager {
-			let capturedPath = filePath
-			let capturedContents = fileContents
-			let capturedWarningID = warningID
-			undoManager.registerUndo(withTarget: NSObject()) { _ in
-				try? capturedContents.write(toFile: capturedPath, atomically: true, encoding: .utf8)
-				SourceFileReader.invalidateCache(for: capturedPath)
-				NotificationCenter.default.post(name: Notification.Name("PeripheryWarningRestored"), object: capturedWarningID)
+	Registers undo for a simple modification (no line number adjustments).
+	*/
+	private func registerModificationUndo(
+		modification: CodeModificationHelper.ModificationResult,
+		actionName: String
+	) {
+		UndoRedoHelper.registerModificationUndo(
+			undoManager: undoManager,
+			modification: modification,
+			warningID: warningID,
+			actionName: actionName,
+			onComplete: { [self] in
+				WarningStateManager.completeWarning(
+					warningID: warningID,
+					completedActions: &completedActions,
+					removingWarnings: &removingWarnings
+				)
+			},
+			onRestore: { [self] in
+				WarningStateManager.restoreWarning(
+					warningID: warningID,
+					completedActions: &completedActions,
+					removingWarnings: &removingWarnings
+				)
 			}
-			undoManager.setActionName("Fix Redundant Public")
-		}
+		)
+	}
 
-		// Find and remove 'public' followed by any whitespace on the declaration line
-		var lines = fileContents.components(separatedBy: .newlines)
-		guard location.line > 0 && location.line <= lines.count else { return }
+	/**
+	Registers undo for a modification that includes line number adjustments.
+	*/
+	private func registerModificationUndoWithLineAdjustment(
+		modification: CodeModificationHelper.ModificationResult,
+		adjustedUSRs: [String],
+		actionName: String
+	) {
+		UndoRedoHelper.registerModificationUndoWithLineAdjustment(
+			undoManager: undoManager,
+			modification: modification,
+			warningID: warningID,
+			adjustedUSRs: adjustedUSRs,
+			sourceGraph: sourceGraph,
+			actionName: actionName,
+			onComplete: { [self] in
+				WarningStateManager.completeWarning(
+					warningID: warningID,
+					completedActions: &completedActions,
+					removingWarnings: &removingWarnings
+				)
+			},
+			onRestore: { [self] in
+				WarningStateManager.restoreWarning(
+					warningID: warningID,
+					completedActions: &completedActions,
+					removingWarnings: &removingWarnings
+				)
+			}
+		)
+	}
 
-		let lineIndex = location.line - 1
-		let originalLine = lines[lineIndex]
-
-		// Match "public" followed by any whitespace (space, newline, tab, etc.)
-		let pattern = #"public\s+"#
-		if let regex = try? NSRegularExpression(pattern: pattern) {
-			let range = NSRange(originalLine.startIndex..., in: originalLine)
-			let newLine = regex.stringByReplacingMatches(
-				in: originalLine,
-				range: range,
-				withTemplate: ""
-			)
-			lines[lineIndex] = newLine
-		}
-
-		let newContents = lines.joined(separator: "\n")
-		try? newContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-
-		// Invalidate source file cache so preview shows updated content
-		SourceFileReader.invalidateCache(for: filePath)
-
-		// Mark action as completed
-		completedActions.insert(warningID)
-		removingWarnings.remove(warningID)
-
-		// Notify that warning was completed
-		NotificationCenter.default.post(
-			name: Notification.Name("PeripheryWarningCompleted"),
-			object: warningID
+	/**
+	Marks a warning as completed and posts notification.
+	*/
+	private func completeWarning() {
+		WarningStateManager.completeWarning(
+			warningID: warningID,
+			completedActions: &completedActions,
+			removingWarnings: &removingWarnings
 		)
 	}
 
 	private func DeleteButton() -> some View {
-		Button(
-			result.annotation.isUnused ? "Delete declaration" : (isRedundantPublic ? "Remove public keyword" : "Delete"),
+		let label = switch(result.annotation) {
+		case .unused: "Delete declaration"
+		case .redundantPublicAccessibility(_): "Remove public keyword"
+		case .superfluousIgnoreCommand: "Delete Periphery Ignore command"
+		default: ""
+		}
+
+		return Button(
+			label,
 			systemImage: "trash",
 			action: {
-				if result.annotation.isUnused {
+				if result.annotation == .unused {
 					deleteDeclaration()
-				} else if isRedundantPublic {
+				} else if result.annotation.isRedundantPublic {
 					fixRedundantPublic()
+				} else if result.annotation == .superfluousIgnoreCommand {
+					fixSuperfluousIgnoreCommand()
 				}
 			}
 		)
@@ -1121,15 +683,17 @@ struct PeripheryWarningRow: View {
 		.frame(width: 16, height: 16)
 		.buttonStyle(.plain)
 		.help({
-			if result.annotation.isUnused {
+			if result.annotation == .unused {
 				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
-			} else if isRedundantPublic {
+			} else if result.annotation.isRedundantPublic {
 				"Remove public keyword"
+			} else if result.annotation == .superfluousIgnoreCommand {
+				"Remove Superfluous ignore command"
 			} else {
 				""
 			}
 		}())
-		.disabled(result.annotation.isUnused && !canDelete)
+		.disabled(result.annotation == .unused && !canDelete)
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
 
@@ -1147,10 +711,13 @@ struct PeripheryWarningRow: View {
 
 	private func ActionButtons() -> some View {
 		HStack(spacing: 4) {
-			if result.annotation.isUnused || isRedundantPublic {
+			if result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
 				DeleteButton()
 			}
-			IgnoreButton()
+			// Can't ignore a superfluous ignore!
+			if result.annotation != .superfluousIgnoreCommand {
+				IgnoreButton()
+			}
 		}
 	}
 
@@ -1236,7 +803,7 @@ struct PeripheryWarningRow: View {
 			}
 		GridRow {
 			// Disclosure button for full source preview (only if multi-line and not completed)
-			if !completedActions.contains(warningID) && (result.annotation.isUnused || isRedundantProtocol) && hasFullRange && hasMultiLineSource {
+			if !completedActions.contains(warningID) && (result.annotation == .unused || result.annotation.isRedundantProtocol) && hasFullRange && hasMultiLineSource {
 					Button(isExpanded ? "Hide full source" : "Show full source", systemImage: isExpanded ? "chevron.down" : "chevron.right") {
 						if isExpanded {
 							expandedWarnings.remove(warningID)

@@ -169,8 +169,6 @@ struct ContentView: View {
 	 then starting a scan.
 	 */
 	private func handleScanArgument(configName: String) {
-		// Use CLIScanRunner to find configuration by display name
-		let runner = CLIScanRunner()
 
 		// Find configuration matching the display name
 		var foundConfig: PeripheryConfiguration?

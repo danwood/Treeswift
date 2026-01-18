@@ -31,7 +31,6 @@ final class Dumper: Sendable {
 	nonisolated private func isEnvironmentRelated(_ declaration: Declaration) -> Bool {
 		let environmentAttributes = ["EnvironmentObject", "Environment"]
 		// Check declaration attributes
-		// FIXME: Use "description" here?
 		if declaration.attributes.contains(where: { environmentAttributes.contains($0.description) }) {
 			return true
 		}

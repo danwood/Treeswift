@@ -163,6 +163,17 @@ struct FilterBarView: View {
 								.foregroundStyle(.secondary)
 						}
 					}
+
+					OptionClickToggle(
+						isEnabled: $filterState.showSuperfluousIgnoreCommand,
+						onOptionClick: setAllWarningFilters
+					) {
+						HStack(spacing: 4) {
+							Text("Superflous Ignore")
+							Text("(\(annotationCounts[ScanResult.Annotation.superfluousIgnoreCommand.stringValue] ?? 0))")
+								.foregroundStyle(.secondary)
+						}
+					}
 				}
 			}
 
