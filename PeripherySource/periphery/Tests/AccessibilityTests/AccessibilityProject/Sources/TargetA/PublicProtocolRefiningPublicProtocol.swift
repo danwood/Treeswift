@@ -1,4 +1,0 @@
-import Foundation
-
-public protocol PublicProtocolRefiningPublicProtocol_Refined {}
-public protocol PublicProtocolRefiningPublicProtocol: PublicProtocolRefiningPublicProtocol_Refined {}

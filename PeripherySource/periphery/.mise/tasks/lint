@@ -1,9 +1,0 @@
-#!/bin/bash
-
-set -euo pipefail
-
-cd $MISE_PROJECT_ROOT
-
-bazel run //bazel/dev:buildifier.fix
-swiftformat .
-swiftlint lint --quiet

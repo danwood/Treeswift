@@ -1,2 +1,0 @@
-@Mock
-protocol MockedProtocol {}

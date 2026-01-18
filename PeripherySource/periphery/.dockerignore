@@ -1,7 +1,0 @@
-.git/
-**/.build/
-**/.swiftpm/
-.release/
-bazel-*
-docker/
-!docker/bazel-entrypoint.sh
