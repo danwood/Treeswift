@@ -44,7 +44,7 @@ final class Dumper: Sendable {
 			return true
 		}
 		// Check inheritance (covers e.g. property wrappers in protocols)
-		if declaration.immediateInheritedTypeReferences.contains(where: { ref in
+		if declaration.immediateInheritedTypeReferences.contains(where: { (ref: Reference) in
 			if let n = ref.name {
 				return environmentAttributes.contains(where: { n.contains($0) })
 			}
@@ -99,7 +99,7 @@ final class Dumper: Sendable {
 		child: Declaration,
 		parent: Declaration
 	) -> RelationshipType {
-		let parentReferences = sourceGraph.references(to: child)
+		let parentReferences: Set<Reference> = sourceGraph.references(to: child)
 
 		// Added: Scan for variableInitFunctionCall references
 		if parentReferences.contains(where: { $0.role == .variableInitFunctionCall }) {
@@ -111,19 +111,19 @@ final class Dumper: Sendable {
 			return .embed
 		}
 
-		let sameFileReferences = parentReferences.filter { ref in
+		let sameFileReferences: Set<Reference> = parentReferences.filter { (ref: Reference) in
 			// Check if this reference is in the same file as the parent
 			ref.location.file.path == parent.location.file.path
 		}
 
 		if !sameFileReferences.isEmpty {
 			// Check if parent uses child in a constructor call or as a struct reference
-			let hasConstructorReference = sameFileReferences.contains { ref in
-				ref.kind == .functionConstructor || ref.kind == .struct
+			let hasConstructorReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .functionConstructor || ref.declarationKind == .struct
 			}
 			if hasConstructorReference {
 				// Check if this is a subview relationship (SwiftUI pattern)
-				let hasSubviewReference = sameFileReferences.contains { ref in
+				let hasSubviewReference = sameFileReferences.contains { (ref: Reference) in
 					let isSubview = isSubviewPattern(parent: parent, child: child, ref: ref)
 					return isSubview
 				}
@@ -135,48 +135,48 @@ final class Dumper: Sendable {
 			}
 
 			// Check if parent has a property of child type
-			let hasPropertyReference = sameFileReferences.contains { ref in
-				ref.kind == .varInstance || ref.kind == .varGlobal
+			let hasPropertyReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .varInstance || ref.declarationKind == .varGlobal
 			}
 			if hasPropertyReference {
 				return .prop
 			}
 
 			// Check if parent uses child as a parameter type
-			let hasParameterReference = sameFileReferences.contains { ref in
-				ref.kind == .functionMethodInstance
+			let hasParameterReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .functionMethodInstance
 			}
 			if hasParameterReference {
 				return .param
 			}
 
 			// Check if parent uses child as a local variable type
-			let hasLocalVarReference = sameFileReferences.contains { ref in
-				ref.kind == .varLocal
+			let hasLocalVarReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .varLocal
 			}
 			if hasLocalVarReference {
 				return .local
 			}
 
 			// Check if parent uses child in a static property/method
-			let hasStaticReference = sameFileReferences.contains { ref in
-				ref.kind == .varStatic || ref.kind == .functionMethodStatic
+			let hasStaticReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .varStatic || ref.declarationKind == .functionMethodStatic
 			}
 			if hasStaticReference {
 				return .staticMember
 			}
 
 			// Check if parent uses child in a method call
-			let hasMethodCallReference = sameFileReferences.contains { ref in
-				ref.kind == .functionMethodInstance || ref.kind == .functionMethodStatic
+			let hasMethodCallReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .functionMethodInstance || ref.declarationKind == .functionMethodStatic
 			}
 			if hasMethodCallReference {
 				return .call
 			}
 
 			// Check if parent uses child in a type annotation
-			let hasTypeAnnotationReference = sameFileReferences.contains { ref in
-				ref.kind == .varInstance || ref.kind == .varGlobal || ref.kind == .varLocal
+			let hasTypeAnnotationReference = sameFileReferences.contains { (ref: Reference) in
+				ref.declarationKind == .varInstance || ref.declarationKind == .varGlobal || ref.declarationKind == .varLocal
 			}
 			if hasTypeAnnotationReference {
 				return .type
@@ -238,11 +238,11 @@ final class Dumper: Sendable {
 	) -> [Declaration] {
 		let (onlyBodyGetterTypes, remaining) = declarations.partitioned { type in
 			guard !displayedTypes.contains(type), !isMainApp(type) else { return false }
-			let referencingDecls = referencingDeclarations(for: type, in: sourceGraph)
+			let referencingDecls: [Declaration] = referencingDeclarations(for: type, in: sourceGraph)
 			return !isMainApp(type) &&
 				!referencingDecls.isEmpty &&
-				referencingDecls.allSatisfy { ref in
-					ref.kind == .functionAccessorGetter && ref.name == "getter:body"
+				referencingDecls.allSatisfy { declaration in
+					declaration.kind == .functionAccessorGetter && declaration.name == "getter:body"
 				}
 		}
 		declarations = remaining
@@ -257,11 +257,11 @@ final class Dumper: Sendable {
 	) -> [Declaration] {
 		let (previewOnlyTypes, remaining) = declarations.partitioned { type in
 			guard !displayedTypes.contains(type), !isMainApp(type) else { return false }
-			let referencingDecls = referencingDeclarations(for: type, in: sourceGraph)
+			let referencingDecls: [Declaration] = referencingDeclarations(for: type, in: sourceGraph)
 			guard !referencingDecls.isEmpty else { return false }
 			// Check if all references come from static methods named exactly "makePreview()"
-			return referencingDecls.allSatisfy { ref in
-				ref.kind.rawValue.contains("static") && ref.name == "makePreview()"
+			return referencingDecls.allSatisfy { declaration in
+				declaration.kind.rawValue.contains("static") && declaration.name == "makePreview()"
 			}
 		}
 		declarations = remaining
@@ -428,13 +428,13 @@ final class Dumper: Sendable {
 	/// Checks if a function embeds a ViewModifier by looking for the .modifier() pattern
 	private nonisolated func isViewModifierEmbeddingFunction(_ funcDecl: Declaration, sourceGraph _: SourceGraph) -> Bool {
 		// Look for references to "modifier" method calls within this function
-		let hasModifierCall = funcDecl.references.contains { ref in
-			ref.name == "modifier" && ref.kind == .functionMethodInstance
+		let hasModifierCall = funcDecl.references.contains { (ref: Reference) in
+			ref.name == "modifier" && ref.declarationKind == .functionMethodInstance
 		}
 
 		// Also check for "modifier(_:)" which is the full method signature
-		let hasModifierCallWithParam = funcDecl.references.contains { ref in
-			ref.name == "modifier(_:)" && ref.kind == .functionMethodInstance
+		let hasModifierCallWithParam = funcDecl.references.contains { (ref: Reference) in
+			ref.name == "modifier(_:)" && ref.declarationKind == .functionMethodInstance
 		}
 
 		// For View extension functions, if they have a modifier call, they're likely ViewModifier embedders
@@ -738,8 +738,8 @@ final class Dumper: Sendable {
 		let protocolExtensions = sourceGraph.declarations(ofKind: .extensionProtocol)
 
 		let viewExtensions = protocolExtensions.filter { extDecl in
-			let hasViewReference = extDecl.references.contains { ref in
-				ref.name == "View" && ref.kind == .protocol
+			let hasViewReference = extDecl.references.contains { (ref: Reference) in
+				ref.name == "View" && ref.declarationKind == .protocol
 			}
 			return hasViewReference
 		}
