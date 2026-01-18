@@ -1,6 +1,6 @@
 # Treeswift Modifications to Periphery
 
-This document describes all local modifications made to the Periphery source code to enable deep integration with Treeswift. These modifications follow the **diff minimization strategy** from CLAUDE.md to ease future upstream merges.
+This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's local modifications to the Periphery package. This document describes all changes, the diff minimization strategy, and the update workflow.
 
 ## Base Version
 
@@ -265,44 +265,139 @@ Files likely to conflict on update:
 
 ---
 
-## Diff Minimization Patterns Used
+---
 
-Following CLAUDE.md guidelines to minimize diff with upstream:
+## Why Use a Local Modified Package?
 
-### 1. Public modifiers on separate lines
+The upstream Periphery Swift Package exposes only `PeripheryKit` as a library product. The internal scanning orchestration logic (`Scan`, `Project`, `ProjectDriver` implementations, etc.) is part of the `periphery` executable target and cannot be imported as libraries.
+
+By maintaining a local modified copy of the package, we can:
+- Expose additional library products (Configuration, SourceGraph, FrontendLib, etc.)
+- Make internal classes public where needed (`Project`, `Scan`)
+- Maintain our own modifications while staying synchronized with upstream
+- Use the standard Swift Package Manager module system
+
+---
+
+## Git Subtree Management
+
+The `PeripherySource/periphery` directory is managed as a **git subtree** tracking upstream Periphery changes.
+
+**Setup (already done):**
+```bash
+# Add upstream remote
+git remote add periphery-upstream https://github.com/peripheryapp/periphery.git
+
+# Current baseline: clean upstream 5a4ac8b (post-3.4.0) at commit 4dd2a038
+```
+
+**To update to a newer released version of Periphery:**
+
+```bash
+# Example: Pull a specific version tag (e.g., version 3.5.0)
+git subtree pull --prefix=PeripherySource/periphery periphery-upstream 3.5.0 --squash
+
+# After the merge, verify local modifications are still present
+
+# If modifications were overwritten, re-apply them using the patch workflow below
+# Commit any re-applied modifications
+git add PeripherySource/periphery/
+git commit -m "Re-apply local modifications after periphery update to 3.5.0"
+```
+
+**To update to the latest development code (master branch):**
+
+```bash
+# Pull the latest master branch
+git subtree pull --prefix=PeripherySource/periphery periphery-upstream master --squash
+
+# After the merge, verify and re-apply local modifications if needed
+git add PeripherySource/periphery/
+git commit -m "Re-apply local modifications after periphery update to master"
+```
+
+**Git subtree workflow:**
+- The `periphery-upstream` remote points to `https://github.com/peripheryapp/periphery`
+- Updates are pulled with `git subtree pull` and squashed into a single commit
+- Your local modifications are preserved in separate commits on top
+- When merging new upstream versions, git will attempt to preserve your changes
+- If conflicts occur, resolve them and re-apply modifications as needed
+
+**Benefits of git subtree:**
+- Keeps the complete periphery source code in your repository
+- Tracks upstream changes and allows easy updates
+- Preserves your local modifications in git history
+- No need for separate submodule checkouts
+- Simple merge workflow for pulling upstream changes
+- The local package can be referenced directly in Xcode
+
+---
+
+## Diff Minimization Strategy
+
+**Goal:** Minimize diff with upstream to ease future updates.
+
+**Rule:** Preserve original lines byte-for-byte. Make additions appear as pure insertions (+ lines), not modifications (+/- lines).
+
+This strategy makes our modifications easier to maintain across upstream updates because:
+- Git can better auto-merge changes when original lines are untouched
+- Patch files are more resilient to upstream refactoring
+- Diffs are cleaner and easier to review
+- Re-applying modifications after conflicts is simpler
+
+### Diff Minimization Patterns
+
+#### 1. Adding to start of line - split across lines
+
+**Pattern:** Place modifier on separate line before original line
 ```swift
-// Original line preserved:
-final class Project {
+// Bad (modifies existing line):
+public final class Project {
 
-// Modified (appears as pure insertion):
+// Good (pure insertion):
 public
 final class Project {
 ```
 
-### 2. Leading commas for parameter additions
-```swift
-// Original line preserved:
-logger: Logger
+#### 2. Adding to end of line - use leading comma on new line
 
-// Modified (appears as pure insertion):
+**Pattern:** Keep original line intact, add continuation with leading comma
+```swift
+// Bad (modifies existing line):
+logger: Logger, progressDelegate: ScanProgressDelegate? = nil
+
+// Good (pure insertion):
 logger: Logger
 , progressDelegate: ScanProgressDelegate? = nil
 ```
 
-### 3. Multi-line boolean expressions
+#### 3. Adding to boolean expressions - continue on new line
+
+**Pattern:** Keep original expression intact, continue condition on new line
 ```swift
-// Original preserved, continuation added:
+// Good (original line preserved):
 lhs.file == rhs.file && lhs.line == rhs.line && lhs.column == rhs.column
 && lhs.endLine == rhs.endLine && lhs.endColumn == rhs.endColumn
 ```
 
-### 4. Tree emoji markers for significant changes
-- `// 🌲 MODIFIED VERSION FOR LOCAL PACKAGE USAGE`
-- `// 🌲 MODIFICATION: Split Frontend into executable + library`
-- `// 🌲 Scan now returns a duple`
-- `// 🌲 Updated algorithm includes end location`
+#### 4. Tree emoji markers for significant changes
 
-These markers make it easy to find Treeswift-specific changes when reviewing diffs.
+**Pattern:** Use 🌲 emoji in comments to mark Treeswift-specific modifications
+```swift
+// 🌲 MODIFIED VERSION FOR LOCAL PACKAGE USAGE
+// 🌲 MODIFICATION: Split Frontend into executable + library
+// 🌲 Scan now returns a duple
+// 🌲 Updated algorithm includes end location
+```
+
+These markers make it easy to identify Treeswift-specific changes when reviewing diffs.
+
+**Verification command:**
+```bash
+git diff 4dd2a038 HEAD -- PeripherySource/periphery/
+```
+
+This should show minimal modifications to existing lines.
 
 ---
 

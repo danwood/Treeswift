@@ -7,7 +7,7 @@
 --wrapparameters before-first
 --stripunusedargs closure-only
 
---swiftversion 6.0
+--swiftversion 6.2
 
 --enable blankLinesAroundMark
 --enable blankLineAfterImports

@@ -14,119 +14,14 @@ This implementation invokes Periphery scanning functionality directly from a Swi
 
 The `PeripherySource/periphery` directory contains a complete copy of the Periphery source code, managed as a **git subtree** tracking the upstream repository at <https://github.com/peripheryapp/periphery>. This directory is referenced as a **local Swift package** in the Xcode project.
 
-#### Why Use a Local Modified Package?
-
-The upstream Periphery Swift Package exposes only `PeripheryKit` as a library product. The internal scanning orchestration logic (`Scan`, `Project`, `ProjectDriver` implementations, etc.) is part of the `periphery` executable target and cannot be imported as libraries.
-
-By maintaining a local modified copy of the package, we can:
+The local package has been modified to:
 - Expose additional library products (Configuration, SourceGraph, FrontendLib, etc.)
 - Make internal classes public where needed (`Project`, `Scan`)
-- Maintain our own modifications while staying synchronized with upstream
-- Use the standard Swift Package Manager module system
+- Add location range tracking (endLine/endColumn properties)
+- Add scan progress delegation for GUI feedback
+- Support Swift 6 concurrency with cancellation checkpoints
 
-#### Package Modifications
-
-The local package at `PeripherySource/periphery/Package.swift` has been modified to expose additional library products:
-
-**Added Library Products:**
-- `Configuration` - Configuration management
-- `SourceGraph` - Code graph representation
-- `Shared` - Shell, SwiftVersion, common utilities
-- `Logger` - Logging infrastructure
-- `Extensions` - Utility extensions (FilePath, String, etc.)
-- `Indexer` - Indexing pipeline
-- `ProjectDrivers` - Project driver implementations
-- `SyntaxAnalysis` - Swift syntax analysis
-- `XcodeSupport` - Xcode project support
-- `FrontendLib` - Frontend orchestration (Scan, Project classes)
-
-**Target Structure Changes:**
-- Split `Frontend` executable target into two targets:
-  - `Frontend` (executable) - Contains only `main.swift`
-  - `FrontendLib` (library) - Contains all other Frontend code (Scan, Project, etc.)
-- Made `Project` and `Scan` classes public with public initializers
-
-#### Periphery Source Code Modifications
-
-Beyond the Package.swift modifications, the local Periphery source code has been enhanced with custom analysis capabilities and data structure improvements. These modifications fall into two categories:
-
-**1. Data Structure Enhancements** (core functionality improvements)
-- **Location range tracking**: Extended `Location` class with `endLine` and `endColumn` properties
-  - Allows tracking the full source range of declarations (not just start position)
-  - Modified `Location.swift` init to accept optional `endLine` and `endColumn` parameters
-  - Updated hash calculation and equality comparison to include end positions
-  - Modified `DeclarationSyntaxVisitor.swift` to capture end positions from Swift syntax nodes
-  - Updated `SourceLocationBuilder.swift` to extract end line/column from syntax
-  - Modified `SwiftIndexer.swift` to populate Location with end position data
-
-**Modified Files Summary:**
-- `Package.swift` - Added library product exports (10 new products)
-- `Frontend/Project.swift` - Made class and methods public (5 lines)
-- `Frontend/Scan.swift` - Made class public + return SourceGraph along with [ScanResult]
-- `SourceGraph/Elements/Location.swift` - Added endLine/endColumn properties (~20 lines)
-- `SourceGraph/Elements/Declaration.swift` - Minor tweaks for Dumper
-- `Indexer/SwiftIndexer.swift` - Capture and use end positions (~20 lines)
-- `SyntaxAnalysis/DeclarationSyntaxVisitor.swift` - Extract end positions from syntax (~25 lines)
-- `SyntaxAnalysis/SourceLocationBuilder.swift` - Calculate end line/column (~10 lines)
-- `PeripheryKit/Results/OutputFormatter.swift` - Minor formatting tweaks
-- `ProjectDrivers/XcodeProjectDriver.swift` - Minor adjustments
-- `XcodeSupport/Xcodebuild.swift` - Minor fixes
-
-**Total Impact:** ~945 insertions, ~31 deletions across 10 files (primarily the Dumper class addition)
-
-#### Git Subtree Management
-
-The `PeripherySource/periphery` directory is managed as a **git subtree** tracking upstream Periphery changes.
-
-**Setup (already done):**
-```bash
-# Add upstream remote
-git remote add periphery-upstream https://github.com/peripheryapp/periphery.git
-
-# Current baseline: clean upstream 5a4ac8b (post-3.4.0) at commit 4dd2a038
-```
-
-**To update to a newer released version of Periphery:**
-
-See [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md) for the complete update workflow.
-
-```bash
-# Example: Pull a specific version tag (e.g., version 3.5.0)
-git subtree pull --prefix=PeripherySource/periphery periphery-upstream 3.5.0 --squash
-
-# After the merge, verify local modifications are still present
-
-# If modifications were overwritten, re-apply them
-# Commit any re-applied modifications
-git add PeripherySource/periphery/
-git commit -m "Re-apply local modifications after periphery update to 3.3.0"
-```
-
-**To update to the latest development code (master branch):**
-
-```bash
-# Pull the latest master branch
-git subtree pull --prefix=PeripherySource/periphery periphery-upstream master --squash
-
-# After the merge, verify and re-apply local modifications if needed
-git add PeripherySource/periphery/
-git commit -m "Re-apply local modifications after periphery update to master"
-```
-
-**Git subtree workflow:**
-- The `periphery-upstream` remote points to `https://github.com/peripheryapp/periphery`
-- Updates are pulled with `git subtree pull` and squashed into a single commit
-- Your local modifications are preserved in separate commits on top
-- When merging new upstream versions, git will attempt to preserve your changes
-- If conflicts occur, resolve them and re-apply modifications as needed
-
-**Benefits of git subtree:**
-- Keeps the complete periphery source code in your repository
-- Tracks upstream changes and allows easy updates
-- Preserves your local modifications in git history
-- No need for separate submodule checkouts
-- Simple merge workflow for pulling upstream changes
-- The local package can be referenced directly in Xcode
+**For complete details** on all modifications, diff minimization strategy, update workflow, and git subtree management, see [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md).
 
 **Source:** https://github.com/peripheryapp/periphery (Based on 3.4.0+ post-release commit 5a4ac8b, MIT License, managed as git subtree)
 

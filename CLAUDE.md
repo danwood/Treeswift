@@ -65,6 +65,8 @@ The executable is at: `<path-to-app>/Contents/MacOS/Treeswift`
 - Markdown: Use spaces (2)
 - JSON/YAML: Use spaces (2)
 
+**Use .swiftformat** - This codebase is reformatted with swiftformat; use the settings in .swiftformat file.
+
 ## Key Project Constraints
 
 ### UI Layout
@@ -77,35 +79,10 @@ Shared helper functions belong in `Utilities/` folder, not scattered across view
 
 ## Modifying PeripherySource/periphery Files
 
-**Goal:** Minimize diff with upstream to ease future updates.
+When modifying files in `PeripherySource/periphery/`, follow the diff minimization strategy and document all changes in [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md).
 
-**Rule:** Preserve original lines byte-for-byte. Make additions appear as pure insertions (+ lines), not modifications (+/- lines).
-
-### Diff Minimization Patterns
-
-**Adding to start of line** - split across lines:
-```swift
-// Bad: public final class Project {
-// Good:
-public
-final class Project {
-```
-
-**Adding to end of line** - use leading comma on new line:
-```swift
-// Bad: logger: Logger, progressDelegate: ScanProgressDelegate? = nil
-// Good:
-logger: Logger
-, progressDelegate: ScanProgressDelegate? = nil
-```
-
-**Adding to boolean expressions** - continue on new line:
-```swift
-// Good:
-lhs.file == rhs.file && lhs.line == rhs.line && lhs.column == rhs.column
-&& lhs.endLine == rhs.endLine && lhs.endColumn == rhs.endColumn
-```
-
-**Verify changes:** `git diff 4dd2a038 HEAD -- PeripherySource/periphery/` should show minimal modifications.
-
-**Document all changes** in [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md)
+See that file for complete details on:
+- Diff minimization patterns and examples
+- Current modifications to Periphery
+- Update workflow for new Periphery versions
+- Git subtree management
