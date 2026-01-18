@@ -85,7 +85,7 @@ The application provides a complete macOS-native GUI for Periphery scanning with
 
 **Swift Version:**
 - Swift 6.2
-- macOS 15+ deployment target
+- macOS 15.6+ deployment target
 - Uses modern Swift concurrency (`SWIFT_APPROACHABLE_CONCURRENCY = YES`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`)
 
 **Sandbox:**
@@ -158,17 +158,6 @@ External Package Dependencies:
    - Verify local modifications are preserved
    - Re-apply if necessary (Package.swift changes, public modifiers)
    - Minimal conflicts since modifications are small and well-defined
-
-## Using the Application
-
-1. Build and run the Treeswift app
-2. Create a new configuration:
-   - Drag a project file (.xcodeproj or .xcworkspace) to the sidebar, or
-   - Click the "+" button and use the Choose button to select a project
-3. Select schemes from the automatically-detected list
-4. Configure build arguments and options as needed
-5. Click "Run Scan"
-6. Results appear in Xcode format (text is selectable)
 
 ## Status
 

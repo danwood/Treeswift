@@ -14,27 +14,27 @@ final class FolderTypeAnalyzer: Sendable {
 
 	nonisolated func analyzeFolders(
 		nodes: [FileBrowserNode],
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		projectPath: String
 	) async -> [FileBrowserNode] {
-		await analyzeFoldersRecursive(nodes: nodes, graph: graph, projectPath: projectPath)
+		await analyzeFoldersRecursive(nodes: nodes, sourceGraph: sourceGraph, projectPath: projectPath)
 	}
 
 	private nonisolated func analyzeFoldersRecursive(
 		nodes: [FileBrowserNode],
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		projectPath: String
 	) async -> [FileBrowserNode] {
 		var results: [FileBrowserNode?] = Array(repeating: nil, count: nodes.count)
 
 		await withTaskGroup(of: (Int, FileBrowserNode).self) { group in
 			for (index, node) in nodes.enumerated() {
-				group.addTask { [graph] in
+				group.addTask { [sourceGraph] in
 					switch node {
 					case let .directory(dir):
 						let enrichedChildren = await self.analyzeFoldersRecursive(
 							nodes: dir.children,
-							graph: graph,
+							sourceGraph: sourceGraph,
 							projectPath: projectPath
 						)
 
@@ -43,7 +43,7 @@ final class FolderTypeAnalyzer: Sendable {
 
 						let analysis = self.analyzeFolder(
 							directory: mutableDir,
-							graph: graph
+							sourceGraph: sourceGraph
 						)
 						mutableDir.folderType = analysis.folderType
 						mutableDir.analysisWarnings = analysis.warnings
@@ -119,7 +119,7 @@ final class FolderTypeAnalyzer: Sendable {
 
 	private nonisolated func analyzeFolder(
 		directory: FileBrowserDirectory,
-		graph: SourceGraph
+		sourceGraph: SourceGraph
 	)
 		-> (
 			folderType: FolderType,
@@ -127,7 +127,7 @@ final class FolderTypeAnalyzer: Sendable {
 			statistics: FolderStatistics?,
 			symbolWarnings: [Declaration: AnalysisWarning]?
 		) {
-		let allDeclarations = graph.allDeclarations
+		let allDeclarations = sourceGraph.allDeclarations
 
 		let swiftFiles = collectSwiftFiles(in: directory)
 		guard !swiftFiles.isEmpty else {
@@ -149,7 +149,7 @@ final class FolderTypeAnalyzer: Sendable {
 		let referenceAnalysis = analyzeReferences(
 			symbols: internalSymbols,
 			folderPath: folderPath,
-			graph: graph
+			sourceGraph: sourceGraph
 		)
 
 		let statistics = FolderStatistics(
@@ -234,9 +234,9 @@ final class FolderTypeAnalyzer: Sendable {
 	private nonisolated func analyzeReferences(
 		symbols: [Declaration],
 		folderPath: String,
-		graph: SourceGraph
+		sourceGraph: SourceGraph
 	) -> ReferenceAnalysis {
-		ReferenceAnalysisUtility.analyzeSymbolReferences(symbols: symbols, sourcePath: folderPath, graph: graph)
+		ReferenceAnalysisUtility.analyzeSymbolReferences(symbols: symbols, sourcePath: folderPath, sourceGraph: sourceGraph)
 	}
 
 	// If possible, classify as symbol folder or its more specialized view folder

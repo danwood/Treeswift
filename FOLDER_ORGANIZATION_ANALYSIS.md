@@ -1,5 +1,13 @@
 # Folder Organization Analysis Guide
 
+> **About This Document**
+>
+> This document describes folder-based encapsulation principles being applied to the Treeswift codebase. It serves as both a reference guide and an aspirational target for code organization.
+>
+> **Purpose:** Comprehensive guide to folder organization philosophy
+> **Audience:** Developers working on Treeswift who want to understand encapsulation patterns
+> **Status:** Reference and philosophical discussion
+
 ## Overview
 
 This document describes a systematic approach to analyzing and organizing Swift codebases using folder-based encapsulation patterns. While Swift's access control (`private`, `fileprivate`, `internal`, `public`) provides visibility control, it lacks a mechanism to restrict symbols to a specific folder. This guide establishes conventions and analysis techniques to achieve folder-based organization through static analysis rather than compiler enforcement.

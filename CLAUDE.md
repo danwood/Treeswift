@@ -14,49 +14,9 @@ Treeswift is a macOS SwiftUI GUI for the Periphery static analysis tool. It uses
 xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build
 ```
 
-## Command-Line Testing Tools
+## Command-Line Interface
 
-Treeswift supports command-line operation for testing and automation. The built app can be invoked from the terminal:
-
-**Finding the built executable:**
-
-After building, locate the executable with:
-```bash
-find ~/Library/Developer/Xcode/DerivedData -name "Treeswift.app" -type d 2>/dev/null | head -1
-```
-
-The executable is at: `<path-to-app>/Contents/MacOS/Treeswift`
-
-**Available commands:**
-
-1. **List configurations:**
-   ```bash
-   Treeswift --list
-   ```
-   Prints all saved configuration names to stdout, one per line, then exits.
-
-2. **Run a scan:**
-   ```bash
-   Treeswift --scan <configuration_name>
-   ```
-   Executes a scan for the named configuration, outputs progress and results to stderr, then exits.
-   - Exit code 0: Success
-   - Exit code 1: Error (config not found, scan failed, invalid arguments)
-
-3. **Launch GUI (default):**
-   ```bash
-   Treeswift
-   ```
-   Opens the normal GUI application.
-
-**Use these CLI tools when you need to:**
-- Test scan functionality without GUI interaction
-- Examine console output directly in the terminal
-- Verify configuration changes
-- Debug scan progress or results
-- Automate testing workflows
-
-**Note:** CLI invocations are independent processes. You can run CLI commands even while the GUI is open.
+Treeswift is a GUI application but can also be launched with command-line arguments for testing and automation. See README.md for complete CLI documentation.
 
 ## Code Formatting
 

@@ -6,7 +6,7 @@ A modern macOS tool for analyzing and organizing your Swift codebase.
 
 ## Requirements
 
-- macOS 15 "Sequoia" or higher
+- macOS 15.6 "Sequoia" or higher
 - Xcode (for building and for analyzing Xcode projects)
 
 ## Status
@@ -108,16 +108,6 @@ The CLI is useful for:
 ## Analysis Components
 
 Treeswift integrates the [Periphery](https://github.com/peripheryapp/periphery) static analysis engine as one component of its analysis capabilities. The app includes a recent version of Periphery as a git subtree, with modifications to enable deeper integration and enhanced analysis features.
-
-## Technical Details
-
-- **Language**: Swift 6.2
-- **Framework**: SwiftUI for macOS
-- **Minimum Deployment**: macOS 15.6+
-- **Architecture**: Three-column NavigationSplitView with persistent configuration management
-- **Analysis Engine**: Integrated static analysis components
-
-For detailed architecture information, see [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md).
 
 ## Contributing
 

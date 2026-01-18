@@ -42,32 +42,6 @@ struct CodeModificationHelper {
 	}
 
 	/**
-	 Errors that can occur during code modification operations.
-
-	 Note: This is deprecated. Use CodeModificationError instead.
-	 */
-	@available(*, deprecated, renamed: "CodeModificationError")
-	enum ModificationError: Error, LocalizedError {
-		case cannotReadFile
-		case cannotWriteFile
-		case invalidLineRange
-		case patternNotFound
-
-		var errorDescription: String? {
-			switch self {
-			case .cannotReadFile:
-				"Cannot read source file"
-			case .cannotWriteFile:
-				"Cannot write to source file"
-			case .invalidLineRange:
-				"Invalid line range"
-			case .patternNotFound:
-				"Pattern not found in source"
-			}
-		}
-	}
-
-	/**
 	 Removes redundant public keyword from a declaration.
 
 	 Uses regex to match "public" followed by any whitespace and replaces with empty string.
@@ -79,17 +53,17 @@ struct CodeModificationHelper {
 	) -> Result<ModificationResult, Error> {
 		let filePath = location.file.path.string
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
-			return .failure(ModificationError.cannotReadFile)
+			return .failure(CodeModificationError.cannotReadFile(filePath))
 		}
 
 		// Verify structural confirmation that 'public' modifier exists
 		guard declaration.modifiers.contains("public") else {
-			return .failure(ModificationError.patternNotFound)
+			return .failure(CodeModificationError.patternNotFound("public"))
 		}
 
 		var lines = fileContents.components(separatedBy: .newlines)
 		guard location.line > 0, location.line <= lines.count else {
-			return .failure(ModificationError.invalidLineRange)
+			return .failure(CodeModificationError.invalidLineRange(location.line, lines.count))
 		}
 
 		let lineIndex = location.line - 1
@@ -98,7 +72,7 @@ struct CodeModificationHelper {
 		// Match "public" followed by any whitespace (space, newline, tab, etc.)
 		let pattern = #"public\s+"#
 		guard let regex = try? NSRegularExpression(pattern: pattern) else {
-			return .failure(ModificationError.patternNotFound)
+			return .failure(CodeModificationError.patternNotFound("public"))
 		}
 
 		let range = NSRange(originalLine.startIndex..., in: originalLine)
@@ -115,7 +89,7 @@ struct CodeModificationHelper {
 		do {
 			try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
 		} catch {
-			return .failure(ModificationError.cannotWriteFile)
+			return .failure(CodeModificationError.cannotWriteFile(filePath))
 		}
 
 		return .success(ModificationResult(
@@ -141,12 +115,12 @@ struct CodeModificationHelper {
 	) -> Result<ModificationResult, Error> {
 		let filePath = location.file.path.string
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
-			return .failure(ModificationError.cannotReadFile)
+			return .failure(CodeModificationError.cannotReadFile(filePath))
 		}
 
 		let lines = fileContents.components(separatedBy: .newlines)
 		guard location.line > 0, location.line <= lines.count else {
-			return .failure(ModificationError.invalidLineRange)
+			return .failure(CodeModificationError.invalidLineRange(location.line, lines.count))
 		}
 
 		// Use CommentScanner to find the periphery:ignore comment
@@ -156,11 +130,11 @@ struct CodeModificationHelper {
 			backwardFrom: location.line,
 			maxDistance: 10
 		) else {
-			return .failure(ModificationError.patternNotFound)
+			return .failure(CodeModificationError.patternNotFound("periphery:ignore"))
 		}
 
 		// Determine deletion range
-		var startLine = ignoreLineNumber
+		let startLine = ignoreLineNumber
 		var endLine = ignoreLineNumber
 
 		// Check if there's a trailing blank line to remove
@@ -184,7 +158,7 @@ struct CodeModificationHelper {
 		do {
 			try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
 		} catch {
-			return .failure(ModificationError.cannotWriteFile)
+			return .failure(CodeModificationError.cannotWriteFile(filePath))
 		}
 
 		let linesRemoved = endLine - startLine + 1

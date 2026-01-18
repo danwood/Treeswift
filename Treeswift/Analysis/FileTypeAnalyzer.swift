@@ -15,7 +15,7 @@ final class FileTypeAnalyzer: Sendable {
 
 	nonisolated func enrichFilesWithTypeInfo(
 		fileNodes: [FileBrowserNode],
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		scanResults: [ScanResult]
 	) async -> [FileBrowserNode] {
 		// Build warning cache once for all files
@@ -41,7 +41,7 @@ final class FileTypeAnalyzer: Sendable {
 		await withTaskGroup(of: (Int, [FileTypeInfo]).self) { group in
 			for item in fileWorkItems {
 				group.addTask {
-					let typeInfos = await self.analyzeFile(path: item.path, graph: graph, warningCache: warningCache)
+					let typeInfos = await self.analyzeFile(path: item.path, sourceGraph: sourceGraph, warningCache: warningCache)
 					return (item.index, typeInfos)
 				}
 			}
@@ -64,7 +64,7 @@ final class FileTypeAnalyzer: Sendable {
 			if case var .directory(dir) = enrichedNodes[idx] {
 				let enrichedChildren = await enrichFilesWithTypeInfo(
 					fileNodes: dir.children,
-					graph: graph,
+					sourceGraph: sourceGraph,
 					scanResults: scanResults
 				)
 				dir.children = enrichedChildren
@@ -77,10 +77,10 @@ final class FileTypeAnalyzer: Sendable {
 
 	private nonisolated func analyzeFile(
 		path: String,
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		warningCache: [TypeWarningKey: TypeWarningStatus]
 	) async -> [FileTypeInfo] {
-		let allDeclarations = graph.allDeclarations
+		let allDeclarations = sourceGraph.allDeclarations
 
 		/* All top-level symbol kinds we track - includes types, typealiases, free functions,
 		 global variables, operators, precedence groups, and macros. */

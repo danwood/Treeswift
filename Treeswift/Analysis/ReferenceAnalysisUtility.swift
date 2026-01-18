@@ -42,7 +42,7 @@ nonisolated enum ReferenceAnalysisUtility {
 	static func analyzeSymbolReferences(
 		symbols: [Declaration],
 		sourcePath: String,
-		graph: SourceGraph
+		sourceGraph: SourceGraph
 	) -> ReferenceAnalysis {
 		var symbolReferences: [Declaration: Set<String>] = [:]
 		var allExternalFiles: Set<String> = []
@@ -50,7 +50,7 @@ nonisolated enum ReferenceAnalysisUtility {
 		var consolidatedRefs: Set<ConsolidatedReference> = []
 
 		for symbol in symbols {
-			let refs = graph.references(to: symbol)
+			let refs = sourceGraph.references(to: symbol)
 			var referencingFiles: Set<String> = []
 
 			for ref in refs {

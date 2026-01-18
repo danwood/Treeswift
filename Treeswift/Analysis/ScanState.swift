@@ -164,7 +164,7 @@ final class ScanState {
 									let scanResults = await MainActor.run { self.scanResults }
 									let typeEnrichedNodes = await fileAnalyzer.enrichFilesWithTypeInfo(
 										fileNodes: fileNodes,
-										graph: graph,
+										sourceGraph: graph,
 										scanResults: scanResults
 									)
 									"* ✓ Type analysis complete".logToConsole()
@@ -172,14 +172,14 @@ final class ScanState {
 									// Analyze file-level warnings for shared code
 									let fileWarningEnrichedNodes = await fileWarningAnalyzer.analyzeFiles(
 										nodes: typeEnrichedNodes,
-										graph: graph
+										sourceGraph: graph
 									)
 									"* ✓ File warning analysis complete".logToConsole()
 
 									// Perform folder analysis
 									let folderEnrichedNodes = await folderAnalyzer.analyzeFolders(
 										nodes: fileWarningEnrichedNodes,
-										graph: graph,
+										sourceGraph: graph,
 										projectPath: path
 									)
 									"* ✓ Folder analysis complete".logToConsole()
@@ -310,20 +310,20 @@ final class ScanState {
 				let scanResults = await MainActor.run { self.scanResults }
 				let typeEnrichedNodes = await fileAnalyzer.enrichFilesWithTypeInfo(
 					fileNodes: fileNodes,
-					graph: graph,
+					sourceGraph: graph,
 					scanResults: scanResults
 				)
 
 				// Analyze file-level warnings for shared code
 				let warningEnrichedNodes = await fileWarningAnalyzer.analyzeFiles(
 					nodes: typeEnrichedNodes,
-					graph: graph
+					sourceGraph: graph
 				)
 
 				// Analyze folder structure
 				let folderEnrichedNodes = await folderAnalyzer.analyzeFolders(
 					nodes: warningEnrichedNodes,
-					graph: graph,
+					sourceGraph: graph,
 					projectPath: path
 				)
 

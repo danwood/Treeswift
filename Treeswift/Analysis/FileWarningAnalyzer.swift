@@ -77,24 +77,24 @@ final class FileWarningAnalyzer: Sendable {
 
 	nonisolated func analyzeFiles(
 		nodes: [FileBrowserNode],
-		graph: SourceGraph
+		sourceGraph: SourceGraph
 	) async -> [FileBrowserNode] {
 		// Precompute declarations grouped by file to avoid scanning the whole graph per file
 		let declarationsByFile: [String: [Declaration]] = {
 			var dict: [String: [Declaration]] = [:]
-			for decl in graph.allDeclarations {
+			for decl in sourceGraph.allDeclarations {
 				let path = decl.location.file.path.string
 				dict[path, default: []].append(decl)
 			}
 			return dict
 		}()
 		let context = AnalysisContext(declarationsByFile: declarationsByFile)
-		return await analyzeFilesRecursive(nodes: nodes, graph: graph, context: context)
+		return await analyzeFilesRecursive(nodes: nodes, sourceGraph: sourceGraph, context: context)
 	}
 
 	private nonisolated func analyzeFilesRecursive(
 		nodes: [FileBrowserNode],
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		context: AnalysisContext
 	) async -> [FileBrowserNode] {
 		var analyzedNodes: [FileBrowserNode] = []
@@ -104,7 +104,7 @@ final class FileWarningAnalyzer: Sendable {
 			case let .directory(dir):
 				let enrichedChildren = await analyzeFilesRecursive(
 					nodes: dir.children,
-					graph: graph,
+					sourceGraph: sourceGraph,
 					context: context
 				)
 
@@ -115,7 +115,7 @@ final class FileWarningAnalyzer: Sendable {
 
 			case let .file(file):
 				var mutableFile = file
-				let analysisResult = analyzeFile(file: file, graph: graph, context: context)
+				let analysisResult = analyzeFile(file: file, sourceGraph: sourceGraph, context: context)
 				mutableFile.analysisWarnings = analysisResult.warnings
 				mutableFile.statistics = analysisResult.statistics
 
@@ -157,7 +157,7 @@ final class FileWarningAnalyzer: Sendable {
 
 	private nonisolated func analyzeFile(
 		file: FileBrowserFile,
-		graph: SourceGraph,
+		sourceGraph: SourceGraph,
 		context: AnalysisContext
 	) -> FileAnalysisResult {
 		// Get all symbols declared in this file from precomputed context
@@ -187,14 +187,14 @@ final class FileWarningAnalyzer: Sendable {
 		let crossFolderAnalysis = ReferenceAnalysisUtility.analyzeSymbolReferences(
 			symbols: fileSymbols,
 			sourcePath: folderPath, // Use folder path so references from same folder are excluded
-			graph: graph
+			sourceGraph: sourceGraph
 		)
 
 		// Analyze all references (excludes only same-file refs)
 		let allReferencesAnalysis = ReferenceAnalysisUtility.analyzeSymbolReferences(
 			symbols: fileSymbols,
 			sourcePath: file.path, // Use file path so only self-references are excluded
-			graph: graph
+			sourceGraph: sourceGraph
 		)
 
 		// Build per-symbol reference map (symbol name -> file names)
