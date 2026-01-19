@@ -12,6 +12,16 @@ import SystemPackage
 
 extension FileNode {
 	/**
+	 Statistics about deletion operations.
+	 */
+	struct DeletionStats {
+		let totalWarningsInFile: Int
+		let deletedCount: Int
+		let nonDeletableCount: Int
+		let failedIgnoreCommentsCount: Int
+	}
+
+	/**
 	 Result of removing all unused code from a file.
 	 */
 	struct RemovalResult {
@@ -23,6 +33,7 @@ extension FileNode {
 		let lineAdjustments: [Int]
 		let shouldDeleteFile: Bool
 		let shouldRemoveImports: Bool
+		let deletionStats: DeletionStats
 	}
 
 	/**
@@ -45,6 +56,30 @@ extension FileNode {
 				userInfo: [NSLocalizedDescriptionKey: "Cannot read file"]
 			))
 		}
+
+		// Count total warnings in this file (for statistics)
+		let allWarnings = scanResults.filter { result in
+			let declaration = result.declaration
+			let location = ScanResultHelper.location(from: declaration)
+			guard location.file.path.string == path else { return false }
+			if let filterState {
+				guard filterState.shouldShow(result: result, declaration: declaration) else {
+					return false
+				}
+			}
+			return true
+		}
+		let totalWarningsInFile = allWarnings.count
+
+		// Count non-deletable warnings
+		let nonDeletableWarnings = allWarnings.filter { result in
+			let declaration = result.declaration
+			let location = ScanResultHelper.location(from: declaration)
+			let hasFullRange = location.endLine != nil && location.endColumn != nil
+			let isImport = declaration.kind == .module
+			return !result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport)
+		}
+		let nonDeletableCount = nonDeletableWarnings.count
 
 		// Filter and sort warnings for this file (bottom to top)
 		let fileWarnings = scanResults
@@ -93,6 +128,7 @@ extension FileNode {
 		var removedWarningIDs: [String] = []
 		var adjustedUSRs: [String] = []
 		var lineAdjustments: [Int] = []
+		var failedIgnoreCommentsCount = 0
 
 		for (result, declaration, location) in fileWarnings {
 			// Generate warning ID
@@ -133,6 +169,7 @@ extension FileNode {
 					}
 					lineAdjustments.append(linesRemoved)
 				case .failure:
+					failedIgnoreCommentsCount += 1
 					continue
 				}
 			} else if declaration.kind == .module {
@@ -212,7 +249,13 @@ extension FileNode {
 			adjustedUSRs: adjustedUSRs,
 			lineAdjustments: lineAdjustments,
 			shouldDeleteFile: shouldDeleteFile,
-			shouldRemoveImports: shouldRemoveImports
+			shouldRemoveImports: shouldRemoveImports,
+			deletionStats: DeletionStats(
+				totalWarningsInFile: totalWarningsInFile,
+				deletedCount: removedWarningIDs.count,
+				nonDeletableCount: nonDeletableCount,
+				failedIgnoreCommentsCount: failedIgnoreCommentsCount
+			)
 		))
 	}
 

@@ -28,7 +28,22 @@ struct PeripheryTreeView: View {
 	@State private var showProgressSheet = false
 	@State private var resultIndex = ScanResultIndex()
 	@State private var cachedVisibleItems: [String] = []
+	@State private var removalSummary: RemovalSummary?
 	@Environment(\.undoManager) private var undoManager
+
+	/**
+	 Summary of deletion operations for alert display.
+	 */
+	struct RemovalSummary: Identifiable {
+		let id = UUID()
+		let deletedCount: Int
+		let nonDeletableCount: Int
+		let failedIgnoreCommentsCount: Int
+		let fileCount: Int
+		let targetName: String
+	}
+
+	fileprivate static let removeAllUnusedCodeLabel = "Remove All Unused Code"
 
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
@@ -127,6 +142,13 @@ struct PeripheryTreeView: View {
 			)
 			.interactiveDismissDisabled()
 		}
+		.alert(item: $removalSummary) { summary in
+			Alert(
+				title: Text("Deletion Summary"),
+				message: Text(buildSummaryMessage(summary)),
+				dismissButton: .default(Text("OK"))
+			)
+		}
 	}
 
 	private func recomputeFilteredNodes() {
@@ -177,6 +199,34 @@ struct PeripheryTreeView: View {
 			return nil
 		}
 		return TreeCopyFormatter.formatForCopy(node: node, scanResults: scanResults, filterState: filterState)
+	}
+
+	/**
+	 Builds the alert message for removal summary.
+
+	 Includes deletion counts, non-deletable warnings, and manual deletion requirements.
+	 Shows file count when more than one file was processed.
+	 */
+	private func buildSummaryMessage(_ summary: RemovalSummary) -> String {
+		var message = "\(summary.targetName)\n\n"
+
+		// Show file count if more than one file
+		if summary.fileCount > 1 {
+			message += "Processed \(summary.fileCount) files\n\n"
+		}
+
+		message += "✓ Deleted: \(summary.deletedCount) warning\(summary.deletedCount == 1 ? "" : "s")\n"
+
+		if summary.nonDeletableCount > 0 {
+			message += "⚠️ Non-deletable: \(summary.nonDeletableCount) warning\(summary.nonDeletableCount == 1 ? "" : "s") "
+			message += "(assign-only property, redundant protocol)\n"
+		}
+
+		if summary.failedIgnoreCommentsCount > 0 {
+			message += "⚠️ Manual deletion needed: \(summary.failedIgnoreCommentsCount) ignore comment\(summary.failedIgnoreCommentsCount == 1 ? "" : "s")\n"
+		}
+
+		return message
 	}
 
 	private func filterNode(_ node: TreeNode, with filterState: FilterState) -> TreeNode? {
@@ -560,6 +610,15 @@ struct PeripheryTreeView: View {
 				)
 			}
 
+			// Show deletion summary
+			removalSummary = RemovalSummary(
+				deletedCount: removalResult.deletionStats.deletedCount,
+				nonDeletableCount: removalResult.deletionStats.nonDeletableCount,
+				failedIgnoreCommentsCount: removalResult.deletionStats.failedIgnoreCommentsCount,
+				fileCount: 1,
+				targetName: file.name
+			)
+
 		case let .failure(error):
 			print("Failed to remove unused code: \(error.localizedDescription)")
 		}
@@ -604,7 +663,7 @@ struct PeripheryTreeView: View {
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performRedo()
 				}
-				undoManager?.setActionName("Remove All Unused Code")
+				undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 			}
 		}
 
@@ -642,7 +701,7 @@ struct PeripheryTreeView: View {
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performUndo()
 				}
-				undoManager?.setActionName("Remove All Unused Code")
+				undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 			}
 		}
 
@@ -650,7 +709,7 @@ struct PeripheryTreeView: View {
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
-		undoManager?.setActionName("Remove All Unused Code")
+		undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 	}
 
 	/**
@@ -786,6 +845,10 @@ struct PeripheryTreeView: View {
 				fileID: String
 			)] = []
 			var allRemovedWarningIDs: [String] = []
+			var totalDeleted = 0
+			var totalNonDeletable = 0
+			var totalFailedIgnores = 0
+			var filesProcessed = 0
 
 			await processFilesWithProgress(filesToProcess) { file in
 				// Process file
@@ -821,6 +884,12 @@ struct PeripheryTreeView: View {
 
 					allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
 
+					// Accumulate statistics
+					totalDeleted += removalResult.deletionStats.deletedCount
+					totalNonDeletable += removalResult.deletionStats.nonDeletableCount
+					totalFailedIgnores += removalResult.deletionStats.failedIgnoreCommentsCount
+					filesProcessed += 1
+
 				case let .failure(error):
 					// Only log if it's not the "no removable warnings" case
 					let nsError = error as NSError
@@ -854,6 +923,17 @@ struct PeripheryTreeView: View {
 			// Register undo/redo
 			if !fileModifications.isEmpty {
 				registerRemoveAllInFolderUndo(fileModifications: fileModifications)
+			}
+
+			// Show deletion summary if any files were processed
+			if filesProcessed > 0 {
+				removalSummary = RemovalSummary(
+					deletedCount: totalDeleted,
+					nonDeletableCount: totalNonDeletable,
+					failedIgnoreCommentsCount: totalFailedIgnores,
+					fileCount: filesProcessed,
+					targetName: folder.name
+				)
 			}
 		}
 	}
@@ -901,7 +981,7 @@ struct PeripheryTreeView: View {
 			undoManager?.registerUndo(withTarget: NSObject()) { _ in
 				performRedo()
 			}
-			undoManager?.setActionName("Remove All Unused Code")
+			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 		}
 
 		// Define redo action
@@ -940,14 +1020,14 @@ struct PeripheryTreeView: View {
 			undoManager?.registerUndo(withTarget: NSObject()) { _ in
 				performUndo()
 			}
-			undoManager?.setActionName("Remove All Unused Code")
+			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 		}
 
 		// Register initial undo
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
-		undoManager?.setActionName("Remove All Unused Code")
+		undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 	}
 
 	/**
@@ -1115,7 +1195,7 @@ private struct TreeNodeView: View {
 
 					Divider()
 
-					Button("Remove All Unused Code") {
+					Button(PeripheryTreeView.removeAllUnusedCodeLabel) {
 						onRemoveAllUnusedCodeInFolder(folder)
 					}
 
@@ -1180,7 +1260,7 @@ private struct TreeNodeView: View {
 
 				Divider()
 
-				Button("Remove All Unused Code") {
+				Button(PeripheryTreeView.removeAllUnusedCodeLabel) {
 					onRemoveAllUnusedCode(file)
 				}
 

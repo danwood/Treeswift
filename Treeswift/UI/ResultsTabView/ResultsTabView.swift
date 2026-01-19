@@ -17,7 +17,7 @@ enum ResultsTab: String, CaseIterable, Sendable {
 }
 
 extension EnvironmentValues {
-	@Entry var refreshFileTree: (() -> Void)? = nil
+	@Entry var refreshFileTree: (() -> Void)?
 	@Entry var peripheryFilterState: FilterState? = nil
 }
 

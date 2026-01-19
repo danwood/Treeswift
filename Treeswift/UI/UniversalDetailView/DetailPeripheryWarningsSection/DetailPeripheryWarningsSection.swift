@@ -656,6 +656,39 @@ struct PeripheryWarningRow: View {
 		)
 	}
 
+	/**
+	 Determines if the superfluous ignore comment can be deleted.
+
+	 Returns true if the ignore comment can be found, false otherwise.
+	 For non-superfluous-ignore warnings, always returns true.
+	 */
+	private var canDeleteSuperfluousIgnore: Bool {
+		if result.annotation != .superfluousIgnoreCommand {
+			return true
+		}
+		return canFindSuperfluousIgnoreComment()
+	}
+
+	/**
+	 Checks if the periphery:ignore comment can be found for this declaration.
+
+	 Searches backward from the declaration line using the same logic as
+	 CodeModificationHelper.removeSuperfluousIgnoreComment().
+	 */
+	private func canFindSuperfluousIgnoreComment() -> Bool {
+		let filePath = location.file.path.string
+		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
+			return false
+		}
+		let lines = fileContents.components(separatedBy: .newlines)
+		return CommentScanner.findCommentContaining(
+			pattern: "periphery:ignore",
+			in: lines,
+			backwardFrom: location.line,
+			maxDistance: 10
+		) != nil
+	}
+
 	private func DeleteButton() -> some View {
 		let label = switch result.annotation {
 		case .unused: "Delete declaration"
@@ -688,12 +721,15 @@ struct PeripheryWarningRow: View {
 			} else if result.annotation.isRedundantPublic {
 				"Remove public keyword"
 			} else if result.annotation == .superfluousIgnoreCommand {
-				"Remove Superfluous ignore command"
+				canDeleteSuperfluousIgnore
+					? "Remove Superfluous ignore command"
+					: "Can't find comment - must be deleted manually"
 			} else {
 				""
 			}
 		}())
-		.disabled(result.annotation == .unused && !canDelete)
+		.disabled((result.annotation == .unused && !canDelete) ||
+			(result.annotation == .superfluousIgnoreCommand && !canDeleteSuperfluousIgnore))
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
 

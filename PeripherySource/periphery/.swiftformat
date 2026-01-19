@@ -10,3 +10,6 @@
 --enable blankLinesAfterGuardStatements
 --enable blankLinesAroundMark
 --enable blankLinesBetweenImports
+--enable nil-init remove
+--enable redundantNilInit
+

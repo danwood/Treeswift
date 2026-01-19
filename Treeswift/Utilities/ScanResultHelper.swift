@@ -13,8 +13,6 @@ import SwiftUI
 import SystemPackage
 
 struct ScanResultHelper {
-	// Access internal properties via Mirror reflection
-
 	nonisolated static func location(from declaration: Declaration) -> Location {
 		// Check for comment command overrides first
 		for command in declaration.commentCommands {
