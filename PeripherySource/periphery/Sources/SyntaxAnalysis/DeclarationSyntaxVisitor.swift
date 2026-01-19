@@ -27,7 +27,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
     private let sourceLocationBuilder: SourceLocationBuilder
     private let typeSyntaxInspector: TypeSyntaxInspector
     private let swiftVersion: SwiftVersion
-    private(set) var results: [Result] = []
+    private var results: [Result] = []
 
     public var resultsByLocation: [Location: Result] {
         results.reduce(into: [Location: Result]()) { dict, result in
@@ -235,7 +235,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         }
     }
 
-    func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?) {
+    private func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?) {
         let elements = Array(pattern.elements)
         let types: [TupleTypeElementSyntax?] = typeTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)
         let initializers: [LabeledExprSyntax?] = initializerTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)
@@ -332,7 +332,13 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         ,
         endPosition: AbsolutePosition? = nil
     ) {
-        let modifierNames = modifiers?.map(\.name.text) ?? []
+        let modifierNames: [String] = modifiers?.map { modifier in
+            let name = modifier.name.text
+            if let detail = modifier.detail?.detail.text {
+                return "\(name)(\(detail))"
+            }
+            return name
+        } ?? []
         let accessibility = modifierNames.mapFirst { Accessibility(rawValue: $0) }
 
         var parsedAttributes: Set<DeclarationAttribute> = []
