@@ -5,6 +5,45 @@ import SystemPackage
 // Helper for intelligently deleting declarations from source files
 struct DeclarationDeletionHelper {
 	/**
+	 Detects if a line contains a complete declaration.
+
+	 A declaration line contains keywords like var, let, func, struct, etc.
+	 Distinguishes between attribute lines (@State var foo) which ARE declarations,
+	 and pure attribute lines (@FetchRequest(...)) which are NOT declarations.
+	 */
+	private static func isDeclarationLine(_ line: String) -> Bool {
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+		// Declaration keywords that indicate a complete declaration
+		let declarationKeywords = [
+			"var ", "let ", "func ",
+			"struct ", "class ", "enum ", "protocol ", "actor ",
+			"init(", "init ", "deinit ", "subscript ",
+			"typealias ", "associatedtype "
+		]
+
+		// Check if line contains a declaration keyword
+		for keyword in declarationKeywords {
+			if trimmed.contains(keyword) {
+				// Make sure it's not just an attribute line like "@State private var"
+				// If the line starts with @, check if there's a keyword AFTER the @Attribute
+				if trimmed.hasPrefix("@") {
+					// This might be "@State var foo" which IS a declaration
+					// Find the attribute name and check what comes after
+					if let spaceIndex = trimmed.firstIndex(of: " ") {
+						let afterAttribute = String(trimmed[trimmed.index(after: spaceIndex)...])
+						// Check if keyword appears after the attribute
+						return declarationKeywords.contains { afterAttribute.contains($0) }
+					}
+					return false
+				}
+				return true
+			}
+		}
+		return false
+	}
+
+	/**
 	 Find the first line to delete by looking backwards from the declaration.
 
 	 Uses declaration metadata to know which attributes to look for, then scans
@@ -49,6 +88,11 @@ struct DeclarationDeletionHelper {
 
 			// Stop at blank lines
 			if line.isEmpty {
+				break
+			}
+
+			// Stop if we hit another declaration
+			if isDeclarationLine(line) {
 				break
 			}
 
@@ -116,6 +160,11 @@ struct DeclarationDeletionHelper {
 
 			// Stop at blank lines - we don't want to delete spacing
 			if line.isEmpty {
+				break
+			}
+
+			// Stop if we hit another declaration
+			if isDeclarationLine(line) {
 				break
 			}
 
