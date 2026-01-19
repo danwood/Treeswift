@@ -4,10 +4,18 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 ## Base Version
 
-- **Upstream**: https://github.com/peripheryapp/periphery
-- **Base commit**: 4dd2a038 (clean upstream 5a4ac8b, post-3.4.0 release)
+- **Upstream**: https://github.com/danwood/periphery (branch: all-fixes)
+- **Base commit**: 8ebf4a42 (includes post-3.4.0 + additional fixes)
+- **Previous upstream**: https://github.com/peripheryapp/periphery (commit 5a4ac8b)
 - **Current modifications**: 17 files changed, 488 insertions, 25 deletions
-- **Migration**: Applied via patch from 3.2.0 baseline, manually updated for 3.4.0+ API changes
+- **Migration**: Switched from peripheryapp/periphery to danwood/periphery all-fixes branch
+
+**What's in the all-fixes branch:**
+- All changes from upstream periphery post-3.4.0
+- #Preview macro unused code detection (unless --retain-swift-ui-previews)
+- Redundant nested access detection
+- Redundant internal/fileprivate accessibility markers
+- Accessibility warning fixes and CI improvements
 
 ## Modification Categories
 
@@ -281,47 +289,50 @@ By maintaining a local modified copy of the package, we can:
 
 ## Git Subtree Management
 
-The `PeripherySource/periphery` directory is managed as a **git subtree** tracking upstream Periphery changes.
+The `PeripherySource/periphery` directory is managed as a **git subtree** tracking danwood/periphery changes.
 
-**Setup (already done):**
+**Current Setup:**
 ```bash
-# Add upstream remote
-git remote add periphery-upstream https://github.com/peripheryapp/periphery.git
+# Configured remotes
+git remote add periphery-upstream https://github.com/peripheryapp/periphery.git  # Original upstream
+git remote add danwood-fork https://github.com/danwood/periphery                 # Current source
 
-# Current baseline: clean upstream 5a4ac8b (post-3.4.0) at commit 4dd2a038
+# Current baseline: 8ebf4a42 from danwood/periphery all-fixes branch
 ```
 
-**To update to a newer released version of Periphery:**
+**To update to the latest all-fixes branch:**
 
 ```bash
-# Example: Pull a specific version tag (e.g., version 3.5.0)
-git subtree pull --prefix=PeripherySource/periphery periphery-upstream 3.5.0 --squash
+# Pull the latest all-fixes branch from danwood fork
+git fetch danwood-fork all-fixes
+git subtree pull --prefix=PeripherySource/periphery danwood-fork all-fixes --squash
 
 # After the merge, verify local modifications are still present
+# Resolve any conflicts, prioritizing Treeswift modifications
 
-# If modifications were overwritten, re-apply them using the patch workflow below
-# Commit any re-applied modifications
+# Stage changes
 git add PeripherySource/periphery/
-git commit -m "Re-apply local modifications after periphery update to 3.5.0"
+git commit -m "Update subtree to latest danwood/periphery all-fixes"
 ```
 
-**To update to the latest development code (master branch):**
+**To switch back to upstream peripheryapp/periphery:**
 
 ```bash
-# Pull the latest master branch
+# Pull from the original upstream
 git subtree pull --prefix=PeripherySource/periphery periphery-upstream master --squash
 
 # After the merge, verify and re-apply local modifications if needed
 git add PeripherySource/periphery/
-git commit -m "Re-apply local modifications after periphery update to master"
+git commit -m "Switch subtree back to peripheryapp/periphery upstream"
 ```
 
 **Git subtree workflow:**
-- The `periphery-upstream` remote points to `https://github.com/peripheryapp/periphery`
+- The `danwood-fork` remote currently points to `https://github.com/danwood/periphery`
+- The `periphery-upstream` remote still points to `https://github.com/peripheryapp/periphery`
 - Updates are pulled with `git subtree pull` and squashed into a single commit
-- Your local modifications are preserved in separate commits on top
+- Treeswift modifications are preserved in separate commits on top
 - When merging new upstream versions, git will attempt to preserve your changes
-- If conflicts occur, resolve them and re-apply modifications as needed
+- If conflicts occur, resolve them prioritizing Treeswift modifications
 
 **Benefits of git subtree:**
 - Keeps the complete periphery source code in your repository
@@ -418,17 +429,17 @@ When updating to a newer Periphery version:
 To see all Treeswift modifications to Periphery (excluding upstream changes):
 
 ```bash
-# View all local modifications
-git diff 4dd2a038 HEAD -- PeripherySource/periphery/
+# View all local modifications against danwood fork baseline
+git diff danwood-fork/all-fixes HEAD -- PeripherySource/periphery/
 
 # Generate patch file
-git diff 4dd2a038 HEAD -- PeripherySource/periphery/ > current_modifications.patch
+git diff danwood-fork/all-fixes HEAD -- PeripherySource/periphery/ > current_modifications.patch
 
 # View statistics
-git diff 4dd2a038 HEAD -- PeripherySource/periphery/ --stat
+git diff --stat danwood-fork/all-fixes HEAD -- PeripherySource/periphery/
 ```
 
-**Note**: Commit `4dd2a038` is the clean upstream baseline (5a4ac8b). All diffs against this commit show only Treeswift modifications, not upstream Periphery development.
+**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery all-fixes branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
 
 ## References
 
