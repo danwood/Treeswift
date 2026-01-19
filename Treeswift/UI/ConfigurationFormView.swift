@@ -314,6 +314,11 @@ struct ConfigurationFormView: View {
 
 		availableSchemes = await XcodeSchemeReader.schemes(forProjectAt: projectPath)
 		isLoadingSchemes = false
+
+		// Auto-select the scheme if there's only one and none is currently selected
+		if availableSchemes.count == 1, configuration.schemes.isEmpty {
+			configuration.schemes = availableSchemes
+		}
 	}
 
 	private func displayNameForPath(_ path: String) -> String {
@@ -346,11 +351,15 @@ struct ConfigurationFormView: View {
 				let projectURL: URL?
 				let projectType: ProjectType?
 
-				if url.hasDirectoryPath {
-					// It's a folder - search for project files
+				if url.isValidProjectFile {
+					// It's a project/workspace bundle or Package.swift - use directly
+					projectURL = url
+					projectType = url.detectedProjectType
+				} else if url.hasDirectoryPath {
+					// It's a folder - search for project files inside
 					let fm = FileManager.default
 
-					// Check for .xcodeproj first (priority)
+					// Check for .xcodeproj or .xcworkspace first (priority)
 					if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
 					   let xcodeproj = contents.first(where: {
 					   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
@@ -368,14 +377,9 @@ struct ConfigurationFormView: View {
 						projectType = nil
 					}
 				} else {
-					// It's a file - validate and detect type
-					if url.isValidProjectFile {
-						projectURL = url
-						projectType = url.detectedProjectType
-					} else {
-						projectURL = nil
-						projectType = nil
-					}
+					// Not a valid project
+					projectURL = nil
+					projectType = nil
 				}
 
 				guard let projectURL, let projectType else {

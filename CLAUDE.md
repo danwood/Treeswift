@@ -20,8 +20,20 @@ Treeswift is a GUI application but can also be launched with command-line argume
 
 ## Code Formatting
 
-**Use .editorconfig** - Always check the project's `.editorconfig` file for indentation settings. For this project:
-- Swift files: Use **tabs** (not spaces) for indentation
+### Indentation Rules - CRITICAL
+
+**All code in this project uses TABS**, with ONE critical exception:
+
+- **Treeswift code (everything except PeripherySource/)**: Use **TABS** for indentation
+  - All Swift files in the main project
+  - All configuration files (unless otherwise specified in .editorconfig)
+
+- **PeripherySource/ directory ONLY**: Use **4 SPACES** per indentation level
+  - This directory contains a git subtree to the upstream Periphery repository
+  - The upstream project uses spaces, so we must match that convention
+  - This applies to ALL files within PeripherySource/ and its subdirectories
+
+**Use .editorconfig** - Check the project's `.editorconfig` file for specific settings:
 - Markdown: Use spaces (2)
 - JSON/YAML: Use spaces (2)
 
