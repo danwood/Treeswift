@@ -65,7 +65,16 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 	}
 
 	static func == (lhs: CategoriesNode, rhs: CategoriesNode) -> Bool {
-		lhs.id == rhs.id
+		switch (lhs, rhs) {
+		case let (.section(lhsNode), .section(rhsNode)):
+			lhsNode == rhsNode
+		case let (.declaration(lhsNode), .declaration(rhsNode)):
+			lhsNode == rhsNode
+		case let (.syntheticRoot(lhsNode), .syntheticRoot(rhsNode)):
+			lhsNode == rhsNode
+		default:
+			false
+		}
 	}
 }
 
@@ -79,7 +88,7 @@ struct SectionNode: Identifiable, Hashable, Sendable {
 	}
 
 	static func == (lhs: SectionNode, rhs: SectionNode) -> Bool {
-		lhs.id == rhs.id
+		lhs.id == rhs.id && lhs.children == rhs.children
 	}
 }
 
@@ -116,7 +125,7 @@ struct DeclarationNode: Identifiable, Hashable, Sendable {
 	}
 
 	static func == (lhs: DeclarationNode, rhs: DeclarationNode) -> Bool {
-		lhs.id == rhs.id
+		lhs.id == rhs.id && lhs.children == rhs.children
 	}
 }
 
@@ -131,7 +140,7 @@ struct SyntheticRootNode: Identifiable, Hashable, Sendable {
 	}
 
 	static func == (lhs: SyntheticRootNode, rhs: SyntheticRootNode) -> Bool {
-		lhs.id == rhs.id
+		lhs.id == rhs.id && lhs.children == rhs.children
 	}
 }
 
