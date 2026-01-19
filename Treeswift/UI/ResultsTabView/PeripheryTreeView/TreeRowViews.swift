@@ -30,8 +30,91 @@ struct FileRowView: View {
 	let scanResults: [ScanResult]
 	let removingFileIDs: Set<String>
 	let hiddenWarningIDs: Set<String>
+	var resultIndex: ScanResultIndex?
 
 	private var visibleBadges: [Badge] {
+		// Use index if available for better performance
+		if let resultIndex {
+			return visibleBadgesFromIndex(resultIndex)
+		}
+
+		// Fall back to original implementation
+		return visibleBadgesLegacy()
+	}
+
+	private func visibleBadgesFromIndex(_ index: ScanResultIndex) -> [Badge] {
+		struct CounterKey: Hashable {
+			let swiftType: SwiftType
+			let isUnused: Bool
+		}
+
+		// Fixed display order
+		let orderIndex: [SwiftType: Int] = [
+			.struct: 0,
+			.class: 1,
+			.enum: 2,
+			.typealias: 3,
+			.extension: 4,
+			.parameter: 5,
+			.property: 6,
+			.initializer: 7,
+			.function: 8
+		]
+
+		// Get filtered results in one pass using the index
+		let visibleResults = index.filteredResults(
+			forFile: file.path,
+			filterState: filterState,
+			hiddenWarningIDs: hiddenWarningIDs
+		)
+
+		// Count by (SwiftType, isUnused)
+		var counts: [CounterKey: Int] = [:]
+		counts.reserveCapacity(visibleResults.count)
+
+		for result in visibleResults {
+			let declaration = result.declaration
+			let swiftType = SwiftType.from(declarationKind: declaration.kind)
+			let key = CounterKey(swiftType: swiftType, isUnused: result.annotation == .unused)
+			counts[key, default: 0] += 1
+		}
+
+		// Build badges in desired order (unused first for each type)
+		var badges: [Badge] = []
+		badges.reserveCapacity(counts.count)
+
+		for swiftType in SwiftType.allCases {
+			// Unused first
+			let unusedKey = CounterKey(swiftType: swiftType, isUnused: true)
+			if let unusedCount = counts[unusedKey], unusedCount > 0 {
+				badges.append(Badge(
+					letter: swiftType.rawValue,
+					count: unusedCount,
+					swiftType: swiftType,
+					isUnused: true
+				))
+			}
+			// Then other
+			let otherKey = CounterKey(swiftType: swiftType, isUnused: false)
+			if let otherCount = counts[otherKey], otherCount > 0 {
+				badges.append(Badge(
+					letter: swiftType.rawValue,
+					count: otherCount,
+					swiftType: swiftType,
+					isUnused: false
+				))
+			}
+		}
+
+		// Stable sort by order index (cheap, small array)
+		return badges.sorted { lhs, rhs in
+			let l = orderIndex[lhs.swiftType] ?? Int.max
+			let r = orderIndex[rhs.swiftType] ?? Int.max
+			return l < r
+		}
+	}
+
+	private func visibleBadgesLegacy() -> [Badge] {
 		struct CounterKey: Hashable {
 			let swiftType: SwiftType
 			let isUnused: Bool

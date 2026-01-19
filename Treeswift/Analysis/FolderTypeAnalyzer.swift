@@ -236,7 +236,11 @@ final class FolderTypeAnalyzer: Sendable {
 		folderPath: String,
 		sourceGraph: SourceGraph
 	) -> ReferenceAnalysis {
-		ReferenceAnalysisUtility.analyzeSymbolReferences(symbols: symbols, sourcePath: folderPath, sourceGraph: sourceGraph)
+		ReferenceAnalysisUtility.analyzeSymbolReferences(
+			symbols: symbols,
+			sourcePath: folderPath,
+			sourceGraph: sourceGraph
+		)
 	}
 
 	// If possible, classify as symbol folder or its more specialized view folder

@@ -26,6 +26,8 @@ struct PeripheryTreeView: View {
 	@State private var hiddenWarningIDs: Set<String> = []
 	@State private var fileOperationProgress = FileOperationProgressState()
 	@State private var showProgressSheet = false
+	@State private var resultIndex = ScanResultIndex()
+	@State private var cachedVisibleItems: [String] = []
 	@Environment(\.undoManager) private var undoManager
 
 	var body: some View {
@@ -41,6 +43,7 @@ struct PeripheryTreeView: View {
 					selectedID: $selectedID,
 					removingFileIDs: $removingFileIDs,
 					hiddenWarningIDs: hiddenWarningIDs,
+					resultIndex: resultIndex,
 					onIgnoreAllWarnings: ignoreAllWarnings,
 					onRemoveAllUnusedCode: removeAllUnusedCode,
 					onIgnoreAllWarningsInFolder: ignoreAllWarningsInFolder,
@@ -54,10 +57,7 @@ struct PeripheryTreeView: View {
 		}
 		.focusableTreeNavigation(
 			selectedID: $selectedID,
-			visibleItems: TreeKeyboardNavigation.buildVisibleItemList(
-				nodes: filteredNodesCache,
-				expandedIDs: expandedIDs
-			),
+			visibleItems: cachedVisibleItems,
 			claimFocusTrigger: $claimFocusTrigger
 		)
 		.focusedValue(\.copyableText, currentCopyableText(from: filteredNodesCache))
@@ -67,7 +67,9 @@ struct PeripheryTreeView: View {
 			return [NSItemProvider(object: text as NSString)]
 		}
 		.onAppear {
+			resultIndex.rebuild(from: scanResults)
 			recomputeFilteredNodes()
+			rebuildVisibleItemsCache()
 			// Only expand on first appearance to avoid re-expanding when switching tabs
 			if expandedIDs.isEmpty {
 				expandToFileLevel(using: rootNodes)
@@ -85,9 +87,11 @@ struct PeripheryTreeView: View {
 			recomputeFilteredNodes()
 		}
 		.onChange(of: filterState?.filterChangeCounter) { _, _ in
+			resultIndex.invalidateCache(for: filterState)
 			recomputeFilteredNodes()
 		}
 		.onChange(of: scanResults) {
+			resultIndex.rebuild(from: scanResults)
 			recomputeFilteredNodes()
 		}
 		.onChange(of: hiddenFileIDs) {
@@ -95,6 +99,12 @@ struct PeripheryTreeView: View {
 		}
 		.onChange(of: hiddenWarningIDs) {
 			recomputeFilteredNodes()
+		}
+		.onChange(of: filteredNodesCache) {
+			rebuildVisibleItemsCache()
+		}
+		.onChange(of: expandedIDs) {
+			rebuildVisibleItemsCache()
 		}
 		.onReceive(NotificationCenter.default
 			.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
@@ -127,6 +137,13 @@ struct PeripheryTreeView: View {
 		}
 		// Always update - SwiftUI will handle diff efficiently
 		filteredNodesCache = newFiltered
+	}
+
+	private func rebuildVisibleItemsCache() {
+		cachedVisibleItems = TreeKeyboardNavigation.buildVisibleItemList(
+			nodes: filteredNodesCache,
+			expandedIDs: expandedIDs
+		)
 	}
 
 	private func expandToFileLevel(using nodes: [TreeNode]) {
@@ -176,21 +193,13 @@ struct PeripheryTreeView: View {
 				return nil
 			}
 
-			// Check if ANY warning in scanResults for this file matches the filter AND is not hidden
-			let hasMatchingWarnings = scanResults.contains { result in
-				let declaration = result.declaration
-				let location = ScanResultHelper.location(from: declaration)
-
-				// Check if warning is for this file and passes filter
-				guard location.file.path.string == file.path else { return false }
-				guard filterState.shouldShow(result: result, declaration: declaration) else { return false }
-
-				// Check if warning is not individually hidden
-				let usr = declaration.usrs.first ?? ""
-				let warningID = "\(location.file.path.string):\(usr)"
-				return !hiddenWarningIDs.contains(warningID)
-			}
-			return hasMatchingWarnings ? node : nil
+			// Use index to get filtered results for this file
+			let filteredResults = resultIndex.filteredResults(
+				forFile: file.path,
+				filterState: filterState,
+				hiddenWarningIDs: hiddenWarningIDs
+			)
+			return filteredResults.isEmpty ? nil : node
 		}
 	}
 
@@ -435,21 +444,16 @@ struct PeripheryTreeView: View {
 
 	/**
 	 Counts warnings in a tree node respecting the current filter state.
+	 Uses the result index for efficient filtering.
 	 */
 	private func countWarnings(in node: TreeNode) -> Int {
 		switch node {
 		case let .file(file):
-			scanResults.count(where: { result in
-				let declaration = result.declaration
-				let location = ScanResultHelper.location(from: declaration)
-
-				guard location.file.path.string == file.path else { return false }
-				guard filterState?.shouldShow(result: result, declaration: declaration) ?? true else { return false }
-
-				let usr = declaration.usrs.first ?? ""
-				let warningID = "\(location.file.path.string):\(usr)"
-				return !hiddenWarningIDs.contains(warningID)
-			})
+			resultIndex.filteredResults(
+				forFile: file.path,
+				filterState: filterState,
+				hiddenWarningIDs: hiddenWarningIDs
+			).count
 
 		case let .folder(folder):
 			folder.children.reduce(0) { $0 + countWarnings(in: $1) }
@@ -997,24 +1001,19 @@ struct PeripheryTreeView: View {
 
 	/**
 	 Collects all file nodes that have warnings from a tree node.
+	 Uses the result index for efficient filtering.
 	 */
 	private func collectFilesWithWarnings(from node: TreeNode, into files: inout [FileNode]) {
 		switch node {
 		case let .file(file):
-			// Check if file has any visible warnings
-			let hasWarnings = scanResults.contains { result in
-				let declaration = result.declaration
-				let location = ScanResultHelper.location(from: declaration)
+			// Check if file has any visible warnings using the index
+			let filteredResults = resultIndex.filteredResults(
+				forFile: file.path,
+				filterState: filterState,
+				hiddenWarningIDs: hiddenWarningIDs
+			)
 
-				guard location.file.path.string == file.path else { return false }
-				guard filterState?.shouldShow(result: result, declaration: declaration) ?? true else { return false }
-
-				let usr = declaration.usrs.first ?? ""
-				let warningID = "\(location.file.path.string):\(usr)"
-				return !hiddenWarningIDs.contains(warningID)
-			}
-
-			if hasWarnings {
+			if !filteredResults.isEmpty {
 				files.append(file)
 			}
 
@@ -1035,6 +1034,7 @@ private struct TreeNodeView: View {
 	@Binding var removingFileIDs: Set<String>
 	let hiddenWarningIDs: Set<String>
 	var indentLevel: Int = 0
+	let resultIndex: ScanResultIndex
 	let onIgnoreAllWarnings: (FileNode) -> Void
 	let onRemoveAllUnusedCode: (FileNode) -> Void
 	let onIgnoreAllWarningsInFolder: (FolderNode) -> Void
@@ -1059,6 +1059,7 @@ private struct TreeNodeView: View {
 						removingFileIDs: $removingFileIDs,
 						hiddenWarningIDs: hiddenWarningIDs,
 						indentLevel: indentLevel + 1,
+						resultIndex: resultIndex,
 						onIgnoreAllWarnings: onIgnoreAllWarnings,
 						onRemoveAllUnusedCode: onRemoveAllUnusedCode,
 						onIgnoreAllWarningsInFolder: onIgnoreAllWarningsInFolder,
@@ -1139,7 +1140,8 @@ private struct TreeNodeView: View {
 					filterState: filterState,
 					scanResults: scanResults,
 					removingFileIDs: removingFileIDs,
-					hiddenWarningIDs: hiddenWarningIDs
+					hiddenWarningIDs: hiddenWarningIDs,
+					resultIndex: resultIndex
 				)
 			}
 			.treeLabelPadding(indentLevel: indentLevel)

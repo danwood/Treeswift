@@ -254,7 +254,10 @@ final class PeripheryScanRunner: Sendable {
 					// Categories: Sequential streaming (7 sections)
 					let categoriesTask = Task {
 						_ = Dumper()
-							.buildCategoriesStreaming(sourceGraph: sourceGraph, projectRootPath: projectRootPath) { section in
+							.buildCategoriesStreaming(
+								sourceGraph: sourceGraph,
+								projectRootPath: projectRootPath
+							) { section in
 								continuation.yield(.categoriesSectionAdded(section))
 							}
 						if let data = "* ✓ Categories streaming complete\n".data(using: .utf8) {

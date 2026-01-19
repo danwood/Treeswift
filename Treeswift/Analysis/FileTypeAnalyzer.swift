@@ -41,7 +41,11 @@ final class FileTypeAnalyzer: Sendable {
 		await withTaskGroup(of: (Int, [FileTypeInfo]).self) { group in
 			for item in fileWorkItems {
 				group.addTask {
-					let typeInfos = await self.analyzeFile(path: item.path, sourceGraph: sourceGraph, warningCache: warningCache)
+					let typeInfos = await self.analyzeFile(
+						path: item.path,
+						sourceGraph: sourceGraph,
+						warningCache: warningCache
+					)
 					return (item.index, typeInfos)
 				}
 			}

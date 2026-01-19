@@ -176,7 +176,8 @@ final class Dumper: Sendable {
 
 			// Check if parent uses child in a type annotation
 			let hasTypeAnnotationReference = sameFileReferences.contains { (ref: Reference) in
-				ref.declarationKind == .varInstance || ref.declarationKind == .varGlobal || ref.declarationKind == .varLocal
+				ref.declarationKind == .varInstance || ref.declarationKind == .varGlobal || ref
+					.declarationKind == .varLocal
 			}
 			if hasTypeAnnotationReference {
 				return .type
@@ -269,7 +270,10 @@ final class Dumper: Sendable {
 	}
 
 	/// Given a type and a graph, returns all declarations that reference this type.
-	private nonisolated func referencingDeclarations(for type: Declaration, in sourceGraph: SourceGraph) -> [Declaration] {
+	private nonisolated func referencingDeclarations(
+		for type: Declaration,
+		in sourceGraph: SourceGraph
+	) -> [Declaration] {
 		let references = sourceGraph.references(to: type).sorted { $0.location < $1.location }
 
 		// Walk up from each Reference's parent to find the nearest owning Declaration
@@ -426,7 +430,10 @@ final class Dumper: Sendable {
 	}
 
 	/// Checks if a function embeds a ViewModifier by looking for the .modifier() pattern
-	private nonisolated func isViewModifierEmbeddingFunction(_ funcDecl: Declaration, sourceGraph _: SourceGraph) -> Bool {
+	private nonisolated func isViewModifierEmbeddingFunction(
+		_ funcDecl: Declaration,
+		sourceGraph _: SourceGraph
+	) -> Bool {
 		// Look for references to "modifier" method calls within this function
 		let hasModifierCall = funcDecl.references.contains { (ref: Reference) in
 			ref.name == "modifier" && ref.declarationKind == .functionMethodInstance
