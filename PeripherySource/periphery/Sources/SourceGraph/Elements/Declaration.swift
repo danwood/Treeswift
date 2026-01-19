@@ -213,9 +213,9 @@ public final class Declaration: @unchecked Sendable {
             }
         }
     }
-	
-	public var location: Location	// 🌲 FIXME: Can we return this back to a 'let'?
-	public var attributes: Set<DeclarationAttribute> = []
+    
+    public var location: Location    // 🌲 FIXME: Can we return this back to a 'let'?
+    public var attributes: Set<DeclarationAttribute> = []
     public var modifiers: Set<String> = []
     public var accessibility: DeclarationAccessibility = .init(value: .internal, isExplicit: false)
     public let kind: Kind

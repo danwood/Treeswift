@@ -5,13 +5,13 @@ public class Location: @unchecked Sendable {
     public let file: SourceFile
     public let line: Int
     public let column: Int
-	public let endLine: Int?
-	public let endColumn: Int?
+    public let endLine: Int?
+    public let endColumn: Int?
 
     private let hashValueCache: Int
 
-	// 🌲 Updated to handle end location as well.
-	public init(file: SourceFile, line: Int, column: Int, endLine: Int? = nil, endColumn: Int? = nil) {
+    // 🌲 Updated to handle end location as well.
+    public init(file: SourceFile, line: Int, column: Int, endLine: Int? = nil, endColumn: Int? = nil) {
         self.file = file
         self.line = line
         self.column = column
@@ -25,21 +25,21 @@ public class Location: @unchecked Sendable {
         let newPath = file.path.relativeTo(path)
         let newFile = SourceFile(path: newPath, modules: file.modules)
         newFile.importStatements = file.importStatements
-		return Location(file: newFile, line: line, column: column
-						, endLine: endLine, endColumn: endColumn)
+        return Location(file: newFile, line: line, column: column
+                        , endLine: endLine, endColumn: endColumn)
     }
 
     // MARK: - Private
 
-	private func buildDescription(path: String) -> String {
-		// 🌲 Now includes end location
-		var components = [path, line.description, column.description]
-		if let endLine = endLine, let endColumn = endColumn {
-			components.append(endLine.description)
-			components.append(endColumn.description)
-		}
-		return components.joined(separator: ":")
-	}
+    private func buildDescription(path: String) -> String {
+        // 🌲 Now includes end location
+        var components = [path, line.description, column.description]
+        if let endLine = endLine, let endColumn = endColumn {
+            components.append(endLine.description)
+            components.append(endColumn.description)
+        }
+        return components.joined(separator: ":")
+    }
 
     private lazy var descriptionInternal: String = buildDescription(path: file.path.string)
 

@@ -46,7 +46,7 @@ final class Scan {
         try build(driver)
         try index(driver)
         try analyze()
-		return(buildResults(), graph) // 🌲 Return a duple
+        return(buildResults(), graph) // 🌲 Return a duple
     }
 
     // MARK: - Private
@@ -66,8 +66,8 @@ final class Scan {
     }
 
     private func index(_ driver: ProjectDriver) throws {
-		try Task.checkCancellation()
-		progressDelegate?.didStartIndexing()
+        try Task.checkCancellation()
+        progressDelegate?.didStartIndexing()
         let indexInterval = logger.beginInterval("index")
 
         if configuration.outputFormat.supportsAuxiliaryOutput {
@@ -84,8 +84,8 @@ final class Scan {
     }
 
     private func analyze() throws {
-		try Task.checkCancellation()
-		progressDelegate?.didStartAnalyzing()
+        try Task.checkCancellation()
+        progressDelegate?.didStartAnalyzing()
         let analyzeInterval = logger.beginInterval("analyze")
 
         if configuration.outputFormat.supportsAuxiliaryOutput {

@@ -200,9 +200,9 @@ let package = Package(
         .executable(name: "periphery", targets: ["Frontend"]),
         .library(name: "PeripheryKit", targets: ["PeripheryKit"]),
 
-		// 🌲 MODIFICATION: Additional library products exposed for external package integration
-		// These internal modules are exposed to allow Treeswift and other consumers
-		// to import and use Periphery's internals directly for deep integration
+        // 🌲 MODIFICATION: Additional library products exposed for external package integration
+        // These internal modules are exposed to allow Treeswift and other consumers
+        // to import and use Periphery's internals directly for deep integration
         .library(name: "Configuration", targets: ["Configuration"]),
         .library(name: "SourceGraph", targets: ["SourceGraph"]),
         .library(name: "Shared", targets: ["Shared"]),

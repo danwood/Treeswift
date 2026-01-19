@@ -87,7 +87,7 @@ extension OutputFormatter {
     }
 
     func locationDescription(_ location: Location) -> String {
-		// 🌲 Updated algorithm includes end location
+        // 🌲 Updated algorithm includes end location
         var components = [
             outputPath(location).string,
             String(location.line),

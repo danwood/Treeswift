@@ -21,14 +21,14 @@
             configuration: Configuration,
             shell: Shell,
             logger: Logger
-			, progressDelegate: ScanProgressDelegate? = nil
+            , progressDelegate: ScanProgressDelegate? = nil
        ) throws {
             if configuration.outputFormat.supportsAuxiliaryOutput {
                 let asterisk = logger.colorize("*", .boldGreen)
                 logger.info("\(asterisk) Inspecting project...")
             }
 
-			// 🌲 Remove "Inspecting project..." output; use progressDelegate instead
+            // 🌲 Remove "Inspecting project..." output; use progressDelegate instead
             let xcodebuild = Xcodebuild(shell: shell, logger: logger)
 
             guard !configuration.schemes.isEmpty else {
@@ -114,8 +114,8 @@
                     logger.info("\(asterisk) Building \(scheme)...")
                 }
 
-				// 🌲 Remove "Building \(scheme)..." output; use progressDelegate instead
-				try Task.checkCancellation()
+                // 🌲 Remove "Building \(scheme)..." output; use progressDelegate instead
+                try Task.checkCancellation()
                 progressDelegate?.didStartBuilding(scheme: scheme)
 
                 try xcodebuild.build(project: project,
@@ -135,7 +135,7 @@
 
             let targets = project.targets
             try targets.forEach { try $0.identifyFiles() }
-			// 🌲 Below changed from mapSet(\.name) to targetNameToModuleName($0.name) to convert space to _
+            // 🌲 Below changed from mapSet(\.name) to targetNameToModuleName($0.name) to convert space to _
             let excludedTestTargets = configuration.excludeTests ? project.targets.filter(\.isTestTarget).mapSet { targetNameToModuleName($0.name) } : []
             let collector = SourceFileCollector(
                 indexStorePaths: indexStorePaths,

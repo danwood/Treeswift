@@ -400,16 +400,16 @@ final class SwiftIndexer: Indexer {
 
         private func applyDeclarationMetadata(to decl: Declaration, with result: DeclarationSyntaxVisitor.Result) {
             graph.withLock { _ in
-				// 🌲 Update location with end positions if available. FIXME: Can we do this atomically elsewhere so location can be let?
-				if let endLine = result.location.endLine, let endColumn = result.location.endColumn {
-					decl.location = Location(
-						file: decl.location.file,
-						line: decl.location.line,
-						column: decl.location.column,
-						endLine: endLine,
-						endColumn: endColumn
-					)
-				}
+                // 🌲 Update location with end positions if available. FIXME: Can we do this atomically elsewhere so location can be let?
+                if let endLine = result.location.endLine, let endColumn = result.location.endColumn {
+                    decl.location = Location(
+                        file: decl.location.file,
+                        line: decl.location.line,
+                        column: decl.location.column,
+                        endLine: endLine,
+                        endColumn: endColumn
+                    )
+                }
 
                 if let accessibility = result.accessibility {
                     decl.accessibility = .init(value: accessibility, isExplicit: true)

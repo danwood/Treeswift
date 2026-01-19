@@ -244,7 +244,7 @@ struct ScanCommand: ParsableCommand {
         let updateChecker = UpdateChecker(logger: logger, configuration: configuration)
         updateChecker.run()
 
-        let (results, graph) = try Scan(	// 🌲 Scan now returns a duple
+        let (results, graph) = try Scan(    // 🌲 Scan now returns a duple
             configuration: configuration,
             logger: logger,
             swiftVersion: swiftVersion
