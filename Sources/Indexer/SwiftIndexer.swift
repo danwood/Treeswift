@@ -88,12 +88,12 @@ final class SwiftIndexer: Indexer {
     private final class Job {
         let sourceFile: SourceFile
 
-        private let units: [IndexUnit]
-        private let graph: SourceGraphMutex
-        private let logger: ContextualLogger
-        private let configuration: Configuration
-        private var retainAllDeclarations: Bool
-        private let swiftVersion: SwiftVersion
+        let units: [IndexUnit]
+        let graph: SourceGraphMutex
+        let logger: ContextualLogger
+        let configuration: Configuration
+        var retainAllDeclarations: Bool
+        let swiftVersion: SwiftVersion
 
         required init(
             sourceFile: SourceFile,
@@ -276,16 +276,14 @@ final class SwiftIndexer: Indexer {
             applyCommentCommands(using: multiplexingSyntaxVisitor)
         }
 
-        // MARK: - Private
+        var declarations: [Declaration] = []
+        var childDeclsByParentUsr: [String: Set<Declaration>] = [:]
+        var referencesByUsr: [String: Set<Reference>] = [:]
+        var danglingReferences: [Reference] = []
+        var varParameterUsrs: Set<String> = []
+        var extensionUsrMap: [String: String] = [:]
 
-        private var declarations: [Declaration] = []
-        private var childDeclsByParentUsr: [String: Set<Declaration>] = [:]
-        private var referencesByUsr: [String: Set<Reference>] = [:]
-        private var danglingReferences: [Reference] = []
-        private var varParameterUsrs: Set<String> = []
-        private var extensionUsrMap: [String: String] = [:]
-
-        private func establishDeclarationHierarchy() {
+        func establishDeclarationHierarchy() {
             graph.withLock { graph in
                 for (parent, decls) in childDeclsByParentUsr {
                     guard let parentDecl = graph.declaration(withUsr: parent) else {
@@ -306,7 +304,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func associateLatentReferences() {
+        func associateLatentReferences() {
             for (usr, refs) in referencesByUsr {
                 graph.withLock { graph in
                     if let decl = graph.declaration(withUsr: usr) {
@@ -322,7 +320,7 @@ final class SwiftIndexer: Indexer {
 
         // Swift does not associate some type references with the containing declaration, resulting in references
         // with no clear parent. Property references are one example: https://github.com/apple/swift/issues/56163
-        private func associateDanglingReferences() {
+        func associateDanglingReferences() {
             guard !danglingReferences.isEmpty else { return }
 
             let explicitDeclarations = declarations.filter { !$0.isImplicit }
@@ -367,7 +365,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func applyCommentCommands(using syntaxVisitor: MultiplexingSyntaxVisitor) {
+        func applyCommentCommands(using syntaxVisitor: MultiplexingSyntaxVisitor) {
             let fileCommands = syntaxVisitor.parseComments()
 
             if fileCommands.contains(.ignoreAll) {
@@ -379,7 +377,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func visitDeclarations(using declarationVisitor: DeclarationSyntaxVisitor) {
+        func visitDeclarations(using declarationVisitor: DeclarationSyntaxVisitor) {
             let declarationsByLocation = declarationVisitor.resultsByLocation
 
             for decl in declarations {
@@ -389,7 +387,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func applyDeclarationMetadata(to decl: Declaration, with result: DeclarationSyntaxVisitor.Result) {
+        func applyDeclarationMetadata(to decl: Declaration, with result: DeclarationSyntaxVisitor.Result) {
             graph.withLock { _ in
                 if let accessibility = result.accessibility {
                     decl.accessibility = .init(value: accessibility, isExplicit: true)
@@ -434,7 +432,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func retainHierarchy(_ decls: [Declaration], markExplicitlyIgnored: Bool = false) {
+        func retainHierarchy(_ decls: [Declaration], markExplicitlyIgnored: Bool = false) {
             for decl in decls {
                 graph.withLock { graph in
                     graph.markRetained(decl)
@@ -448,13 +446,13 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func associate(_ ref: Reference, with decl: Declaration) {
+        func associate(_ ref: Reference, with decl: Declaration) {
             graph.withLock { _ in
                 associateUnsafe(ref, with: decl)
             }
         }
 
-        private func associateUnsafe(_ ref: Reference, with decl: Declaration) {
+        func associateUnsafe(_ ref: Reference, with decl: Declaration) {
             ref.parent = decl
 
             if ref.kind == .related {
@@ -464,7 +462,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func identifyUnusedParameters(using syntaxVisitor: MultiplexingSyntaxVisitor) {
+        func identifyUnusedParameters(using syntaxVisitor: MultiplexingSyntaxVisitor) {
             let functionDecls = declarations.filter(\.kind.isFunctionKind)
             let functionDeclsByLocation = functionDecls.reduce(into: [Location: Declaration]()) {
                 $0[$1.location] = $1
@@ -517,7 +515,7 @@ final class SwiftIndexer: Indexer {
             }
         }
 
-        private func parseRawDeclaration(
+        func parseRawDeclaration(
             _ occurrence: IndexStoreOccurrence,
             _ usr: String,
             _ location: Location,
@@ -566,7 +564,7 @@ final class SwiftIndexer: Indexer {
             return (decl, rawRelations)
         }
 
-        private func parseDeclaration(
+        func parseDeclaration(
             _ decl: Declaration,
             _ relations: [RawRelation]
         ) throws -> Set<Reference> {
@@ -622,7 +620,7 @@ final class SwiftIndexer: Indexer {
             return references
         }
 
-        private func parseImplicit(
+        func parseImplicit(
             _ occurrenceUsr: String,
             _ location: Location,
             _ relations: [IndexStoreRelation]
@@ -650,7 +648,7 @@ final class SwiftIndexer: Indexer {
             return refs
         }
 
-        private func parseReference(
+        func parseReference(
             _ occurrence: IndexStoreOccurrence,
             _ occurrenceUsr: String,
             _ location: Location,
@@ -703,11 +701,11 @@ final class SwiftIndexer: Indexer {
             return refs
         }
 
-        private func transformLocation(_ input: IndexStoreOccurrence.Location) throws -> Location? {
+        func transformLocation(_ input: IndexStoreOccurrence.Location) throws -> Location? {
             Location(file: sourceFile, line: Int(input.line), column: Int(input.column))
         }
 
-        private func transformDeclarationKind(_ kind: IndexStoreSymbol.Kind, _ subKind: IndexStoreSymbol.SubKind) -> Declaration.Kind? {
+        func transformDeclarationKind(_ kind: IndexStoreSymbol.Kind, _ subKind: IndexStoreSymbol.SubKind) -> Declaration.Kind? {
             switch subKind {
             case .accessorGetter: return .functionAccessorGetter
             case .accessorSetter: return .functionAccessorSetter

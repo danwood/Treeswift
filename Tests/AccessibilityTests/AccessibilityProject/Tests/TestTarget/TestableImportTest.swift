@@ -13,4 +13,8 @@ class TestableImportTest: XCTestCase {
         let cls = NotRedundantPublicTestableImportClass()
         print(cls.testableProperty ?? "")
     }
+
+    func testRedundantAccessibilityComponents() {
+        _ = RedundantAccessibilityComponents()
+    }
 }
