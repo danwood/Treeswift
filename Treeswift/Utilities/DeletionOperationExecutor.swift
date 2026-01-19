@@ -123,7 +123,7 @@ struct DeletionOperationExecutor {
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) -> Result<Void, Error> {
-		guard let endLine = location.endLine, let _ = location.endColumn else {
+		guard let endLine = location.endLine, location.endColumn != nil else {
 			return .failure(NSError(
 				domain: "DeletionOperationExecutor",
 				code: 3,

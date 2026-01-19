@@ -64,14 +64,16 @@ enum TreeKeyboardNavigation {
 
 			// If this node is expandable and expanded, recurse into children
 			if node.isExpandable, expandedIDs.contains(node.navigationID) {
-				collectVisibleIDs(
-					from: node.childNodes as! [T],
-					expandedIDs: expandedIDs,
-					into: &list,
-					showFolderPrivateFiles: showFolderPrivateFiles,
-					showAllFolders: showAllFolders,
-					isFolderPrivateCheck: isFolderPrivateCheck
-				)
+				if let children = node.childNodes as? [T] {
+					collectVisibleIDs(
+						from: children,
+						expandedIDs: expandedIDs,
+						into: &list,
+						showFolderPrivateFiles: showFolderPrivateFiles,
+						showAllFolders: showAllFolders,
+						isFolderPrivateCheck: isFolderPrivateCheck
+					)
+				}
 			}
 		}
 	}

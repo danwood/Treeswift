@@ -6,6 +6,7 @@
 --wraparguments before-first
 --wrapparameters before-first
 --stripunusedargs closure-only
+--trimWhitespace always
 
 --swiftversion 6.2
 
@@ -14,4 +15,5 @@
 --disable wrapMultilineStatementBraces
 --disable enumNamespaces
 
+--enable redundantNilInit
 

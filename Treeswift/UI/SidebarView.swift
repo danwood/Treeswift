@@ -219,7 +219,7 @@ struct SidebarView: View {
 }
 
 #Preview {
-	@Previewable @State var selectedID: UUID? = nil
+	@Previewable @State var selectedID: UUID?
 	NavigationSplitView {
 		SidebarView(
 			configManager: ConfigurationManager(),

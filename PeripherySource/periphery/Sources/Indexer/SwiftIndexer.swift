@@ -389,7 +389,7 @@ final class SwiftIndexer: Indexer {
                     key.line == decl.location.line &&
                     key.column == decl.location.column
                 }?.value
-                
+                 
                 guard let result = matchingResult else { 
                     continue 
                 }

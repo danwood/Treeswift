@@ -1,5 +1,6 @@
 excluded:
   - "**/.build"
+  - "PeripherySource/**"
 
 opt_in_rules:
   - single_test_class
@@ -33,3 +34,14 @@ disabled_rules:
   - balanced_xctest_lifecycle
   - todo
   - for_where
+
+
+  # Dan
+  - multiple_closures_with_trailing_closure
+  - vertical_parameter_alignment
+
+# configurable rules can be customized from this configuration file
+# binary rules can set their severity level
+# force_cast: warning # implicitly
+force_try:
+  severity: warning # explicitly

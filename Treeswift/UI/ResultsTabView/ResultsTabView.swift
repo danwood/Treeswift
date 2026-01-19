@@ -18,7 +18,7 @@ enum ResultsTab: String, CaseIterable, Sendable {
 
 extension EnvironmentValues {
 	@Entry var refreshFileTree: (() -> Void)?
-	@Entry var peripheryFilterState: FilterState? = nil
+	@Entry var peripheryFilterState: FilterState?
 }
 
 struct ResultsTabView: View {
