@@ -195,7 +195,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         // from the conforming declaration to the protocol requirement. If this declaration
         // has any related references pointing to protocol members with matching names,
         // it's implementing a protocol requirement.
-        let relatedReferences = graph.references(to: decl).filter(\.isRelated)
+        let relatedReferences = graph.references(to: decl).filter { $0.kind == .related }
         for ref in relatedReferences {
             if let protocolDecl = graph.declaration(withUsr: ref.usr),
                protocolDecl.kind.isProtocolMemberKind || protocolDecl.kind == .associatedtype
@@ -207,7 +207,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         // Alternative check: Look for related references FROM this declaration
         // to protocol members. The ProtocolConformanceReferenceBuilder inverts
         // these relationships, so we might find them either direction.
-        for ref in decl.related where ref.kind.isProtocolMemberConformingKind {
+        for ref in decl.related where ref.declarationKind.isProtocolMemberConformingKind {
             if let referencedDecl = graph.declaration(withUsr: ref.usr),
                let referencedParent = referencedDecl.parent,
                referencedParent.kind == .protocol
@@ -249,7 +249,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             let siblings = parent.declarations
             let hasFunctionReference = siblings.contains { sibling in
                 sibling.kind.isFunctionKind && sibling.references.contains { ref in
-                    ref.kind == .typealias && decl.usrs.contains(ref.usr)
+                    ref.declarationKind == .typealias && decl.usrs.contains(ref.usr)
                 }
             }
             if hasFunctionReference {
