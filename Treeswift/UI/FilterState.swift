@@ -265,14 +265,14 @@ final class FilterState {
 	}
 
 	/// Check if a warning should be shown based on current filter settings
-	func shouldShow(result: ScanResult, declaration: Declaration) -> Bool {
+	func shouldShow(scanResult: ScanResult, declaration: Declaration) -> Bool {
 		// Check top-level filter
 		if topLevelOnly, declaration.parent != nil {
 			return false
 		}
 
 		// Check annotation filter
-		let annotationString = result.annotation.stringValue
+		let annotationString = scanResult.annotation.stringValue
 		if let keyPath = annotationFilterMap[annotationString] {
 			if !self[keyPath: keyPath] {
 				return false

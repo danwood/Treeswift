@@ -141,10 +141,10 @@ struct FileRowView: View {
 		}
 
 		// 2) Apply filter state (if present)
-		let filteredResults: [ScanResult] = fileResults.filter { result in
+		let filteredResults: [ScanResult] = fileResults.filter { scanResult in
 			guard let filterState else { return true }
-			let declaration = result.declaration
-			return filterState.shouldShow(result: result, declaration: declaration)
+			let declaration = scanResult.declaration
+			return filterState.shouldShow(scanResult: scanResult, declaration: declaration)
 		}
 
 		// 3) Filter out hidden warnings

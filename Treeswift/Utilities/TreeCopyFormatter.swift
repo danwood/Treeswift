@@ -109,8 +109,8 @@ enum TreeCopyFormatter {
 		case let .file(file):
 			// Filter warnings for this specific file
 			let fileWarnings = scanResults
-				.compactMap { result -> (result: ScanResult, declaration: Declaration, location: Location)? in
-					let declaration = result.declaration
+				.compactMap { scanResult -> (scanResult: ScanResult, declaration: Declaration, location: Location)? in
+					let declaration = scanResult.declaration
 					let location = ScanResultHelper.location(from: declaration)
 
 					// Match file path
@@ -118,10 +118,11 @@ enum TreeCopyFormatter {
 
 					// Apply filter state if present
 					if let filterState {
-						guard filterState.shouldShow(result: result, declaration: declaration) else { return nil }
+						guard filterState.shouldShow(scanResult: scanResult, declaration: declaration)
+						else { return nil }
 					}
 
-					return (result, declaration, location)
+					return (scanResult, declaration, location)
 				}
 				.sorted { lhs, rhs in
 					// Sort by line number, then column number
@@ -132,10 +133,10 @@ enum TreeCopyFormatter {
 				}
 
 			// Format each warning in Xcode format
-			for (result, declaration, location) in fileWarnings {
+			for (scanResult, declaration, location) in fileWarnings {
 				let warningLine = ScanResultHelper.formatPlainTextWarning(
 					declaration: declaration,
-					annotation: result.annotation,
+					scanResult: scanResult,
 					location: location
 				)
 				lines.append(warningLine)

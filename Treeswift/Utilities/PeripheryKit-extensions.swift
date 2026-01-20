@@ -35,7 +35,10 @@ extension ScanResult.Annotation {
 		case .assignOnlyProperty: "assignOnlyProperty"
 		case .redundantProtocol: "redundantProtocol"
 		case .redundantPublicAccessibility: "redundantPublicAccessibility"
+		case .redundantInternalAccessibility: "redundantInternalAccessibility"
+		case .redundantFilePrivateAccessibility: "redundantFilePrivateAccessibility"
 		case .superfluousIgnoreCommand: "superfluousIgnoreCommand"
+		case .redundantAccessibility: "redundantAccessibility"
 		}
 	}
 
@@ -49,12 +52,15 @@ extension ScanResult.Annotation {
 		switch self {
 		case .unused:
 			hasFullRange || isImport
-		case .redundantPublicAccessibility:
+		case .redundantPublicAccessibility,
+		     .redundantInternalAccessibility,
+		     .redundantFilePrivateAccessibility,
+		     .redundantAccessibility:
 			true
 		case .assignOnlyProperty, .redundantProtocol:
 			false
 		case .superfluousIgnoreCommand:
-			true
+			true // FIXME: We can try to remove, though it may not work if it's not positioned as expected
 		}
 	}
 }
@@ -70,6 +76,9 @@ extension ScanResult.Annotation: @retroactive RawRepresentable {
 		case .redundantProtocol: 2
 		case .redundantPublicAccessibility: 3
 		case .superfluousIgnoreCommand: 4
+		case .redundantInternalAccessibility: 5
+		case .redundantFilePrivateAccessibility: 6
+		case .redundantAccessibility: 7
 		}
 	}
 

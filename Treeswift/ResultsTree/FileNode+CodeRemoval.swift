@@ -57,12 +57,12 @@ extension FileNode {
 		}
 
 		// Count total warnings in this file (for statistics)
-		let allWarnings = scanResults.filter { result in
-			let declaration = result.declaration
+		let allWarnings = scanResults.filter { scanResult in
+			let declaration = scanResult.declaration
 			let location = ScanResultHelper.location(from: declaration)
 			guard location.file.path.string == path else { return false }
 			if let filterState {
-				guard filterState.shouldShow(result: result, declaration: declaration) else {
+				guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
 					return false
 				}
 			}
@@ -82,8 +82,8 @@ extension FileNode {
 
 		// Filter and sort warnings for this file (bottom to top)
 		let fileWarnings = scanResults
-			.compactMap { result -> (result: ScanResult, declaration: Declaration, location: Location)? in
-				let declaration = result.declaration
+			.compactMap { scanResult -> (result: ScanResult, declaration: Declaration, location: Location)? in
+				let declaration = scanResult.declaration
 				let location = ScanResultHelper.location(from: declaration)
 
 				// Match file path
@@ -91,7 +91,7 @@ extension FileNode {
 
 				// Apply filter state if provided
 				if let filterState {
-					guard filterState.shouldShow(result: result, declaration: declaration) else {
+					guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
 						return nil
 					}
 				}
@@ -99,11 +99,11 @@ extension FileNode {
 				// Check if code can be removed for this warning
 				let hasFullRange = location.endLine != nil && location.endColumn != nil
 				let isImport = declaration.kind == .module
-				guard result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) else {
+				guard scanResult.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) else {
 					return nil
 				}
 
-				return (result, declaration, location)
+				return (scanResult, declaration, location)
 			}
 			.sorted { lhs, rhs in
 				// Sort bottom to top (highest line first)

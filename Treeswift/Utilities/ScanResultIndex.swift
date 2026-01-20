@@ -103,11 +103,11 @@ final class ScanResultIndex {
 		hiddenWarningIDs: Set<String>,
 		filePath: String
 	) -> [ScanResult] {
-		results.filter { result in
-			let declaration = result.declaration
+		results.filter { scanResult in
+			let declaration = scanResult.declaration
 
 			// Apply filter state if present
-			if let filterState, !filterState.shouldShow(result: result, declaration: declaration) {
+			if let filterState, !filterState.shouldShow(scanResult: scanResult, declaration: declaration) {
 				return false
 			}
 

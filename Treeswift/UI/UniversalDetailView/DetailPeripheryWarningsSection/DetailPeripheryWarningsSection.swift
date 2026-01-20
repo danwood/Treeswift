@@ -39,8 +39,8 @@ struct DetailPeripheryWarningsSection: View {
 	// Filter warnings for this specific file and sort by line:column
 	private var fileWarnings: [(result: ScanResult, declaration: Declaration)] {
 		scanResults
-			.compactMap { result -> (result: ScanResult, declaration: Declaration)? in
-				let declaration = result.declaration
+			.compactMap { scanResult -> (result: ScanResult, declaration: Declaration)? in
+				let declaration = scanResult.declaration
 				let location = ScanResultHelper.location(from: declaration)
 
 				// Match file path
@@ -48,12 +48,12 @@ struct DetailPeripheryWarningsSection: View {
 
 				// Apply filter state if provided
 				if let filterState {
-					guard filterState.shouldShow(result: result, declaration: declaration) else {
+					guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
 						return nil
 					}
 				}
 
-				return (result, declaration)
+				return (scanResult, declaration)
 			}
 			.sorted { lhs, rhs in
 				// Sort by line number, then column number for logical reading order
@@ -88,7 +88,7 @@ struct DetailPeripheryWarningsSection: View {
 				Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 4) {
 					ForEach(Array(fileWarnings.enumerated()), id: \.offset) { _, tuple in
 						PeripheryWarningRow(
-							result: tuple.result,
+							scanResult: tuple.result,
 							declaration: tuple.declaration,
 							showDetails: showDetails,
 							sourceGraph: sourceGraph,
@@ -125,7 +125,7 @@ struct DetailPeripheryWarningsSection: View {
 
 // Individual warning row with clickable badge and selectable text - shared component
 struct PeripheryWarningRow: View {
-	let result: ScanResult
+	let scanResult: ScanResult
 	let declaration: Declaration
 	let showDetails: Bool
 	let sourceGraph: SourceGraph?
@@ -148,14 +148,14 @@ struct PeripheryWarningRow: View {
 			letter: swiftType.rawValue,
 			count: 1,
 			swiftType: swiftType,
-			isUnused: result.annotation == .unused
+			isUnused: scanResult.annotation == .unused
 		)
 	}
 
 	private var warningText: AttributedString {
 		ScanResultHelper.formatAttributedDescription(
 			declaration: declaration,
-			annotation: result.annotation
+			scanResult: scanResult
 		)
 	}
 
@@ -284,13 +284,13 @@ struct PeripheryWarningRow: View {
 		}
 
 		// For redundant public warnings, highlight the "public " keyword instead of the symbol
-		if result.annotation.isRedundantPublic {
+		if scanResult.annotation.isRedundantPublic {
 			return ScanResultHelper.highlightRedundantPublicInLine(line: lineText)
 		}
 
 		// For superfluous ignore commands, show entire line in secondary color (no highlighting)
 		// since we're removing the comment, not the declaration
-		if result.annotation == .superfluousIgnoreCommand {
+		if scanResult.annotation == .superfluousIgnoreCommand {
 			var result = AttributedString(lineText)
 			result.font = .system(.caption, design: .monospaced)
 			result.foregroundColor = Color.secondary
@@ -663,7 +663,7 @@ struct PeripheryWarningRow: View {
 	 For non-superfluous-ignore warnings, always returns true.
 	 */
 	private var canDeleteSuperfluousIgnore: Bool {
-		if result.annotation != .superfluousIgnoreCommand {
+		if scanResult.annotation != .superfluousIgnoreCommand {
 			return true
 		}
 		return canFindSuperfluousIgnoreComment()
@@ -690,7 +690,7 @@ struct PeripheryWarningRow: View {
 	}
 
 	private func DeleteButton() -> some View {
-		let label = switch result.annotation {
+		let label = switch scanResult.annotation {
 		case .unused: "Delete declaration"
 		case .redundantPublicAccessibility: "Remove public keyword"
 		case .superfluousIgnoreCommand: "Delete Periphery Ignore command"
@@ -701,11 +701,11 @@ struct PeripheryWarningRow: View {
 			label,
 			systemImage: "trash",
 			action: {
-				if result.annotation == .unused {
+				if scanResult.annotation == .unused {
 					deleteDeclaration()
-				} else if result.annotation.isRedundantPublic {
+				} else if scanResult.annotation.isRedundantPublic {
 					fixRedundantPublic()
-				} else if result.annotation == .superfluousIgnoreCommand {
+				} else if scanResult.annotation == .superfluousIgnoreCommand {
 					fixSuperfluousIgnoreCommand()
 				}
 			}
@@ -716,11 +716,11 @@ struct PeripheryWarningRow: View {
 		.frame(width: 16, height: 16)
 		.buttonStyle(.plain)
 		.help({
-			if result.annotation == .unused {
+			if scanResult.annotation == .unused {
 				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
-			} else if result.annotation.isRedundantPublic {
+			} else if scanResult.annotation.isRedundantPublic {
 				"Remove public keyword"
-			} else if result.annotation == .superfluousIgnoreCommand {
+			} else if scanResult.annotation == .superfluousIgnoreCommand {
 				canDeleteSuperfluousIgnore
 					? "Remove Superfluous ignore command"
 					: "Can't find comment - must be deleted manually"
@@ -728,8 +728,8 @@ struct PeripheryWarningRow: View {
 				""
 			}
 		}())
-		.disabled((result.annotation == .unused && !canDelete) ||
-			(result.annotation == .superfluousIgnoreCommand && !canDeleteSuperfluousIgnore))
+		.disabled((scanResult.annotation == .unused && !canDelete) ||
+			(scanResult.annotation == .superfluousIgnoreCommand && !canDeleteSuperfluousIgnore))
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
 
@@ -747,11 +747,11 @@ struct PeripheryWarningRow: View {
 
 	private func ActionButtons() -> some View {
 		HStack(spacing: 4) {
-			if result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
+			if scanResult.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
 				DeleteButton()
 			}
 			// Can't ignore a superfluous ignore!
-			if result.annotation != .superfluousIgnoreCommand {
+			if scanResult.annotation != .superfluousIgnoreCommand {
 				IgnoreButton()
 			}
 		}
@@ -840,7 +840,7 @@ struct PeripheryWarningRow: View {
 			GridRow {
 				// Disclosure button for full source preview (only if multi-line and not completed)
 				if !completedActions.contains(warningID),
-				   result.annotation == .unused || result.annotation.isRedundantProtocol, hasFullRange,
+				   scanResult.annotation == .unused || scanResult.annotation.isRedundantProtocol, hasFullRange,
 				   hasMultiLineSource {
 					Button(
 						isExpanded ? "Hide full source" : "Show full source",
@@ -870,7 +870,7 @@ struct PeripheryWarningRow: View {
 						source(sourceLine)
 					}
 					// Show assignment locations for assignOnlyProperty warnings
-					if case ScanResult.Annotation.assignOnlyProperty = result.annotation, let sourceGraph {
+					if case ScanResult.Annotation.assignOnlyProperty = scanResult.annotation, let sourceGraph {
 						VStack(alignment: .leading, spacing: 0) {
 							// Get the setter accessor to find assignment references
 							if let setter = declaration.declarations
@@ -884,7 +884,7 @@ struct PeripheryWarningRow: View {
 					}
 
 					// Show usage information for redundant protocol warnings
-					if case let ScanResult.Annotation.redundantProtocol(references, inherited) = result.annotation {
+					if case let ScanResult.Annotation.redundantProtocol(references, inherited) = scanResult.annotation {
 						VStack(alignment: .leading, spacing: 0) {
 							// Show inherited protocols if any
 							if !inherited.isEmpty {

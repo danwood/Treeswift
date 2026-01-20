@@ -47,13 +47,13 @@ struct ScanResultHelper {
 	 */
 	nonisolated static func formatPlainTextWarning(
 		declaration: Declaration,
-		annotation: ScanResult.Annotation,
+		scanResult: ScanResult,
 		location: Location
 	) -> String {
 		let path = location.file.path.string
 		let line = location.line
 		let column = location.column
-		let descAttr: AttributedString = formatAttributedDescription(declaration: declaration, annotation: annotation)
+		let descAttr: AttributedString = formatAttributedDescription(declaration: declaration, scanResult: scanResult)
 		let desc = String(descAttr.characters)
 		return "\(path):\(line):\(column): warning: \(desc)"
 	}
@@ -61,7 +61,7 @@ struct ScanResultHelper {
 	// Format description as AttributedString with bold symbol names
 	nonisolated static func formatAttributedDescription(
 		declaration: Declaration,
-		annotation: ScanResult.Annotation
+		scanResult: ScanResult
 	) -> AttributedString {
 		let kindDisplayName = kindDisplayName(from: declaration)
 
@@ -78,17 +78,26 @@ struct ScanResultHelper {
 			result.append(boldName)
 
 			// Annotation suffix
-			let suffix = switch annotation {
+			let suffix: String
+			switch scanResult.annotation {
 			case .unused:
-				" is unused"
+				suffix = " is unused"
 			case .assignOnlyProperty:
-				" is assigned, but never used"
+				suffix = " is assigned, but never used"
 			case .redundantProtocol:
-				" is redundant as it's never used as an existential type"
+				suffix = " is redundant as it's never used as an existential type"
 			case .redundantPublicAccessibility:
-				" is declared public, but not used outside of this module"
+				suffix = " is declared public, but not used outside of this module"
 			case .superfluousIgnoreCommand:
-				" has a superfluous periphery ignore command"
+				suffix = " has a superfluous periphery ignore command"
+			case let .redundantInternalAccessibility(_, suggestedAccessibility):
+				let accessibilityText = suggestedAccessibility?.rawValue ?? "private/fileprivate"
+				suffix = " not used outside of file; can be \(accessibilityText))"
+			case .redundantFilePrivateAccessibility:
+				suffix = " not used outside of scope; can be private)"
+			case .redundantAccessibility:
+				let accessLevel = declaration.accessibility.value.rawValue
+				suffix = " has redundant \(accessLevel) accessibility"
 			}
 			result.append(AttributedString(suffix))
 		} else {
