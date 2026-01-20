@@ -204,14 +204,21 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             }
         }
 
-        // Alternative check: Look for related references FROM this declaration
-        // to protocol members. The ProtocolConformanceReferenceBuilder inverts
-        // these relationships, so we might find them either direction.
+        // Case 3: Check for .related references FROM this declaration to protocol members.
+        // This covers both internal AND external protocol conformances.
         for ref in decl.related where ref.declarationKind.isProtocolMemberConformingKind {
-            if let referencedDecl = graph.declaration(withUsr: ref.usr),
-               let referencedParent = referencedDecl.parent,
-               referencedParent.kind == .protocol
-            {
+            if let referencedDecl = graph.declaration(withUsr: ref.usr) {
+                // Internal protocol: verify the referenced declaration's parent is a protocol.
+                if let referencedParent = referencedDecl.parent,
+                   referencedParent.kind == .protocol
+                {
+                    return true
+                }
+            } else if ref.name == decl.name {
+                // External protocol: the declaration doesn't exist in our graph,
+                // but the indexer created a .related reference with a protocol member kind
+                // AND the names match. This means this declaration implements an external
+                // protocol requirement.
                 return true
             }
         }
