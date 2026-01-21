@@ -132,7 +132,7 @@ final class ScanResultIndex {
 			hasher.combine(filterState.showUnused)
 			hasher.combine(filterState.showAssignOnly)
 			hasher.combine(filterState.showRedundantProtocol)
-			hasher.combine(filterState.showRedundantPublic)
+			hasher.combine(filterState.showRedundantAccessControl)
 			hasher.combine(filterState.showSuperfluousIgnoreCommand)
 			hasher.combine(filterState.topLevelOnly)
 			hasher.combine(filterState.showStruct)

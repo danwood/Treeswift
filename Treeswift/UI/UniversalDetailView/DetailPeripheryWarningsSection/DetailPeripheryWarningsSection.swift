@@ -693,6 +693,10 @@ struct PeripheryWarningRow: View {
 		let label = switch scanResult.annotation {
 		case .unused: "Delete declaration"
 		case .redundantPublicAccessibility: "Remove public keyword"
+		case let .redundantInternalAccessibility(_, suggestedAccessibility):
+			"Make \(suggestedAccessibility?.rawValue, default: "fileprivate/private")"
+		case .redundantFilePrivateAccessibility: "Make private"
+		case .redundantAccessibility: "Remove accessibility modifier"
 		case .superfluousIgnoreCommand: "Delete Periphery Ignore command"
 		default: ""
 		}

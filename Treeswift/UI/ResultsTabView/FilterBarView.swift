@@ -109,8 +109,8 @@ struct FilterBarView: View {
 	@Bindable var filterState: FilterState
 	let scanResults: [ScanResult]
 
-	private var annotationCounts: [String: Int] {
-		var counts: [String: Int] = [:]
+	private var annotationCounts: [FilterState.WarningType: Int] {
+		var counts: [FilterState.WarningType: Int] = [:]
 		for result in scanResults {
 			let declaration = result.declaration
 
@@ -119,7 +119,7 @@ struct FilterBarView: View {
 				continue
 			}
 
-			let annotation = result.annotation.stringValue
+			let annotation = result.annotation.warningType
 			counts[annotation, default: 0] += 1
 		}
 		return counts
@@ -145,7 +145,7 @@ struct FilterBarView: View {
 		filterState.showUnused = value
 		filterState.showAssignOnly = value
 		filterState.showRedundantProtocol = value
-		filterState.showRedundantPublic = value
+		filterState.showRedundantAccessControl = value
 	}
 
 	private func setAllTypeFilters(to value: Bool) {
@@ -186,7 +186,7 @@ struct FilterBarView: View {
 					) {
 						HStack(spacing: 4) {
 							Text("Unused")
-							Text("(\(annotationCounts[ScanResult.Annotation.unused.stringValue] ?? 0))")
+							Text("(\(annotationCounts[FilterState.WarningType.unused] ?? 0))")
 								.foregroundStyle(.secondary)
 						}
 					}
@@ -197,7 +197,7 @@ struct FilterBarView: View {
 					) {
 						HStack(spacing: 4) {
 							Text("Assign-only")
-							Text("(\(annotationCounts[ScanResult.Annotation.assignOnlyProperty.stringValue] ?? 0))")
+							Text("(\(annotationCounts[FilterState.WarningType.assignOnly] ?? 0))")
 								.foregroundStyle(.secondary)
 						}
 					}
@@ -209,20 +209,20 @@ struct FilterBarView: View {
 						HStack(spacing: 4) {
 							Text("Redundant Protocol")
 							Text(
-								"(\(annotationCounts[ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue] ?? 0))"
+								"(\(annotationCounts[FilterState.WarningType.redundantProtocol] ?? 0))"
 							)
 							.foregroundStyle(.secondary)
 						}
 					}
 
 					OptionClickToggle(
-						isEnabled: $filterState.showRedundantPublic,
+						isEnabled: $filterState.showRedundantAccessControl,
 						onOptionClick: setAllWarningFilters
 					) {
 						HStack(spacing: 4) {
-							Text("Redundant Public")
+							Text("Redundant Access")
 							Text(
-								"(\(annotationCounts[ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue] ?? 0))"
+								"(\(annotationCounts[FilterState.WarningType.redundantAccessControl] ?? 0))"
 							)
 							.foregroundStyle(.secondary)
 						}
@@ -235,7 +235,7 @@ struct FilterBarView: View {
 						HStack(spacing: 4) {
 							Text("Superflous Ignore")
 							Text(
-								"(\(annotationCounts[ScanResult.Annotation.superfluousIgnoreCommand.stringValue] ?? 0))"
+								"(\(annotationCounts[FilterState.WarningType.superfluousIgnoreCommand] ?? 0))"
 							)
 							.foregroundStyle(.secondary)
 						}

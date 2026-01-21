@@ -46,9 +46,9 @@ final class FilterState {
 		}
 	}
 
-	var showRedundantPublic: Bool = true {
+	var showRedundantAccessControl: Bool = true {
 		didSet {
-			Self.defaults.set(showRedundantPublic, forKey: "filterState.showRedundantPublic")
+			Self.defaults.set(showRedundantAccessControl, forKey: "filterState.showRedundantAccessControl")
 			filterChangeCounter += 1
 		}
 	}
@@ -158,8 +158,8 @@ final class FilterState {
 		if defaults.object(forKey: "filterState.showRedundantProtocol") != nil {
 			showRedundantProtocol = defaults.bool(forKey: "filterState.showRedundantProtocol")
 		}
-		if defaults.object(forKey: "filterState.showRedundantPublic") != nil {
-			showRedundantPublic = defaults.bool(forKey: "filterState.showRedundantPublic")
+		if defaults.object(forKey: "filterState.showRedundantAccessControl") != nil {
+			showRedundantAccessControl = defaults.bool(forKey: "filterState.showRedundantAccessControl")
 		}
 		if defaults.object(forKey: "filterState.showClass") != nil {
 			showClass = defaults.bool(forKey: "filterState.showClass")
@@ -197,7 +197,7 @@ final class FilterState {
 		ScanResult.Annotation.unused.stringValue: \.showUnused,
 		ScanResult.Annotation.assignOnlyProperty.stringValue: \.showAssignOnly,
 		ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue: \.showRedundantProtocol,
-		ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue: \.showRedundantPublic,
+		ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue: \.showRedundantAccessControl,
 		ScanResult.Annotation.superfluousIgnoreCommand.stringValue: \.showSuperfluousIgnoreCommand
 	]
 
@@ -219,29 +219,8 @@ final class FilterState {
 		case unused
 		case assignOnly
 		case redundantProtocol
-		case redundantPublic
+		case redundantAccessControl
 		case superfluousIgnoreCommand
-	}
-
-	/**
-	 Returns the set of warning types that can apply to a given Swift type.
-	 Used to determine which type filters should be enabled based on selected warning filters.
-	 */
-	static func applicableWarnings(for swiftType: SwiftType) -> Set<WarningType> {
-		switch swiftType {
-		case .property:
-			[.unused, .assignOnly, .redundantPublic]
-		case .protocol:
-			[.unused, .redundantProtocol, .redundantPublic]
-		case .class, .struct, .enum, .typealias, .function, .initializer:
-			[.unused, .redundantPublic]
-		case .extension:
-			[.unused, .redundantPublic]
-		case .parameter:
-			[.unused]
-		case .import:
-			[.unused]
-		}
 	}
 
 	/**
@@ -249,14 +228,15 @@ final class FilterState {
 	 A type filter is enabled if at least one applicable warning type is enabled.
 	 */
 	func isTypeFilterEnabled(_ swiftType: SwiftType) -> Bool {
-		let applicableWarnings = Self.applicableWarnings(for: swiftType)
+		let applicableWarnings = swiftType.applicableWarnings
 
 		for warning in applicableWarnings {
 			switch warning {
 			case .unused where showUnused: return true
 			case .assignOnly where showAssignOnly: return true
 			case .redundantProtocol where showRedundantProtocol: return true
-			case .redundantPublic where showRedundantPublic: return true
+			case .redundantAccessControl where showRedundantAccessControl: return true
+			case .superfluousIgnoreCommand where showSuperfluousIgnoreCommand: return true
 			default: continue
 			}
 		}
@@ -286,5 +266,43 @@ final class FilterState {
 		}
 
 		return true // Unknown annotations/types always shown
+	}
+}
+
+extension ScanResult.Annotation {
+	var warningType: FilterState.WarningType {
+		switch self {
+		case .unused: .unused
+		case .assignOnlyProperty: .assignOnly
+		case .redundantProtocol: .redundantProtocol
+		case .redundantPublicAccessibility,
+		     .redundantInternalAccessibility,
+		     .redundantFilePrivateAccessibility,
+		     .redundantAccessibility: .redundantAccessControl
+		case .superfluousIgnoreCommand: .superfluousIgnoreCommand
+		}
+	}
+}
+
+extension SwiftType {
+	/**
+	 Returns the set of warning types that can apply to a given Swift type.
+	 Used to determine which type filters should be enabled based on selected warning filters.
+	 */
+	var applicableWarnings: Set<FilterState.WarningType> {
+		switch self {
+		case .property:
+			[.unused, .assignOnly, .redundantAccessControl]
+		case .protocol:
+			[.unused, .redundantProtocol, .redundantAccessControl]
+		case .class, .struct, .enum, .typealias, .function, .initializer:
+			[.unused, .redundantAccessControl]
+		case .extension:
+			[.unused, .redundantAccessControl]
+		case .parameter:
+			[.unused]
+		case .import:
+			[.unused]
+		}
 	}
 }
