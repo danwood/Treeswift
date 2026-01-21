@@ -127,8 +127,7 @@ final class FileWarningAnalyzer: Sendable {
 							name: typeInfo.name,
 							icon: typeInfo.icon,
 							matchesFileName: typeInfo.matchesFileName,
-							isUnused: typeInfo.isUnused,
-							isRedundantPublic: typeInfo.isRedundantPublic,
+							warningTypes: typeInfo.warningTypes,
 							isExtension: typeInfo.isExtension,
 							referencingFileNames: refs,
 							startLine: typeInfo.startLine

@@ -215,7 +215,7 @@ final class FilterState {
 	]
 
 	// Generally tracks ScanResult.Annotation but may be consolidated or simplified
-	enum WarningType {
+	nonisolated enum WarningType: Sendable, Hashable {
 		case unused
 		case assignOnly
 		case redundantProtocol
@@ -270,7 +270,7 @@ final class FilterState {
 }
 
 extension ScanResult.Annotation {
-	var warningType: FilterState.WarningType {
+	nonisolated var warningType: FilterState.WarningType {
 		switch self {
 		case .unused: .unused
 		case .assignOnlyProperty: .assignOnly

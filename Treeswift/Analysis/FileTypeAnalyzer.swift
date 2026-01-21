@@ -13,12 +13,35 @@ import SystemPackage
 final class FileTypeAnalyzer: Sendable {
 	nonisolated init() {}
 
+	/**
+	 Enriches file browser nodes with type information extracted from the SourceGraph.
+
+	 This method recursively processes a file tree, extracting top-level symbol information
+	 from each Swift file and adding it to the FileBrowserNode structure for UI display.
+
+	 For each file, we extract:
+	 - Symbol names (classes, structs, enums, protocols, extensions, etc.)
+	 - Symbol icons (visual indicators for different declaration types)
+	 - Whether symbol name matches file name (for folder organization analysis)
+	 - `WarningType` status (unused, redundant access, etc.) from Periphery scan results
+
+	 PERFORMANCE OPTIMIZATION - TypeWarningCache:
+	 We need to check Periphery warnings for potentially thousands of symbols across hundreds
+	 of files. Without caching, this would require O(n*m) linear searches (n symbols × m scan
+	 results). The TypeWarningCache builds a hash map once at O(m) cost, then provides O(1)
+	 lookups for each of the n symbols, reducing total complexity to O(n+m).
+
+	 The cache is built once here and passed to all recursive calls and concurrent file
+	 analysis tasks, so the hash map is shared across all files being processed.
+	 */
 	nonisolated func enrichFilesWithTypeInfo(
 		fileNodes: [FileBrowserNode],
 		sourceGraph: SourceGraph,
 		scanResults: [ScanResult]
 	) async -> [FileBrowserNode] {
-		// Build warning cache once for all files
+		// Build warning cache once for all files to enable O(1) warning lookups.
+		// This is a critical performance optimization - without it, checking warnings
+		// for each symbol would require linear search through all scanResults.
 		let warningCache = TypeWarningCache.buildCache(from: scanResults)
 
 		// We will process directories recursively (depth-first), but analyze files at each level concurrently.
@@ -177,16 +200,17 @@ final class FileTypeAnalyzer: Sendable {
 			// Check if symbol name matches file name
 			let matchesFileName = symbolName == fileNameWithoutExtension
 
-			// Look up warning status from cache
+			// Look up warning status from cache - this is where we benefit from the O(1) hash lookup.
+			// Without the cache, we would need to iterate through ALL scanResults to find warnings
+			// for this specific symbol, which would be extremely slow when processing large codebases.
 			let warningKey = TypeWarningKey(typeName: symbolName, filePath: path)
-			let warningStatus = warningCache[warningKey] ?? TypeWarningStatus(isUnused: false, isRedundantPublic: false)
+			let warningStatus = warningCache[warningKey] ?? TypeWarningStatus(warningTypes: [])
 
 			typeInfos.append(FileTypeInfo(
 				name: symbolName,
 				icon: icon,
 				matchesFileName: matchesFileName,
-				isUnused: warningStatus.isUnused,
-				isRedundantPublic: warningStatus.isRedundantPublic,
+				warningTypes: warningStatus.warningTypes,
 				isExtension: decl.kind.isExtensionKind,
 				startLine: getStartLine(decl)
 			))
@@ -201,8 +225,7 @@ final class FileTypeAnalyzer: Sendable {
 				name: parentName,
 				icon: "🧩",
 				matchesFileName: false,
-				isUnused: false,
-				isRedundantPublic: false,
+				warningTypes: [],
 				isExtension: true
 			))
 		}

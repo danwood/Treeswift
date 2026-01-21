@@ -57,7 +57,7 @@ struct DetailTopLevelSymbolsSection: View {
 
 							Text(symbolInfo.name)
 								.font(.system(.body, design: .monospaced))
-								.foregroundStyle(symbolInfo.isUnused ? .orange : .primary)
+								.foregroundStyle(symbolInfo.warningTypes.contains(.unused) ? .orange : .primary)
 								.textSelection(.enabled)
 
 							if symbolInfo.matchesFileName {
@@ -66,14 +66,33 @@ struct DetailTopLevelSymbolsSection: View {
 									.foregroundStyle(.green)
 							}
 
-							if symbolInfo.isUnused {
+							// Display all warning types that apply to this symbol
+							if symbolInfo.warningTypes.contains(.unused) {
 								Text("(unused)")
 									.font(.caption)
 									.foregroundStyle(.orange)
 							}
 
-							if symbolInfo.isRedundantPublic {
-								Text("(redundant public)")
+							if symbolInfo.warningTypes.contains(.redundantAccessControl) {
+								Text("(redundant access)")
+									.font(.caption)
+									.foregroundStyle(.secondary)
+							}
+
+							if symbolInfo.warningTypes.contains(.assignOnly) {
+								Text("(assign-only)")
+									.font(.caption)
+									.foregroundStyle(.secondary)
+							}
+
+							if symbolInfo.warningTypes.contains(.redundantProtocol) {
+								Text("(redundant protocol)")
+									.font(.caption)
+									.foregroundStyle(.secondary)
+							}
+
+							if symbolInfo.warningTypes.contains(.superfluousIgnoreCommand) {
+								Text("(superfluous ignore)")
 									.font(.caption)
 									.foregroundStyle(.secondary)
 							}
