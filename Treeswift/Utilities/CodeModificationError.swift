@@ -13,6 +13,7 @@ enum CodeModificationError: Error, LocalizedError {
 	case patternNotFound(String)
 	case missingEndLocation
 	case missingSourceGraph
+	case declarationNotFound
 
 	var errorDescription: String? {
 		switch self {
@@ -28,6 +29,8 @@ enum CodeModificationError: Error, LocalizedError {
 			"Declaration missing end location"
 		case .missingSourceGraph:
 			"Source graph required for this operation"
+		case .declarationNotFound:
+			"Declaration not found in file"
 		}
 	}
 }
