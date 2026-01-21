@@ -2,6 +2,8 @@
 
 A modern macOS tool for analyzing and organizing your Swift codebase.
 
+**This app is still very much in progress. No point in reporting bugs just yet; I’m still working on the basic functionality.**
+
 **Treeswift** helps Swift developers understand their code structure, eliminate unused code, and improve encapsulation in iOS, macOS, and server-side Swift projects through an intuitive native macOS interface.
 
 ## Requirements
