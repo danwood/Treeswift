@@ -8,40 +8,6 @@
 import PeripheryKit
 
 extension ScanResult.Annotation {
-	// Check if annotation is redundant public
-	public var isRedundantPublic: Bool {
-		if case .redundantPublicAccessibility = self { true } else { false }
-	}
-
-	// Check if annotation is redundant protocol
-	public var isRedundantProtocol: Bool {
-		if case .redundantProtocol = self { true } else { false }
-	}
-
-	/**
-	 Returns the string representation of this annotation.
-
-	 IMPORTANT: This duplicates the logic from OutputFormatter.describe(_:) in
-	 .../PeripheryKit/Results/OutputFormatter.swift:25-36
-
-	 We replicate it here because OutputFormatter.describe() is a protocol extension method
-	 that requires a conforming instance to call. These string values MUST match exactly.
-
-	 If Periphery's OutputFormatter.describe() changes, update this to match.
-	 */
-	var stringValue: String {
-		switch self {
-		case .unused: "unused"
-		case .assignOnlyProperty: "assignOnlyProperty"
-		case .redundantProtocol: "redundantProtocol"
-		case .redundantPublicAccessibility: "redundantPublicAccessibility"
-		case .redundantInternalAccessibility: "redundantInternalAccessibility"
-		case .redundantFilePrivateAccessibility: "redundantFilePrivateAccessibility"
-		case .superfluousIgnoreCommand: "superfluousIgnoreCommand"
-		case .redundantAccessibility: "redundantAccessibility"
-		}
-	}
-
 	/**
 	 Determines whether code can be removed for this annotation.
 

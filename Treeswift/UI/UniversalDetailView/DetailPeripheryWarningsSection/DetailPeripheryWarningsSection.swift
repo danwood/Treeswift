@@ -284,7 +284,7 @@ struct PeripheryWarningRow: View {
 		}
 
 		// For redundant public warnings, highlight the "public " keyword instead of the symbol
-		if scanResult.annotation.isRedundantPublic {
+		if case .redundantPublicAccessibility = scanResult.annotation {
 			return ScanResultHelper.highlightRedundantPublicInLine(line: lineText)
 		}
 
@@ -707,7 +707,7 @@ struct PeripheryWarningRow: View {
 			action: {
 				if scanResult.annotation == .unused {
 					deleteDeclaration()
-				} else if scanResult.annotation.isRedundantPublic {
+				} else if case .redundantPublicAccessibility = scanResult.annotation {
 					fixRedundantPublic()
 				} else if scanResult.annotation == .superfluousIgnoreCommand {
 					fixSuperfluousIgnoreCommand()
@@ -722,7 +722,7 @@ struct PeripheryWarningRow: View {
 		.help({
 			if scanResult.annotation == .unused {
 				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
-			} else if scanResult.annotation.isRedundantPublic {
+			} else if case .redundantPublicAccessibility = scanResult.annotation {
 				"Remove public keyword"
 			} else if scanResult.annotation == .superfluousIgnoreCommand {
 				canDeleteSuperfluousIgnore
@@ -842,9 +842,14 @@ struct PeripheryWarningRow: View {
 				.opacity(isRemoving ? 0.5 : 1.0)
 			}
 			GridRow {
+				// Ridiculous way to pattern match the case
+				let isRedundantProtocol: Bool = {
+					if case .redundantProtocol = scanResult.annotation { return true }
+					return false
+				}()
 				// Disclosure button for full source preview (only if multi-line and not completed)
 				if !completedActions.contains(warningID),
-				   scanResult.annotation == .unused || scanResult.annotation.isRedundantProtocol, hasFullRange,
+				   scanResult.annotation == .unused || isRedundantProtocol, hasFullRange,
 				   hasMultiLineSource {
 					Button(
 						isExpanded ? "Hide full source" : "Show full source",

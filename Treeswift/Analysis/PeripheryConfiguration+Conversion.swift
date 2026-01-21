@@ -215,10 +215,6 @@ extension PeripheryConfiguration {
 		config.retainCodableProperties = retainCodableProperties
 		config.retainEncodableProperties = retainEncodableProperties
 
-		// Analysis Settings
-		config.disableRedundantPublicAnalysis = disableRedundantPublicAnalysis
-		config.disableUnusedImportAnalysis = disableUnusedImportAnalysis
-
 		// External Type Settings
 		config.externalEncodableProtocols = externalEncodableProtocols
 		config.externalCodableProtocols = externalCodableProtocols
@@ -248,9 +244,6 @@ extension PeripheryConfiguration {
 		if let genericProjectConfig {
 			config.genericProjectConfig = FilePath(genericProjectConfig)
 		}
-		config.bazel = bazel
-		config.bazelFilter = bazelFilter
-		config.disableUpdateCheck = disableUpdateCheck
 
 		return config
 	}

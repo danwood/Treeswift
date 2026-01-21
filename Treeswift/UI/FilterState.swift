@@ -193,12 +193,12 @@ final class FilterState {
 		}
 	}
 
-	private let annotationFilterMap: [String: WritableKeyPath<FilterState, Bool>] = [
-		ScanResult.Annotation.unused.stringValue: \.showUnused,
-		ScanResult.Annotation.assignOnlyProperty.stringValue: \.showAssignOnly,
-		ScanResult.Annotation.redundantProtocol(references: [], inherited: []).stringValue: \.showRedundantProtocol,
-		ScanResult.Annotation.redundantPublicAccessibility(modules: []).stringValue: \.showRedundantAccessControl,
-		ScanResult.Annotation.superfluousIgnoreCommand.stringValue: \.showSuperfluousIgnoreCommand
+	private let annotationFilterMap: [WarningType: WritableKeyPath<FilterState, Bool>] = [
+		WarningType.unused: \.showUnused,
+		WarningType.assignOnly: \.showAssignOnly,
+		WarningType.redundantProtocol: \.showRedundantProtocol,
+		WarningType.redundantAccessControl: \.showRedundantAccessControl,
+		WarningType.superfluousIgnoreCommand: \.showSuperfluousIgnoreCommand
 	]
 
 	private let typeFilterMap: [SwiftType: WritableKeyPath<FilterState, Bool>] = [
@@ -215,7 +215,7 @@ final class FilterState {
 	]
 
 	// Generally tracks ScanResult.Annotation but may be consolidated or simplified
-	nonisolated enum WarningType: Sendable, Hashable {
+	nonisolated enum WarningType: Int, Sendable, Hashable {
 		case unused
 		case assignOnly
 		case redundantProtocol

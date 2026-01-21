@@ -54,11 +54,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 	var retainCodableProperties: Bool
 	var retainEncodableProperties: Bool
 
-	// MARK: - Analysis Settings
-
-	var disableRedundantPublicAnalysis: Bool
-	var disableUnusedImportAnalysis: Bool
-
 	// MARK: - External Type Settings
 
 	var externalEncodableProtocols: [String]
@@ -83,9 +78,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 
 	var jsonPackageManifestPath: String?
 	var genericProjectConfig: String?
-	var bazel: Bool
-	var bazelFilter: String?
-	var disableUpdateCheck: Bool
 
 	// MARK: - Initialization
 
@@ -117,8 +109,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainSwiftUIPreviews: Bool = false,
 		retainCodableProperties: Bool = false,
 		retainEncodableProperties: Bool = false,
-		disableRedundantPublicAnalysis: Bool = false,
-		disableUnusedImportAnalysis: Bool = false,
 		externalEncodableProtocols: [String] = [],
 		externalCodableProtocols: [String] = [],
 		externalTestCaseClasses: [String] = [],
@@ -131,10 +121,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		writeBaseline: String? = nil,
 		writeResults: String? = nil,
 		jsonPackageManifestPath: String? = nil,
-		genericProjectConfig: String? = nil,
-		bazel: Bool = false,
-		bazelFilter: String? = nil,
-		disableUpdateCheck: Bool = false
+		genericProjectConfig: String? = nil
 	) {
 		self.id = id
 		self.name = name
@@ -163,8 +150,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.retainSwiftUIPreviews = retainSwiftUIPreviews
 		self.retainCodableProperties = retainCodableProperties
 		self.retainEncodableProperties = retainEncodableProperties
-		self.disableRedundantPublicAnalysis = disableRedundantPublicAnalysis
-		self.disableUnusedImportAnalysis = disableUnusedImportAnalysis
 		self.externalEncodableProtocols = externalEncodableProtocols
 		self.externalCodableProtocols = externalCodableProtocols
 		self.externalTestCaseClasses = externalTestCaseClasses
@@ -178,9 +163,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.writeResults = writeResults
 		self.jsonPackageManifestPath = jsonPackageManifestPath
 		self.genericProjectConfig = genericProjectConfig
-		self.bazel = bazel
-		self.bazelFilter = bazelFilter
-		self.disableUpdateCheck = disableUpdateCheck
 	}
 
 	// MARK: - Computed Properties
@@ -229,8 +211,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		case retainSwiftUIPreviews
 		case retainCodableProperties
 		case retainEncodableProperties
-		case disableRedundantPublicAnalysis
-		case disableUnusedImportAnalysis
 		case externalEncodableProtocols
 		case externalCodableProtocols
 		case externalTestCaseClasses
@@ -244,9 +224,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		case writeResults
 		case jsonPackageManifestPath
 		case genericProjectConfig
-		case bazel
-		case bazelFilter
-		case disableUpdateCheck
 	}
 
 	init(from decoder: Decoder) throws {
@@ -282,8 +259,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainSwiftUIPreviews = try container.decode(Bool.self, forKey: .retainSwiftUIPreviews)
 		retainCodableProperties = try container.decode(Bool.self, forKey: .retainCodableProperties)
 		retainEncodableProperties = try container.decode(Bool.self, forKey: .retainEncodableProperties)
-		disableRedundantPublicAnalysis = try container.decode(Bool.self, forKey: .disableRedundantPublicAnalysis)
-		disableUnusedImportAnalysis = try container.decode(Bool.self, forKey: .disableUnusedImportAnalysis)
 		externalEncodableProtocols = try container.decode([String].self, forKey: .externalEncodableProtocols)
 		externalCodableProtocols = try container.decode([String].self, forKey: .externalCodableProtocols)
 		externalTestCaseClasses = try container.decode([String].self, forKey: .externalTestCaseClasses)
@@ -297,9 +272,6 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		writeResults = try container.decodeIfPresent(String.self, forKey: .writeResults)
 		jsonPackageManifestPath = try container.decodeIfPresent(String.self, forKey: .jsonPackageManifestPath)
 		genericProjectConfig = try container.decodeIfPresent(String.self, forKey: .genericProjectConfig)
-		bazel = try container.decode(Bool.self, forKey: .bazel)
-		bazelFilter = try container.decodeIfPresent(String.self, forKey: .bazelFilter)
-		disableUpdateCheck = try container.decode(Bool.self, forKey: .disableUpdateCheck)
 	}
 
 	// MARK: - Convenience Initializers
