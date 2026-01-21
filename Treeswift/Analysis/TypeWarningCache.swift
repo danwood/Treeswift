@@ -53,7 +53,6 @@ struct TypeWarningStatus: Sendable {
 	let warningTypes: Set<FilterState.WarningType>
 }
 
-// periphery:ignore
 final class TypeWarningCache: Sendable {
 	/**
 	 Builds a hash-based lookup cache from Periphery scan results.
@@ -81,7 +80,6 @@ final class TypeWarningCache: Sendable {
 	nonisolated static func buildCache(from scanResults: [ScanResult]) -> [TypeWarningKey: TypeWarningStatus] {
 		var cache: [TypeWarningKey: TypeWarningStatus] = [:]
 
-		// periphery:ignore
 		for result in scanResults {
 			let decl = result.declaration
 			guard let typeName = decl.name else { continue }

@@ -252,7 +252,7 @@ final class FilterState {
 		}
 
 		// Check annotation filter
-		let annotationString = scanResult.annotation.stringValue
+		let annotationString = scanResult.annotation.warningType
 		if let keyPath = annotationFilterMap[annotationString] {
 			if !self[keyPath: keyPath] {
 				return false

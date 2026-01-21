@@ -26,11 +26,12 @@ extension ScanResult.Annotation {
 		case .assignOnlyProperty, .redundantProtocol:
 			false
 		case .superfluousIgnoreCommand:
-			true // FIXME: We can try to remove, though it may not work if it's not positioned as expected
+			true // FIXME: We can try to remove, though it may not work if it's not positioned as expected. look for canFindSuperfluousIgnoreComment
 		}
 	}
 }
 
+// This will make it equatable (at least for the values that don't have parameters)
 extension ScanResult.Annotation: @retroactive RawRepresentable {
 	public typealias RawValue = Int
 

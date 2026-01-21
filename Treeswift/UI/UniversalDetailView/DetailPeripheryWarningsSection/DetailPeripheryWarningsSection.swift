@@ -701,9 +701,19 @@ struct PeripheryWarningRow: View {
 		default: ""
 		}
 
+		let icon = switch scanResult.annotation {
+		case .unused: "trash"
+		case .redundantPublicAccessibility: "eye.slash"
+		case let .redundantInternalAccessibility: "eye.slash"
+		case .redundantFilePrivateAccessibility: "eye.slash"
+		case .redundantAccessibility: "trash" // Deleting the redundant code
+		case .superfluousIgnoreCommand: "trash" // Deleting the extra periphery:ignore comment
+		default: "trash" // shouldn't happen
+		}
+
 		return Button(
 			label,
-			systemImage: "trash",
+			systemImage: icon,
 			action: {
 				if scanResult.annotation == .unused {
 					deleteDeclaration()
@@ -738,7 +748,7 @@ struct PeripheryWarningRow: View {
 	}
 
 	private func IgnoreButton() -> some View {
-		Button("Ignore warning", systemImage: "eye.slash") {
+		Button("Ignore warning", systemImage: "bell.slash") {
 			insertIgnoreDirective()
 		}
 		.labelStyle(.iconOnly)
