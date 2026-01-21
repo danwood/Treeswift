@@ -711,6 +711,16 @@ struct PeripheryWarningRow: View {
 		default: "trash" // shouldn't happen
 		}
 
+		let color = switch scanResult.annotation {
+		case .unused: Color.red
+		case .redundantPublicAccessibility: Color.blue
+		case let .redundantInternalAccessibility: Color.blue
+		case .redundantFilePrivateAccessibility: Color.blue
+		case .redundantAccessibility: Color.red // Deleting the redundant code
+		case .superfluousIgnoreCommand: Color.red // Deleting the extra periphery:ignore comment
+		default: Color.red // shouldn't happen
+		}
+
 		return Button(
 			label,
 			systemImage: icon,
@@ -726,7 +736,7 @@ struct PeripheryWarningRow: View {
 		)
 		// Visually hide the text but keep accessibility label
 		.labelStyle(.iconOnly)
-		.foregroundStyle(.red)
+		.foregroundStyle(color)
 		.frame(width: 16, height: 16)
 		.buttonStyle(.plain)
 		.help({
@@ -734,6 +744,12 @@ struct PeripheryWarningRow: View {
 				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
 			} else if case .redundantPublicAccessibility = scanResult.annotation {
 				"Remove public keyword"
+			} else if case let .redundantInternalAccessibility(_, suggestedAccessibility) = scanResult.annotation {
+				"Replace access with \(suggestedAccessibility, default: "fileprivate/private")"
+			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
+				"Replace access with private"
+			} else if case .redundantAccessibility = scanResult.annotation {
+				"Remove access keyword"
 			} else if scanResult.annotation == .superfluousIgnoreCommand {
 				canDeleteSuperfluousIgnore
 					? "Remove Superfluous ignore command"
