@@ -15,7 +15,6 @@ extension FileNode {
 	 Statistics about deletion operations.
 	 */
 	struct DeletionStats {
-		let totalWarningsInFile: Int
 		let deletedCount: Int
 		let nonDeletableCount: Int
 		let failedIgnoreCommentsCount: Int
@@ -29,9 +28,7 @@ extension FileNode {
 		let originalContents: String
 		let modifiedContents: String
 		let removedWarningIDs: [String]
-		let adjustedUSRs: [String]
 		let shouldDeleteFile: Bool
-		let shouldRemoveImports: Bool
 		let deletionStats: DeletionStats
 	}
 
@@ -68,7 +65,6 @@ extension FileNode {
 			}
 			return true
 		}
-		let totalWarningsInFile = allWarnings.count
 
 		// Count non-deletable warnings
 		let nonDeletableWarnings = allWarnings.filter { result in
@@ -278,11 +274,8 @@ extension FileNode {
 			originalContents: originalContents,
 			modifiedContents: finalContents,
 			removedWarningIDs: removedWarningIDs,
-			adjustedUSRs: adjustedUSRs,
 			shouldDeleteFile: shouldDeleteFile,
-			shouldRemoveImports: shouldRemoveImports,
 			deletionStats: DeletionStats(
-				totalWarningsInFile: totalWarningsInFile,
 				deletedCount: removedWarningIDs.count,
 				nonDeletableCount: nonDeletableCount,
 				failedIgnoreCommentsCount: failedIgnoreCommentsCount

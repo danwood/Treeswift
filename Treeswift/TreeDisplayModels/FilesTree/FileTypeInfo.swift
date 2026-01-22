@@ -13,7 +13,6 @@ nonisolated struct FileTypeInfo: Hashable, Sendable {
 	let matchesFileName: Bool
 	let warningTypes: Set<FilterState.WarningType>
 	let isExtension: Bool
-	let referencingFileNames: [String]
 	let startLine: Int
 
 	init(
@@ -22,7 +21,6 @@ nonisolated struct FileTypeInfo: Hashable, Sendable {
 		matchesFileName: Bool,
 		warningTypes: Set<FilterState.WarningType>,
 		isExtension: Bool,
-		referencingFileNames: [String] = [],
 		startLine: Int = 0
 	) {
 		self.name = name
@@ -30,7 +28,6 @@ nonisolated struct FileTypeInfo: Hashable, Sendable {
 		self.matchesFileName = matchesFileName
 		self.warningTypes = warningTypes
 		self.isExtension = isExtension
-		self.referencingFileNames = referencingFileNames
 		self.startLine = startLine
 	}
 }
