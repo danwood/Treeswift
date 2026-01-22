@@ -73,18 +73,3 @@ extension Image {
 		}
 	}
 }
-
-struct EmojiTestView: View {
-	var body: some View {
-		Image(emoji: "🔵")
-			.resizable()
-			.aspectRatio(1, contentMode: .fit)
-			.background(.yellow)
-		// For testing, be sure to use an emoji that goes all the way to the edge like the circles.
-		// This is easiest to verify that it's centered properly and not clipped
-	}
-}
-
-#Preview {
-	EmojiTestView()
-}

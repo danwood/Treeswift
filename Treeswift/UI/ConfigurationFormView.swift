@@ -491,25 +491,3 @@ struct ConfigurationFormView: View {
 		}
 	}
 }
-
-@MainActor
-private struct MainActorConfigurationFormPreview: View {
-	@State var config = PeripheryConfiguration.demo()
-	@State var isLoading = false
-	@FocusState var focusedField: ContentColumnView.FocusableField?
-	@State var layoutSettings = TreeLayoutSettings()
-
-	var body: some View {
-		ConfigurationFormView(
-			configuration: $config,
-			isLoadingSchemes: $isLoading,
-			focusedField: $focusedField,
-			layoutSettings: $layoutSettings
-		)
-		.frame(width: 600)
-	}
-}
-
-#Preview {
-	MainActorConfigurationFormPreview()
-}

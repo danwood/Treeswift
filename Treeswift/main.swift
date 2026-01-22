@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-func runCLIMode() async {
+private func runCLIMode() async {
 	let mode = LaunchArgumentsHandler.parseLaunchMode()
 
 	// Only handle true CLI-only modes (--list)
@@ -22,7 +22,7 @@ func runCLIMode() async {
 }
 
 // Parse launch mode to determine how to proceed
-let launchMode = LaunchArgumentsHandler.parseLaunchMode()
+private let launchMode = LaunchArgumentsHandler.parseLaunchMode()
 
 switch launchMode {
 case .list:

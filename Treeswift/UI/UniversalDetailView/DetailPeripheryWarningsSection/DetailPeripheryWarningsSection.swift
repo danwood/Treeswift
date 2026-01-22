@@ -124,7 +124,7 @@ struct DetailPeripheryWarningsSection: View {
 }
 
 // Individual warning row with clickable badge and selectable text - shared component
-struct PeripheryWarningRow: View {
+private struct PeripheryWarningRow: View {
 	let scanResult: ScanResult
 	let declaration: Declaration
 	let showDetails: Bool

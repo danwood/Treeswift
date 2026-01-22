@@ -151,7 +151,7 @@ struct OrganizeViewIntoFolderAction: View {
 	}
 }
 
-struct OrganizeItem: Identifiable, Equatable {
+private struct OrganizeItem: Identifiable, Equatable {
 	let id = UUID()
 	let relativePath: String
 	let isFolder: Bool

@@ -42,17 +42,3 @@ enum AccessControlFix {
 	/// Insert fileprivate keyword before declaration
 	case insertFilePrivate
 }
-
-/**
- Plan for a code modification operation.
-
- Describes what will be modified without actually performing the modification.
- Returned by analysis functions and consumed by execution functions.
- */
-struct ModificationPlan {
-	let operation: ModificationOperation
-	let startLine: Int
-	let endLine: Int
-	let replacementText: String?
-	let includeTrailingBlankLine: Bool
-}
