@@ -187,12 +187,7 @@ struct LocationInfo: Hashable, Sendable {
 		var parts: [String] = []
 
 		if let fileName {
-			let lineRange = if let endLine {
-				"\(line):\(endLine)"
-			} else {
-				"\(line)"
-			}
-			parts.append("\(fileName):\(lineRange)")
+			parts.append("\(fileName)")
 		}
 
 		parts.append(icon.asText)

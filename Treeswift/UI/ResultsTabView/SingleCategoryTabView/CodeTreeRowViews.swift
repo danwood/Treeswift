@@ -195,13 +195,6 @@ struct DeclarationRowView: View {
 	private var locationInfoWithoutFileName: String {
 		var parts: [String] = []
 
-		// Add line number
-		if let endLine = declaration.locationInfo.endLine {
-			parts.append("\(declaration.locationInfo.line):\(endLine)")
-		} else {
-			parts.append("\(declaration.locationInfo.line)")
-		}
-
 		// Add warning text if present
 		if let warningText = declaration.locationInfo.warningText {
 			parts.append(warningText)

@@ -1134,6 +1134,7 @@ final class Dumper: Sendable {
 			return LocationInfo(
 				type: .separateFileNameMismatch,
 				icon: .emoji("🛑"),
+				// icon: .systemImage("notequal.circle.fill"),
 				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
