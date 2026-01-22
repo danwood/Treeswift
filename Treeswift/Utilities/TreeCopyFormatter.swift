@@ -56,9 +56,6 @@ enum TreeCopyFormatter {
 
 		case let .declaration(decl):
 			var text = ""
-			if let folderIndicator = decl.folderIndicator {
-				//	text += folderIndicator + " "
-			}
 			// text += decl.typeIcon + " "
 			text += decl.displayName
 			if !decl.conformances.isEmpty {

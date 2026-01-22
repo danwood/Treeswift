@@ -98,8 +98,8 @@ extension TreeIcon: Hashable {
 
 	nonisolated static func == (lhs: TreeIcon, rhs: TreeIcon) -> Bool {
 		switch (lhs, rhs) {
-		case let (.systemImage(l), .systemImage(r)):
-			l == r
+		case let (.systemImage(l, lc), .systemImage(r, rc)):
+			l == r && lc == rc
 		case let (.emoji(l), .emoji(r)):
 			l == r
 		case let (.emojiOnSystemImage(le, ln, ls), .emojiOnSystemImage(re, rn, rs)):

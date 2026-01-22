@@ -704,7 +704,7 @@ struct PeripheryWarningRow: View {
 		let icon = switch scanResult.annotation {
 		case .unused: "trash"
 		case .redundantPublicAccessibility: "eye.slash"
-		case let .redundantInternalAccessibility: "eye.slash"
+		case .redundantInternalAccessibility: "eye.slash"
 		case .redundantFilePrivateAccessibility: "eye.slash"
 		case .redundantAccessibility: "trash" // Deleting the redundant code
 		case .superfluousIgnoreCommand: "trash" // Deleting the extra periphery:ignore comment
@@ -714,7 +714,7 @@ struct PeripheryWarningRow: View {
 		let color = switch scanResult.annotation {
 		case .unused: Color.red
 		case .redundantPublicAccessibility: Color.blue
-		case let .redundantInternalAccessibility: Color.blue
+		case .redundantInternalAccessibility: Color.blue
 		case .redundantFilePrivateAccessibility: Color.blue
 		case .redundantAccessibility: Color.red // Deleting the redundant code
 		case .superfluousIgnoreCommand: Color.red // Deleting the extra periphery:ignore comment
