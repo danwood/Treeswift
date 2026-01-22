@@ -646,9 +646,9 @@ final class Dumper: Sendable {
 		visited: inout Set<Declaration>,
 		displayedTypes: inout Set<Declaration>,
 		sourceGraph: SourceGraph?,
-		projectRootPath: String?,
-		outputNodes: inout [CategoriesNode]
-	) {
+		projectRootPath: String?
+	) -> [CategoriesNode] {
+		var newNodes: [CategoriesNode] = []
 		if !displayedTypes.contains(rootDeclaration) {
 			displayedTypes.insert(rootDeclaration)
 		}
@@ -680,7 +680,7 @@ final class Dumper: Sendable {
 				sourceGraph: sourceGraph,
 				projectRootPath: projectRootPath
 			) {
-				outputNodes.append(.declaration(node))
+				newNodes.append(.declaration(node))
 			}
 		} else {
 			visited.insert(rootDeclaration)
@@ -688,7 +688,7 @@ final class Dumper: Sendable {
 			for child in children {
 				if !displayedTypes.contains(child) {
 					if let relation = typeToReferencers[child]?[rootDeclaration.name ?? ""] {
-						buildHierarchyNodes(
+						let newChildrenNodes = buildHierarchyNodes(
 							rootDeclaration: child,
 							relationToParent: relation.relationType,
 							typeToReferencers: typeToReferencers,
@@ -697,13 +697,14 @@ final class Dumper: Sendable {
 							visited: &visited,
 							displayedTypes: &displayedTypes,
 							sourceGraph: sourceGraph,
-							projectRootPath: projectRootPath,
-							outputNodes: &outputNodes
+							projectRootPath: projectRootPath
 						)
+						newNodes.append(contentsOf: newChildrenNodes)
 					}
 				}
 			}
 		}
+		return newNodes
 	}
 
 	private nonisolated func buildHierarchySection(
@@ -714,9 +715,7 @@ final class Dumper: Sendable {
 		displayedTypes: inout Set<Declaration>,
 		projectRootPath: String?
 	) -> SectionNode {
-		var children: [CategoriesNode] = []
-
-		buildHierarchyNodes(
+		let children: [CategoriesNode] = buildHierarchyNodes(
 			rootDeclaration: rootDeclaration,
 			relationToParent: nil,
 			typeToReferencers: typeToReferencers,
@@ -725,8 +724,7 @@ final class Dumper: Sendable {
 			visited: &visited,
 			displayedTypes: &displayedTypes,
 			sourceGraph: nil,
-			projectRootPath: projectRootPath,
-			outputNodes: &children
+			projectRootPath: projectRootPath
 		)
 
 		return SectionNode(
