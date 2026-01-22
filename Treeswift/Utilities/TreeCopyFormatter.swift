@@ -57,16 +57,16 @@ enum TreeCopyFormatter {
 		case let .declaration(decl):
 			var text = ""
 			if let folderIndicator = decl.folderIndicator {
-				text += folderIndicator.asText + " "
+				//	text += folderIndicator + " "
 			}
-			text += decl.typeIcon.asText + " "
+			// text += decl.typeIcon + " "
 			text += decl.displayName
 			if !decl.conformances.isEmpty {
 				text += decl.conformances
 			}
-			if let relationship = decl.relationship {
-				text += " {\(relationship)}"
-			}
+			// if let relationship = decl.relationship {
+			//	text += " {\(relationship)}"
+			// }
 			text += " " + decl.locationInfo.displayText
 			lines.append(indent + text)
 
@@ -81,7 +81,7 @@ enum TreeCopyFormatter {
 			}
 
 		case let .syntheticRoot(root):
-			lines.append(indent + root.icon.asText + " " + root.title)
+			lines.append(indent /* + root.icon + " "*/ + root.title)
 			if includeDescendants {
 				for child in root.children {
 					lines.append(formatForCopy(

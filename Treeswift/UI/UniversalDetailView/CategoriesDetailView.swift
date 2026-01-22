@@ -99,7 +99,9 @@ struct CategoriesDetailView: View {
 					.font(.headline)
 
 				HStack(spacing: 4) {
-					declaration.locationInfo.icon.view(size: 14)
+					if let icon = declaration.locationInfo.icon {
+						icon.view(size: 14)
+					}
 					let displayFileName = declaration.locationInfo
 						.fileName ?? extractFileName(from: declaration.locationInfo.relativePath)
 					if let fileName = displayFileName {
@@ -123,7 +125,7 @@ struct CategoriesDetailView: View {
 				.textSelection(.enabled)
 
 				// Location icon explanation
-				if let locationExplanation = locationIconExplanation(declaration.locationInfo.icon) {
+				if let icon = declaration.locationInfo.icon, let locationExplanation = locationIconExplanation(icon) {
 					Text(locationExplanation)
 						.font(.caption)
 						.foregroundStyle(.secondary)
@@ -164,6 +166,7 @@ struct CategoriesDetailView: View {
 		}
 	}
 
+	// FIXME: redundant with DetailTopLevelSymbolsSection.iconTooltip(for:…)
 	private func typeIconExplanation(_ icon: TreeIcon) -> String? {
 		guard case let .emoji(emoji) = icon else { return nil }
 		switch emoji {
@@ -187,7 +190,6 @@ struct CategoriesDetailView: View {
 		case "🆘": return "Declaration is too large for its current file"
 		case "📎": return "Swift-nested type (defined inside another type)"
 		case "🔼": return "In same file as parent type"
-		case "✅": return "Separate file with matching name (good)"
 		case "😒": return "Too small to warrant a separate file"
 		case "🛑": return "File name doesn't match declaration name"
 		default: return nil

@@ -47,7 +47,7 @@ struct DetailTopLevelSymbolsSection: View {
 				ForEach(sortedSymbols, id: \.name) { symbolInfo in
 					VStack(alignment: .leading, spacing: 2) {
 						HStack(spacing: 6) {
-							Text(symbolInfo.icon)
+							symbolInfo.icon.view(size: 16)
 								.font(.system(.body))
 								.help(iconTooltip(for: symbolInfo.icon))
 								.onTapGesture(count: 2) {
@@ -112,22 +112,22 @@ struct DetailTopLevelSymbolsSection: View {
 		.padding(.vertical, 4)
 	}
 
-	private func iconTooltip(for icon: String) -> String {
+	private func iconTooltip(for icon: TreeIcon) -> String {
 		switch icon {
-		case "🔷": "Main App entry point (@main)"
-		case "🖼️": "SwiftUI View"
-		case "🟤": "AppKit class (inherits from NS* type)"
-		case "🟦": "Struct"
-		case "🔵": "Class"
-		case "🚦": "Enum"
-		case "📜": "Protocol"
-		case "⚡️": "Function"
-		case "🫥": "Property or Variable"
-		case "🏷️": "Type alias"
-		case "🔮": "Macro"
-		case "⚖️": "Precedence group"
-		case "🧩": "Extension"
-		case "⬜️": "Other declaration type"
+		case .emoji("🔷"): "Main App entry point (@main)"
+		case .emoji("🖼️"): "SwiftUI View"
+		case .emoji("🟤"): "AppKit class (inherits from NS* type)"
+		case .emoji("🟦"): "Struct"
+		case .emoji("🔵"): "Class"
+		case .emoji("🚦"): "Enum"
+		case .emoji("📜"): "Protocol"
+		case .emoji("⚡️"): "Function"
+		case .emoji("🫥"): "Property or Variable"
+		case .emoji("🏷️"): "Type alias"
+		case .emoji("🔮"): "Macro"
+		case .emoji("⚖️"): "Precedence group"
+		case .emoji("🧩"): "Extension"
+		case .emoji("⬜️"): "Other declaration type"
 		default: "Symbol"
 		}
 	}

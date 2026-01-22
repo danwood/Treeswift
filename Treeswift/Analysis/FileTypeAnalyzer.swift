@@ -195,7 +195,7 @@ final class FileTypeAnalyzer: Sendable {
 				continue
 			}
 
-			let icon = DeclarationIconHelper.typeIcon(for: decl).asText
+			let icon = DeclarationIconHelper.typeIcon(for: decl)
 
 			// Check if symbol name matches file name
 			let matchesFileName = symbolName == fileNameWithoutExtension
@@ -223,7 +223,7 @@ final class FileTypeAnalyzer: Sendable {
 		if isExtensionOnlyFile, typeInfos.isEmpty, let parentName = extensionParentName {
 			typeInfos.append(FileTypeInfo(
 				name: parentName,
-				icon: "🧩",
+				icon: TreeIcon.emoji("🧩"),
 				matchesFileName: false,
 				warningTypes: [],
 				isExtension: true

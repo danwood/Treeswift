@@ -249,11 +249,15 @@ struct DeclarationRowView: View {
 							}
 						}
 
-						if let relationship = declaration.relationship, relationship != RelationshipType.constructs {
-							Text("{\(relationship.rawValue)}")
-								.font(.system(.body, design: .monospaced))
-								.foregroundStyle(.secondary)
+						if let icon = declaration.locationInfo.icon {
+							icon.view(size: 14)
 						}
+
+						// if let relationship = declaration.relationship, relationship != RelationshipType.constructs {
+						// 	Text("{\(relationship.rawValue)}")
+						// 		.font(.system(.body, design: .monospaced))
+						// 		.foregroundStyle(.secondary)
+						// }
 
 						Text(locationText)
 							.font(.system(.body, design: .monospaced))

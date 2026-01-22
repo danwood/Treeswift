@@ -8,23 +8,10 @@
 import SwiftUI
 
 enum TreeIcon: @unchecked Sendable {
-	case systemImage(String)
+	case systemImage(String, Color? = nil)
 	case emoji(String)
 	case emojiOnSystemImage(String, String, CGFloat)
 	case imageResource(String)
-
-	nonisolated var asText: String {
-		switch self {
-		case let .systemImage(name):
-			"[\(name)]"
-		case let .emoji(emoji):
-			emoji
-		case let .emojiOnSystemImage(emoji, _, _):
-			emoji
-		case let .imageResource(name):
-			"[\(name)]"
-		}
-	}
 }
 
 // View building methods
@@ -32,10 +19,11 @@ extension TreeIcon {
 	@ViewBuilder
 	func view(size: CGFloat = 16) -> some View {
 		switch self {
-		case let .systemImage(name):
+		case let .systemImage(name, color):
 			Image(systemName: name)
 				.resizable()
 				.aspectRatio(contentMode: .fit)
+				.foregroundStyle(color != nil ? color! : Color.primary)
 				.frame(width: size, height: size)
 		case let .emoji(emoji):
 			Image(emoji: emoji)
@@ -90,9 +78,10 @@ extension TreeIcon {
 extension TreeIcon: Hashable {
 	nonisolated func hash(into hasher: inout Hasher) {
 		switch self {
-		case let .systemImage(name):
+		case let .systemImage(name, color):
 			hasher.combine(0)
 			hasher.combine(name)
+			hasher.combine(color)
 		case let .emoji(emoji):
 			hasher.combine(1)
 			hasher.combine(emoji)

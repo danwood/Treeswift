@@ -9,7 +9,7 @@ import Foundation
 
 nonisolated struct FileTypeInfo: Hashable, Sendable {
 	let name: String
-	let icon: String
+	let icon: TreeIcon
 	let matchesFileName: Bool
 	let warningTypes: Set<FilterState.WarningType>
 	let isExtension: Bool
@@ -18,7 +18,7 @@ nonisolated struct FileTypeInfo: Hashable, Sendable {
 
 	init(
 		name: String,
-		icon: String,
+		icon: TreeIcon,
 		matchesFileName: Bool,
 		warningTypes: Set<FilterState.WarningType>,
 		isExtension: Bool,

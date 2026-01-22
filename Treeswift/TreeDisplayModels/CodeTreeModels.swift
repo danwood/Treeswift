@@ -176,7 +176,7 @@ struct LocationInfo: Hashable, Sendable {
 
 	// periphery:ignore - kept for future use even though currently unused
 	let type: LocationType
-	let icon: TreeIcon
+	let icon: TreeIcon?
 	let fileName: String?
 	let relativePath: String?
 	let line: Int
@@ -189,8 +189,6 @@ struct LocationInfo: Hashable, Sendable {
 		if let fileName {
 			parts.append("\(fileName)")
 		}
-
-		parts.append(icon.asText)
 
 		if let warningText {
 			parts.append(warningText)

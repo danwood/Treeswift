@@ -7,6 +7,7 @@
 
 import Extensions
 import Foundation
+import SwiftUI // for Color
 
 // @preconcurrency: SourceGraph library was written before Swift 6 concurrency
 // This suppresses warnings about Sendable conformance for types from this module
@@ -1103,7 +1104,7 @@ final class Dumper: Sendable {
 		if lineSpan > 100, inSameFile {
 			return LocationInfo(
 				type: .separateFileGood,
-				icon: .emoji("✅"),
+				icon: nil,
 				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
@@ -1113,7 +1114,7 @@ final class Dumper: Sendable {
 		} else if children(of: declaration).count >= 1, inSameFile {
 			return LocationInfo(
 				type: .separateFileGood,
-				icon: .emoji("✅"),
+				icon: nil,
 				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
@@ -1133,13 +1134,12 @@ final class Dumper: Sendable {
 		} else {
 			return LocationInfo(
 				type: .separateFileNameMismatch,
-				icon: .emoji("🛑"),
-				// icon: .systemImage("notequal.circle.fill"),
+				icon: .systemImage("notequal", Color.red),
 				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				warningText: "separate file name mismatch"
+				warningText: nil
 			)
 		}
 	}
