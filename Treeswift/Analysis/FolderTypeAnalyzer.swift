@@ -45,9 +45,12 @@ final class FolderTypeAnalyzer: Sendable {
 							directory: mutableDir,
 							sourceGraph: sourceGraph
 						)
+						mutableDir.folderType = analysis.folderType
+						mutableDir.analysisWarnings = analysis.warnings
+						mutableDir.statistics = analysis.statistics
 
-						// TODO: Cache whether this directory has folder-private files
-						_ = enrichedChildren.contains { child in
+						// Cache whether this directory has folder-private files
+						mutableDir.hasFolderPrivateFiles = enrichedChildren.contains { child in
 							if case let .file(file) = child {
 								return file.statistics?.isFolderPrivate == true
 							}
@@ -121,13 +124,14 @@ final class FolderTypeAnalyzer: Sendable {
 		-> (
 			folderType: FolderType,
 			warnings: [AnalysisWarning],
+			statistics: FolderStatistics?,
 			symbolWarnings: [Declaration: AnalysisWarning]?
 		) {
 		let allDeclarations = sourceGraph.allDeclarations
 
 		let swiftFiles = collectSwiftFiles(in: directory)
 		guard !swiftFiles.isEmpty else {
-			return (.ambiguous, [], nil)
+			return (.ambiguous, [], nil, nil)
 		}
 
 		let folderPath = directory.id
@@ -139,7 +143,7 @@ final class FolderTypeAnalyzer: Sendable {
 		)
 
 		guard !internalSymbols.isEmpty else {
-			return (.ambiguous, [], nil)
+			return (.ambiguous, [], nil, nil)
 		}
 
 		let referenceAnalysis = analyzeReferences(
@@ -148,19 +152,25 @@ final class FolderTypeAnalyzer: Sendable {
 			sourceGraph: sourceGraph
 		)
 
+		let statistics = FolderStatistics(
+			fileCount: swiftFiles.count,
+			internalSymbolCount: internalSymbols.count,
+			externalReferenceCount: referenceAnalysis.externalFileReferenceCount
+		)
+
 		if let symbolFolderResult = tryClassifyAsSymbolFolder(
 			folderName: folderName,
 			swiftFiles: swiftFiles,
 			internalSymbols: internalSymbols,
 			referenceAnalysis: referenceAnalysis
 		) {
-			return (symbolFolderResult.folderType, symbolFolderResult.warnings, nil)
+			return (symbolFolderResult.folderType, symbolFolderResult.warnings, statistics, nil)
 		}
 
 		if let UIFolderResult = tryClassifyAsUIFolder(
 			folderName: folderName
 		) {
-			return (UIFolderResult.folderType, UIFolderResult.warnings, UIFolderResult.symbolWarnings)
+			return (UIFolderResult.folderType, UIFolderResult.warnings, statistics, UIFolderResult.symbolWarnings)
 		}
 
 		if let sharedFolderResult = tryClassifyAsSharedFolder(
@@ -171,6 +181,7 @@ final class FolderTypeAnalyzer: Sendable {
 			return (
 				sharedFolderResult.folderType,
 				sharedFolderResult.warnings,
+				statistics,
 				sharedFolderResult.symbolWarnings
 			)
 		}
@@ -182,7 +193,7 @@ final class FolderTypeAnalyzer: Sendable {
 			swiftFiles: swiftFiles
 		)
 
-		return (FolderType.ambiguous, warnings, nil)
+		return (.ambiguous, warnings, statistics, nil)
 	}
 
 	private nonisolated func collectSwiftFiles(in directory: FileBrowserDirectory) -> [FileBrowserFile] {

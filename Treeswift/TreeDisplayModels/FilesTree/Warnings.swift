@@ -10,6 +10,7 @@ import Foundation
 nonisolated enum WarningSeverity: Hashable, Sendable {
 	case info
 	case warning
+	case error
 }
 
 nonisolated struct AnalysisWarning: Hashable, Sendable {
@@ -50,11 +51,42 @@ nonisolated enum SuggestedAction: Hashable, Sendable {
 	case checkEncapsulation(folderPath: String, reason: String)
 	case renameFileToMatchSymbol(currentPath: String, currentName: String, suggestedName: String)
 	case moveFileToTrash(filePath: String, fileName: String)
+
+	var displayText: String {
+		switch self {
+		case let .moveSymbolsToFolder(symbols, target):
+			if symbols.count == 1 {
+				"Move \(symbols[0]) to \(target.displayName)"
+			} else {
+				"Move \(symbols.count) symbols to \(target.displayName)"
+			}
+		case let .moveFileToFolder(_, fileName, target):
+			"Move \(fileName) to \(target.displayName)"
+		case let .moveFolderIntoFolder(_, sourceName, target):
+			"Move \(sourceName)/ into \(target.displayName)"
+		case let .renameFolder(_, suggestedName):
+			"Rename folder to '\(suggestedName)'"
+		case let .splitFolderIntoSubfolders(_, suggestion):
+			"Split into subfolders (\(suggestion))"
+		case let .refactorToUseMainSymbol(_, mainSymbol, _):
+			"Refactor to use only \(mainSymbol)"
+		case let .checkEncapsulation(_, reason):
+			"Check encapsulation: \(reason)"
+		case let .renameFileToMatchSymbol(_, _, suggestedName):
+			"Rename file to '\(suggestedName)'"
+		case let .moveFileToTrash(_, fileName):
+			"Move '\(fileName)' to Trash"
+		}
+	}
 }
 
 nonisolated struct FolderTarget: Hashable, Sendable {
 	let folderPath: String
 	let folderName: String
+
+	var displayName: String {
+		folderName + "/"
+	}
 }
 
 nonisolated struct SymbolReference: Hashable, Sendable {

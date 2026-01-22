@@ -33,6 +33,14 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 		}
 	}
 
+	func locString(includeFilename: Bool = true) -> String {
+		switch self {
+		case let .section(node): "Section: \(node.title)"
+		case let .declaration(node): node.locationInfo.locString(includeFilename: includeFilename)
+		case let .syntheticRoot(node): "SyntheticRoot: \(node.title)"
+		}
+	}
+
 	// Collects all descendant IDs recursively
 	func collectDescendantIDs() -> Set<String> {
 		var result = Set<String>()
@@ -175,6 +183,7 @@ struct LocationInfo: Hashable, Sendable {
 		case tooBigForSameFile
 	}
 
+	// periphery:ignore - kept for future use even though currently unused
 	let type: LocationType
 	let icon: TreeIcon?
 	let fileName: String?
@@ -195,5 +204,10 @@ struct LocationInfo: Hashable, Sendable {
 		}
 
 		return parts.joined(separator: " ")
+	}
+
+	func locString(includeFilename: Bool = true) -> String {
+		let endLine: String = endLine.map { ":\($0)" } ?? ""
+		return "\(includeFilename ? (fileName ?? "") : ""):\(line)\(endLine)"
 	}
 }

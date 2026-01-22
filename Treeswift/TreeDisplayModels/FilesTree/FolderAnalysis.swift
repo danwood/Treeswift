@@ -14,3 +14,9 @@ nonisolated enum FolderType: Hashable, Sendable {
 	case ui
 	case ambiguous
 }
+
+nonisolated struct FolderStatistics: Hashable, Sendable {
+	let fileCount: Int
+	let internalSymbolCount: Int
+	let externalReferenceCount: Int
+}

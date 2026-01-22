@@ -122,12 +122,14 @@ final class FileWarningAnalyzer: Sendable {
 				// Enrich typeInfos with per-symbol reference data
 				if let typeInfos = file.typeInfos {
 					mutableFile.typeInfos = typeInfos.map { typeInfo in
-						FileTypeInfo(
+						let refs = analysisResult.symbolReferences[typeInfo.name] ?? []
+						return FileTypeInfo(
 							name: typeInfo.name,
 							icon: typeInfo.icon,
 							matchesFileName: typeInfo.matchesFileName,
 							warningTypes: typeInfo.warningTypes,
 							isExtension: typeInfo.isExtension,
+							referencingFileNames: refs,
 							startLine: typeInfo.startLine
 						)
 					}
@@ -135,8 +137,8 @@ final class FileWarningAnalyzer: Sendable {
 
 				// Compute usage badge only if NO analysis warnings exist
 				if analysisResult.warnings.isEmpty, let stats = analysisResult.statistics {
-					_ = Self.computeUsageBadge(statistics: stats)
-					// TODO: some kind of usage badge
+					let (badgeText, isWarning, isPositive) = Self.computeUsageBadge(statistics: stats)
+					mutableFile.usageBadge = UsageBadge(text: badgeText, isWarning: isWarning, isPositive: isPositive)
 				}
 
 				analyzedNodes.append(.file(mutableFile))
@@ -173,7 +175,9 @@ final class FileWarningAnalyzer: Sendable {
 				externalFileCount: 0,
 				folderReferenceCount: 0,
 				sameFolderFileCount: 0,
-				isEntryPoint: false
+				isEntryPoint: false,
+				referencingFolders: [],
+				sameFolderFileNames: []
 			)
 			return FileAnalysisResult(warnings: [], statistics: emptyStats, symbolReferences: [:])
 		}
@@ -206,12 +210,12 @@ final class FileWarningAnalyzer: Sendable {
 		let crossFolderFiles = Set(crossFolderAnalysis.symbolReferences.values.flatMap(\.self))
 		let sameFolderFiles = allExternalFiles.subtracting(crossFolderFiles)
 		let sameFolderFileCount = sameFolderFiles.count
-		_ = sameFolderFiles
+		let sameFolderFileNames = sameFolderFiles
 			.map { ($0 as NSString).lastPathComponent }
 			.sorted()
 
 		// Extract folder names from cross-folder analysis
-		_ = crossFolderAnalysis.folderReferenceCounts.keys
+		let referencingFolders = crossFolderAnalysis.folderReferenceCounts.keys
 			.map { ($0 as NSString).lastPathComponent }
 			.sorted()
 
@@ -224,7 +228,9 @@ final class FileWarningAnalyzer: Sendable {
 			externalFileCount: crossFolderAnalysis.externalFileReferenceCount,
 			folderReferenceCount: crossFolderAnalysis.folderReferenceCounts.count,
 			sameFolderFileCount: sameFolderFileCount,
-			isEntryPoint: isEntryPoint
+			isEntryPoint: isEntryPoint,
+			referencingFolders: referencingFolders,
+			sameFolderFileNames: sameFolderFileNames
 		)
 
 		// Generate warnings for files with shared code (use cross-folder analysis)
