@@ -532,10 +532,10 @@ final class Dumper: Sendable {
 		var sections: [CategoriesNode] = []
 
 		// Section 1: Hierarchical Type Dependency Tree
-		let section1 = buildHierarchySection(
+		let section1: SectionNode = buildHierarchySection(
 			rootDeclaration: rootDeclaration,
 			typeToReferencers: typeToReferencers,
-			viewsOnly: true,
+			viewsOnly: false, // dump everything
 			visited: &visited,
 			displayedTypes: &displayedTypes,
 			projectRootPath: projectRootPath
@@ -546,7 +546,7 @@ final class Dumper: Sendable {
 		filteredDeclarations.removeAll { displayedTypes.contains($0) }
 
 		// Section 2: View Extensions
-		let section2 = buildViewExtensionsSection(
+		let section2: SectionNode = buildViewExtensionsSection(
 			sourceGraph: sourceGraph,
 			typeToReferencers: typeToReferencers,
 			visited: &visited,
@@ -564,7 +564,7 @@ final class Dumper: Sendable {
 			rootDeclaration: rootDeclaration,
 			displayedTypes: displayedTypes
 		)
-		let section3 = buildSharedTypesSection(
+		let section3: SectionNode = buildSharedTypesSection(
 			sharedTypes,
 			typeToReferencers: typeToReferencers,
 			displayedTypes: displayedTypes,
@@ -577,7 +577,7 @@ final class Dumper: Sendable {
 
 		// Section 4: Orphaned Types
 		let orphanedTypes = extractOrphanedTypes(from: &filteredDeclarations, sourceGraph: sourceGraph)
-		let section4 = buildDeclarationListSection(
+		let section4: SectionNode = buildDeclarationListSection(
 			orphanedTypes,
 			sourceGraph: nil,
 			title: "ORPHANED TYPES (NO REFERENCES AT ALL). CAN DELETE.",
@@ -593,7 +593,7 @@ final class Dumper: Sendable {
 			sourceGraph: sourceGraph,
 			displayedTypes: Set<Declaration>()
 		)
-		let section5 = buildDeclarationListSection(
+		let section5: SectionNode = buildDeclarationListSection(
 			previewOnlyTypes,
 			sourceGraph: nil,
 			title: "PREVIEW-ORPHANED TYPES, ONLY REFERENCED BY PREVIEW. CAN DELETE.",
@@ -609,7 +609,7 @@ final class Dumper: Sendable {
 			sourceGraph: sourceGraph,
 			displayedTypes: displayedTypes
 		)
-		let section6 = buildDeclarationListSection(
+		let section6: SectionNode = buildDeclarationListSection(
 			onlyBodyGetterTypes,
 			sourceGraph: nil,
 			title: "ONLY REFERENCED BY BODY:GETTER, NOT IN HIERARCHY. HOPEFULLY EMPTY.",
@@ -666,6 +666,8 @@ final class Dumper: Sendable {
 		}.sorted(by: { $0.1 < $1.1 })
 			.map(\.0)
 
+		// NOTE: "Children" at this level is only the children of the top node!
+
 		let shouldDisplayThisNode = !viewsOnly || conformsToView(rootDeclaration)
 
 		if shouldDisplayThisNode {
@@ -688,7 +690,7 @@ final class Dumper: Sendable {
 			for child in children {
 				if !displayedTypes.contains(child) {
 					if let relation = typeToReferencers[child]?[rootDeclaration.name ?? ""] {
-						let newChildrenNodes = buildHierarchyNodes(
+						let newChildrenNodes: [CategoriesNode] = buildHierarchyNodes(
 							rootDeclaration: child,
 							relationToParent: relation.relationType,
 							typeToReferencers: typeToReferencers,
@@ -890,6 +892,7 @@ final class Dumper: Sendable {
 				folderIndicator: folderIndicator,
 				typeIcon: typeIcon,
 				isView: conformsToView(type),
+				isSameFileAsChildren: nil,
 				displayName: name,
 				conformances: "",
 				relationship: nil,
@@ -993,12 +996,16 @@ final class Dumper: Sendable {
 			}
 		}
 
+		let childrenSameAsParent = children.count >= 1
+			&& children.allSatisfy { $0.location.file.path == declaration.location.file.path }
+
 		let nodeId = "\(declaration.kind.rawValue)-\(name)-\(declaration.location.file.path.string):\(declaration.location.line)"
 		return DeclarationNode(
 			id: nodeId,
 			folderIndicator: folderIndicator,
 			typeIcon: typeIcon,
 			isView: conformsToView(declaration),
+			isSameFileAsChildren: childrenSameAsParent,
 			displayName: name,
 			conformances: conforms.isEmpty ? "" : ": \(conforms)",
 			relationship: relationshipType,

@@ -238,14 +238,20 @@ struct DeclarationRowView: View {
 							}
 							declaration.typeIcon.view(size: 14)
 							if matchesFileName {
-								Text(declaration.displayName + declaration.conformances)
+								Text(declaration.displayName)
 									.font(.body)
 									+ Text(".swift")
 									.font(.system(.body, design: .monospaced))
 									.foregroundStyle(.secondary)
+									+ Text(declaration.conformances)
+									.font(.body)
+
 							} else {
 								Text("\(declaration.displayName)\(declaration.conformances)")
 									.font(.body)
+							}
+							if declaration.isSameFileAsChildren == true {
+								TreeIcon.systemImage("document.fill", Color.purple).view(size: 16)
 							}
 						}
 
