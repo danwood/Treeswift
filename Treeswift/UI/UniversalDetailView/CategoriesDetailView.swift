@@ -134,18 +134,6 @@ struct CategoriesDetailView: View {
 						.font(.caption)
 						.foregroundStyle(.orange)
 				}
-
-				if !declaration.locationInfo.sizeIndicator.isEmpty {
-					Text(declaration.locationInfo.sizeIndicator)
-						.font(.caption)
-						.foregroundStyle(.secondary)
-
-					if let sizeExplanation = sizeIndicatorExplanation(declaration.locationInfo.sizeIndicator) {
-						Text(sizeExplanation)
-							.font(.caption)
-							.foregroundStyle(.secondary)
-					}
-				}
 			}
 
 			// Referencers
@@ -204,19 +192,6 @@ struct CategoriesDetailView: View {
 		case "🛑": return "File name doesn't match declaration name"
 		default: return nil
 		}
-	}
-
-	private func sizeIndicatorExplanation(_ indicator: String) -> String? {
-		if indicator.contains("⬛") {
-			return "Large: more than 100 lines"
-		} else if indicator.contains("◼") {
-			return "Medium-large: 76-100 lines"
-		} else if indicator.contains("▪") {
-			return "Medium: 51-75 lines"
-		} else if indicator.contains("·") {
-			return "Small-medium: 26-50 lines"
-		}
-		return nil
 	}
 
 	private func extractFileName(from relativePath: String?) -> String? {

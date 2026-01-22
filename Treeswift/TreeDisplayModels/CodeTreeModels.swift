@@ -181,7 +181,6 @@ struct LocationInfo: Hashable, Sendable {
 	let relativePath: String?
 	let line: Int
 	let endLine: Int?
-	let sizeIndicator: String
 	let warningText: String?
 
 	var displayText: String {
@@ -200,10 +199,6 @@ struct LocationInfo: Hashable, Sendable {
 
 		if let warningText {
 			parts.append(warningText)
-		}
-
-		if !sizeIndicator.isEmpty {
-			parts.append(sizeIndicator)
 		}
 
 		return parts.joined(separator: " ")

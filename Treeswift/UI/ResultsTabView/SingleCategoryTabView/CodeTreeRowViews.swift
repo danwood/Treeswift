@@ -207,11 +207,6 @@ struct DeclarationRowView: View {
 			parts.append(warningText)
 		}
 
-		// Add size indicator if non-empty
-		if !declaration.locationInfo.sizeIndicator.isEmpty {
-			parts.append(declaration.locationInfo.sizeIndicator)
-		}
-
 		return parts.joined(separator: " ")
 	}
 
@@ -270,6 +265,14 @@ struct DeclarationRowView: View {
 						Text(locationText)
 							.font(.system(.body, design: .monospaced))
 							.foregroundStyle(.secondary)
+						Spacer()
+
+						LineSizeGraph(
+							line: declaration.locationInfo.line,
+							endLine: declaration.locationInfo.endLine
+						)
+						.frame(width: 100)
+						.help("\((declaration.locationInfo.endLine ?? 0) - declaration.locationInfo.line) lines")
 					}
 				}
 				.treeLabelPadding(indentLevel: indentLevel)

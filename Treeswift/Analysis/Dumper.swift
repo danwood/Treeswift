@@ -1043,19 +1043,6 @@ final class Dumper: Sendable {
 			nil
 		}
 
-		let blackSquares = ["⬛", "◼", "▪", "·"]
-		let sizeIndicator: String = if lineSpan > 100 {
-			blackSquares[0]
-		} else if lineSpan > 75 {
-			blackSquares[1]
-		} else if lineSpan > 50 {
-			blackSquares[2]
-		} else if lineSpan > 25 {
-			blackSquares[3]
-		} else {
-			""
-		}
-
 		/* Priority 1: Size warnings in same file (most actionable) */
 		if relationToParent != nil, relationToParent != .embed,
 		   declaration.location.file == parentSourceFile {
@@ -1067,7 +1054,6 @@ final class Dumper: Sendable {
 					relativePath: relativePath,
 					line: line,
 					endLine: endLine,
-					sizeIndicator: sizeIndicator,
 					warningText: "\(lineSpan) lines + \(childrenLineCount) children's lines"
 				)
 			} else if lineSpan > 200 {
@@ -1078,7 +1064,6 @@ final class Dumper: Sendable {
 					relativePath: relativePath,
 					line: line,
 					endLine: endLine,
-					sizeIndicator: sizeIndicator,
 					warningText: "\(lineSpan) lines"
 				)
 			}
@@ -1093,7 +1078,6 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
 				warningText: nil
 			)
 		}
@@ -1108,7 +1092,6 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
 				warningText: nil
 			)
 		}
@@ -1125,7 +1108,6 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
 				warningText: nil
 			)
 		} else if children(of: declaration).count >= 1, inSameFile {
@@ -1136,7 +1118,6 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
 				warningText: nil
 			)
 		} else if inSameFile {
@@ -1147,7 +1128,6 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
 				warningText: "too small for separate file"
 			)
 		} else {
@@ -1158,8 +1138,7 @@ final class Dumper: Sendable {
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
-				sizeIndicator: sizeIndicator,
-				warningText: nil
+				warningText: "separate file name mismatch"
 			)
 		}
 	}
@@ -1176,24 +1155,6 @@ private extension Declaration {
 }
 
 private extension Declaration {
-	nonisolated var locSize: String {
-		let blackSquares = ["⬛", "◼", "▪", "·"]
-		let sizeIndicator: String
-		let lineSpan = (location.endLine ?? 0) - location.line
-		if lineSpan > 100 {
-			sizeIndicator = " " + blackSquares[0]
-		} else if lineSpan > 75 {
-			sizeIndicator = " " + blackSquares[1]
-		} else if lineSpan > 50 {
-			sizeIndicator = " " + blackSquares[2]
-		} else if lineSpan > 25 {
-			sizeIndicator = " " + blackSquares[3]
-		} else {
-			sizeIndicator = ""
-		}
-		return sizeIndicator
-	}
-
 	nonisolated func locString(includeFilename: Bool = true) -> String {
 		let fileComponent = location.file.path.lastComponent ?? "nil"
 		let file = "\(fileComponent)"
@@ -1207,7 +1168,7 @@ private extension Declaration {
 	nonisolated var debugString: String {
 		let name = name ?? ""
 		let kind = kind.icon
-		return "\(kind) \(name) \(locString())\(locSize)"
+		return "\(kind) \(name) \(locString())"
 	}
 }
 
