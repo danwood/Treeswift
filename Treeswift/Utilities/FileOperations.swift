@@ -28,11 +28,6 @@ private enum FileOperationError: LocalizedError, Sendable {
 	}
 }
 
-/// Move a file to a target folder
-/// Move a folder into a target folder
-/// Rename a folder at the specified path
-/// Rename a file (moving it to a new path in the same directory)
-/// Move a file to the trash with undo support
 /// Organize a view and its children into a dedicated folder
 ///
 /// This function:

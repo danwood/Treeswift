@@ -31,7 +31,6 @@ enum TreeCopyFormatter {
 		}
 	}
 
-	// Generate indented output for FileBrowserNode
 	// Generate indented output for CategoriesNode
 	static func formatForCopy(
 		node: CategoriesNode,
