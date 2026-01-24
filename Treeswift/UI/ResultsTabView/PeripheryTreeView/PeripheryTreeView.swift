@@ -30,6 +30,7 @@ struct PeripheryTreeView: View {
 	@State private var cachedVisibleItems: [String] = []
 	@State private var removalSummary: RemovalSummary?
 	@Environment(\.undoManager) private var undoManager
+	@Environment(FileInspectorState.self) private var inspectorState
 
 	/**
 	 Summary of deletion operations for alert display.
@@ -582,6 +583,12 @@ struct PeripheryTreeView: View {
 					for folderID in emptyFolderIDs {
 						hiddenFileIDs.insert(folderID)
 					}
+
+					// Clear selection if this file was selected
+					// (inspector will be cleared automatically via onChange observer)
+					if selectedID == file.id {
+						selectedID = nil
+					}
 				}
 			}
 
@@ -590,6 +597,18 @@ struct PeripheryTreeView: View {
 				_ = withAnimation(.easeInOut(duration: 0.3)) {
 					hiddenWarningIDs.insert(warningID)
 				}
+			}
+
+			// Check if file will be filtered out (has no remaining visible warnings)
+			let remainingVisibleWarnings = resultIndex.filteredResults(
+				forFile: file.path,
+				filterState: filterState,
+				hiddenWarningIDs: hiddenWarningIDs
+			)
+
+			// Clear selection and inspector if file will disappear from tree
+			if remainingVisibleWarnings.isEmpty, selectedID == file.id {
+				selectedID = nil
 			}
 
 			// Register undo/redo
@@ -909,6 +928,25 @@ struct PeripheryTreeView: View {
 			withAnimation(.easeInOut(duration: 0.3)) {
 				for warningID in allRemovedWarningIDs {
 					hiddenWarningIDs.insert(warningID)
+				}
+			}
+
+			// Clear selection if the selected file was removed or has no remaining warnings
+			if let selectedID {
+				// Check if selected file was explicitly deleted/hidden
+				if hiddenFileIDs.contains(selectedID) {
+					self.selectedID = nil
+				} else if let selectedNode = TreeNodeFinder.findTreeNode(withID: selectedID, in: rootNodes),
+				          case let .file(selectedFile) = selectedNode {
+					// Check if selected file has no remaining visible warnings
+					let remainingWarnings = resultIndex.filteredResults(
+						forFile: selectedFile.path,
+						filterState: filterState,
+						hiddenWarningIDs: hiddenWarningIDs
+					)
+					if remainingWarnings.isEmpty {
+						self.selectedID = nil
+					}
 				}
 			}
 
