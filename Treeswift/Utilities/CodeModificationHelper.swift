@@ -73,71 +73,56 @@ struct CodeModificationHelper {
 		return current
 	}
 
-	// MARK: - Access Control Modifications
+	// MARK: - Access Control Helpers
 
 	/**
-	 Removes redundant public keyword from a declaration.
-
-	 Uses regex to match "public" followed by any whitespace and replaces with empty string.
-	 This makes the declaration internal (Swift's default accessibility).
-
-	 Note: This method is deprecated in favor of fixAccessControl(.removePublic).
-	 Kept temporarily for backward compatibility during refactoring.
+	 Removes an access keyword from a line, preserving whitespace.
 	 */
-	static func removeRedundantPublic(
-		declaration: Declaration,
-		location: Location
-	) -> Result<ModificationResult, Error> {
-		let filePath = location.file.path.string
-		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
-			return .failure(CodeModificationError.cannotReadFile(filePath))
-		}
-
-		// Verify structural confirmation that 'public' modifier exists
-		guard declaration.modifiers.contains("public") else {
-			return .failure(CodeModificationError.patternNotFound("public"))
-		}
-
-		var lines = fileContents.components(separatedBy: .newlines)
-		guard location.line > 0, location.line <= lines.count else {
-			return .failure(CodeModificationError.invalidLineRange(location.line, lines.count))
-		}
-
-		let lineIndex = location.line - 1
-		let originalLine = lines[lineIndex]
-
-		// Match "public" followed by any whitespace (space, newline, tab, etc.)
-		let pattern = #"public\s+"#
-		guard let regex = try? NSRegularExpression(pattern: pattern) else {
-			return .failure(CodeModificationError.patternNotFound("public"))
-		}
-
-		let range = NSRange(originalLine.startIndex..., in: originalLine)
-		let newLine = regex.stringByReplacingMatches(
-			in: originalLine,
-			range: range,
-			withTemplate: ""
-		)
-		lines[lineIndex] = newLine
-
-		let modifiedContents = lines.joined(separator: "\n")
-
-		// Write back to file
-		do {
-			try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
-		} catch {
-			return .failure(CodeModificationError.cannotWriteFile(filePath))
-		}
-
-		return .success(ModificationResult(
-			filePath: filePath,
-			originalContents: fileContents,
-			modifiedContents: modifiedContents,
-			linesRemoved: 0, // Replacement, not deletion
-			startLine: location.line,
-			endLine: location.line
-		))
+	private static func removeAccessKeyword(_ keyword: String, from line: String) -> String {
+		line.replacing(#/\#(keyword)(\s+)/#) { String($0.output.2) }
 	}
+
+	/**
+	 Replaces an access keyword with another, preserving whitespace.
+	 */
+	private static func replaceAccessKeyword(
+		_ oldKeyword: String,
+		with newKeyword: String,
+		in line: String
+	) -> String {
+		line.replacing(#/\#(oldKeyword)(\s+)/#) { "\(newKeyword)\($0.output.2)" }
+	}
+
+	/**
+	 Removes any access keyword from a line, preserving whitespace.
+	 */
+	private static func removeAnyAccessKeyword(from line: String) -> String {
+		var modifiedLine = line
+		modifiedLine = modifiedLine.replacing(#/public(\s+)/#) { String($0.output.1) }
+		modifiedLine = modifiedLine.replacing(#/internal(\s+)/#) { String($0.output.1) }
+		modifiedLine = modifiedLine.replacing(#/fileprivate(\s+)/#) { String($0.output.1) }
+		modifiedLine = modifiedLine.replacing(#/private(\s+)/#) { String($0.output.1) }
+		return modifiedLine
+	}
+
+	/**
+	 Replaces or inserts an access keyword in a line.
+	 If the old keyword exists, replaces it. Otherwise inserts the new keyword.
+	 */
+	private static func replaceOrInsertAccessKeyword(
+		oldKeyword: String?,
+		newKeyword: String,
+		declarationKind: Declaration.Kind,
+		in line: String
+	) -> String {
+		if let oldKeyword, line.contains(#/\#(oldKeyword)\s+/#) {
+			replaceAccessKeyword(oldKeyword, with: newKeyword, in: line)
+		} else {
+			insertAccessKeyword(newKeyword, before: declarationKind, in: line)
+		}
+	}
+
+	// MARK: - Access Control Modifications
 
 	/**
 	 Fixes redundant or incorrect access control by removing or inserting access keywords.
@@ -171,38 +156,29 @@ struct CodeModificationHelper {
 			guard declaration.modifiers.contains("public") else {
 				return .failure(CodeModificationError.patternNotFound("public modifier"))
 			}
-			newLine = originalLine.replacing(#/public\s+/#, with: "")
+			newLine = removeAccessKeyword("public", from: originalLine)
 
 		case .removeInternal:
-			guard declaration.modifiers.contains("internal") else {
-				return .failure(CodeModificationError.patternNotFound("internal modifier"))
-			}
-			newLine = originalLine.replacing(#/internal\s+/#, with: "")
+			// Internal is the default, so keyword may not be present - just try to remove it
+			newLine = removeAccessKeyword("internal", from: originalLine)
 
 		case .removePrivate:
 			guard declaration.modifiers.contains("private") else {
 				return .failure(CodeModificationError.patternNotFound("private modifier"))
 			}
-			newLine = originalLine.replacing(#/private\s+/#, with: "")
+			newLine = removeAccessKeyword("private", from: originalLine)
 
 		case .removeFilePrivate:
 			guard declaration.modifiers.contains("fileprivate") else {
 				return .failure(CodeModificationError.patternNotFound("fileprivate modifier"))
 			}
-			newLine = originalLine.replacing(#/fileprivate\s+/#, with: "")
+			newLine = removeAccessKeyword("fileprivate", from: originalLine)
 
 		case let .removeAccessibility(current):
-			// Remove any access keyword present
-			if current != nil {
-				newLine = originalLine.replacing(#/\#(current)\s+/#, with: "")
+			if let current {
+				newLine = removeAccessKeyword(current, from: originalLine)
 			} else {
-				// Try each keyword in order
-				var modifiedLine = originalLine
-				modifiedLine = modifiedLine.replacing(#/public\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/internal\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/fileprivate\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/private\s+/#, with: "")
-				newLine = modifiedLine
+				newLine = removeAnyAccessKeyword(from: originalLine)
 			}
 
 		case .insertPrivate:
@@ -810,49 +786,45 @@ struct CodeModificationHelper {
 
 			// Handle different removal types
 			if case .redundantPublicAccessibility = scanResult.annotation {
-				// Remove "public " keyword from declaration line
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-
-				let modifiedLine = lines[lineIndex].replacing(#/public\s+/#, with: "")
-				lines[lineIndex] = modifiedLine
+				lines[lineIndex] = removeAccessKeyword("public", from: lines[lineIndex])
 				removedWarningIDs.append(warningID)
 
 			} else if case let .redundantInternalAccessibility(_, suggestedAccessibility) = scanResult.annotation {
-				// Replace "internal" with suggested keyword or remove if nil
+				// Internal is the default, so keyword may or may not be present
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 
-				let modifiedLine: String = if let suggested = suggestedAccessibility {
-					// Replace internal with suggested accessibility
-					lines[lineIndex].replacing(#/internal\s+/#, with: "\(suggested.rawValue) ")
+				if let suggested = suggestedAccessibility {
+					lines[lineIndex] = replaceOrInsertAccessKeyword(
+						oldKeyword: "internal",
+						newKeyword: suggested.rawValue,
+						declarationKind: declaration.kind,
+						in: lines[lineIndex]
+					)
 				} else {
-					// Remove internal keyword
-					lines[lineIndex].replacing(#/internal\s+/#, with: "")
+					// No suggested accessibility means top-level scope
+					// Use 'private' by convention (equivalent to fileprivate at top level)
+					lines[lineIndex] = replaceOrInsertAccessKeyword(
+						oldKeyword: "internal",
+						newKeyword: "private",
+						declarationKind: declaration.kind,
+						in: lines[lineIndex]
+					)
 				}
-				lines[lineIndex] = modifiedLine
 				removedWarningIDs.append(warningID)
 
 			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
-				// Replace "fileprivate" with "private" (more restrictive)
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-
-				let modifiedLine = lines[lineIndex].replacing(#/fileprivate\s+/#, with: "private ")
-				lines[lineIndex] = modifiedLine
+				lines[lineIndex] = replaceAccessKeyword("fileprivate", with: "private", in: lines[lineIndex])
 				removedWarningIDs.append(warningID)
 
 			} else if case .redundantAccessibility = scanResult.annotation {
-				// Remove any access keyword (same as container)
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-
-				var modifiedLine = lines[lineIndex]
-				modifiedLine = modifiedLine.replacing(#/public\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/internal\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/fileprivate\s+/#, with: "")
-				modifiedLine = modifiedLine.replacing(#/private\s+/#, with: "")
-				lines[lineIndex] = modifiedLine
+				lines[lineIndex] = removeAnyAccessKeyword(from: lines[lineIndex])
 				removedWarningIDs.append(warningID)
 
 			} else if scanResult.annotation == ScanResult.Annotation.superfluousIgnoreCommand {
