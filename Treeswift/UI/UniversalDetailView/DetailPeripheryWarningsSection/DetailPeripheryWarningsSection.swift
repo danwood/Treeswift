@@ -393,7 +393,7 @@ private struct PeripheryWarningRow: View {
 
 				// Special case for imports (single line deletion)
 				= if isImport {
-				DeletionOperationExecutor.executeImportDeletion(
+				CodeModificationHelper.executeImportDeletion(
 					location: location,
 					sourceGraph: sourceGraph,
 					undoManager: undoManager,
@@ -416,7 +416,7 @@ private struct PeripheryWarningRow: View {
 			}
 			// Use enhanced deletion with sourceGraph if available
 			else if let sourceGraph, hasFullRange {
-				DeletionOperationExecutor.executeDeclarationDeletion(
+				CodeModificationHelper.executeDeclarationDeletion(
 					declaration: declaration,
 					location: location,
 					sourceGraph: sourceGraph,
@@ -439,7 +439,7 @@ private struct PeripheryWarningRow: View {
 				)
 			} else {
 				// Fallback to simple deletion when sourceGraph is missing
-				DeletionOperationExecutor.executeSimpleDeclarationDeletion(
+				CodeModificationHelper.executeSimpleDeclarationDeletion(
 					declaration: declaration,
 					location: location,
 					sourceGraph: sourceGraph,
@@ -487,7 +487,7 @@ private struct PeripheryWarningRow: View {
 		Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(300))
 
-			let result = DeletionOperationExecutor.executeIgnoreDirectiveInsertion(
+			let result = CodeModificationHelper.executeIgnoreCommentInsertion(
 				declaration: declaration,
 				location: location,
 				sourceGraph: sourceGraph,
@@ -561,11 +561,37 @@ private struct PeripheryWarningRow: View {
 		}
 	}
 
-	// Fix redundant public by removing the keyword (internal is default)
-	private func fixRedundantPublic() {
-		let result = CodeModificationHelper.removeRedundantPublic(
+	// Fix redundant access control by removing or inserting keywords
+	private func fixAccessControl() {
+		let fix: ModificationOperation.AccessControlFix
+
+		switch scanResult.annotation {
+		case .redundantPublicAccessibility:
+			fix = .removePublic
+		case let .redundantInternalAccessibility(_, suggestedAccessibility):
+			// Trust Periphery metadata to determine which keyword to insert
+			if let suggested = suggestedAccessibility {
+				switch suggested {
+				case .private: fix = .insertPrivate
+				case .fileprivate: fix = .insertFilePrivate
+				default: return
+				}
+			} else {
+				fix = .removeInternal
+			}
+		case .redundantFilePrivateAccessibility:
+			fix = .insertPrivate
+		case .redundantAccessibility:
+			// Remove whatever access keyword is present
+			fix = .removeAccessibility(current: String?(nil))
+		default:
+			return
+		}
+
+		let result = CodeModificationHelper.fixAccessControl(
 			declaration: declaration,
-			location: location
+			location: location,
+			fix: fix
 		)
 
 		switch result {
@@ -574,13 +600,13 @@ private struct PeripheryWarningRow: View {
 			SourceFileReader.invalidateCache(for: modification.filePath)
 
 			// Register undo
-			registerModificationUndo(modification: modification, actionName: "Fix Redundant Public")
+			registerModificationUndo(modification: modification, actionName: "Fix Access Control")
 
 			// Mark completed and notify
 			completeWarning()
 
 		case let .failure(error):
-			print("Failed to remove redundant public: \(error.localizedDescription)")
+			print("Failed to fix access control: \(error.localizedDescription)")
 		}
 	}
 
@@ -728,7 +754,13 @@ private struct PeripheryWarningRow: View {
 				if scanResult.annotation == .unused {
 					deleteDeclaration()
 				} else if case .redundantPublicAccessibility = scanResult.annotation {
-					fixRedundantPublic()
+					fixAccessControl()
+				} else if case .redundantInternalAccessibility = scanResult.annotation {
+					fixAccessControl()
+				} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
+					fixAccessControl()
+				} else if case .redundantAccessibility = scanResult.annotation {
+					fixAccessControl()
 				} else if scanResult.annotation == .superfluousIgnoreCommand {
 					fixSuperfluousIgnoreCommand()
 				}

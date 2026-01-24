@@ -76,13 +76,13 @@ extension FileNode {
 			let location = ScanResultHelper.location(from: declaration)
 			let hasFullRange = location.endLine != nil && location.endColumn != nil
 			let isImport = declaration.kind == .module
-			return !result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport)
+			return !result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport, location: location)
 		}
 		let nonDeletableCount = nonDeletableWarnings.count
 
 		// Filter and sort warnings for this file (bottom to top)
 		let fileWarnings = scanResults
-			.compactMap { scanResult -> (result: ScanResult, declaration: Declaration, location: Location)? in
+			.compactMap { scanResult -> (scanResult: ScanResult, declaration: Declaration, location: Location)? in
 				let declaration = scanResult.declaration
 				let location = ScanResultHelper.location(from: declaration)
 
@@ -99,7 +99,11 @@ extension FileNode {
 				// Check if code can be removed for this warning
 				let hasFullRange = location.endLine != nil && location.endColumn != nil
 				let isImport = declaration.kind == .module
-				guard scanResult.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) else {
+				guard scanResult.annotation.canRemoveCode(
+					hasFullRange: hasFullRange,
+					isImport: isImport,
+					location: location
+				) else {
 					return nil
 				}
 
@@ -122,171 +126,40 @@ extension FileNode {
 			))
 		}
 
-		// Split contents into lines ONCE for in-memory processing
-		// This prevents line number staleness that occurs with disk-based deletion
-		var lines = originalContents.components(separatedBy: .newlines)
-		var removedWarningIDs: [String] = []
-		var adjustedUSRs: [String] = []
-		var failedIgnoreCommentsCount = 0
+		// Use the batch modification helper to process all warnings
+		let result = CodeModificationHelper.executeBatchModifications(
+			operations: fileWarnings,
+			filePath: path,
+			sourceGraph: sourceGraph
+		)
 
-		// Process each warning from bottom to top
-		// Since sorted bottom-to-top, each deletion automatically shifts remaining correctly
-		for (result, declaration, location) in fileWarnings {
-			let usr = declaration.usrs.first ?? ""
-			let warningID = "\(location.file.path.string):\(usr)"
-
-			// Handle different removal types
-			if case .redundantPublicAccessibility = result.annotation {
-				// Remove "public " keyword from declaration line
-				let lineIndex = location.line - 1
-				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-
-				let modifiedLine = lines[lineIndex].replacingOccurrences(
-					of: #"public\s+"#,
-					with: "",
-					options: .regularExpression
-				)
-				lines[lineIndex] = modifiedLine
-				removedWarningIDs.append(warningID)
-
-			} else if result.annotation == .superfluousIgnoreCommand {
-				// Find and remove periphery:ignore comment
-				guard let commentLine = CommentScanner.findCommentContaining(
-					pattern: "periphery:ignore",
-					in: lines,
-					backwardFrom: location.line,
-					maxDistance: 10
-				) else {
-					failedIgnoreCommentsCount += 1
-					continue
-				}
-
-				let commentIndex = commentLine - 1
-				guard commentIndex >= 0, commentIndex < lines.count else { continue }
-
-				lines.remove(at: commentIndex)
-				removedWarningIDs.append(warningID)
-
-				// Adjust source graph line numbers
-				if let sourceGraph {
-					let adjusted = SourceGraphLineAdjuster.adjustAndTrack(
-						sourceGraph: sourceGraph,
-						filePath: path,
-						afterLine: commentLine,
-						lineDelta: -1
-					)
-					adjustedUSRs.append(contentsOf: adjusted)
-				}
-
-			} else if declaration.kind == .module {
-				// Remove import statement
-				let lineIndex = location.line - 1
-				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-
-				lines.remove(at: lineIndex)
-				removedWarningIDs.append(warningID)
-
-				// Adjust source graph
-				if let sourceGraph {
-					let adjusted = SourceGraphLineAdjuster.adjustAndTrack(
-						sourceGraph: sourceGraph,
-						filePath: path,
-						afterLine: location.line,
-						lineDelta: -1
-					)
-					adjustedUSRs.append(contentsOf: adjusted)
-				}
-
-			} else {
-				// Delete full declaration (struct, property, function, etc.)
-				guard let endLine = location.endLine else { continue }
-
-				// Find actual start line (including attributes and comments)
-				let startLine = DeclarationDeletionHelper.findDeletionStartLine(
-					lines: lines,
-					declarationLine: location.line,
-					attributes: declaration.attributes
-				)
-
-				// Include trailing blanks for multi-line declarations
-				let isMultiLine = endLine > location.line
-				let finalEndLine = isMultiLine
-					? DeclarationDeletionHelper.findDeletionEndLine(
-						lines: lines,
-						declarationEndLine: endLine
-					)
-					: endLine
-
-				// Validate range
-				let startIndex = startLine - 1
-				let endIndex = finalEndLine - 1
-				guard startIndex >= 0, endIndex < lines.count, startIndex <= endIndex else {
-					continue
-				}
-
-				// Remove lines from array
-				let linesRemoved = endIndex - startIndex + 1
-				lines.removeSubrange(startIndex ... endIndex)
-				removedWarningIDs.append(warningID)
-
-				// Adjust source graph
-				if let sourceGraph {
-					let adjusted = SourceGraphLineAdjuster.adjustAndTrack(
-						sourceGraph: sourceGraph,
-						filePath: path,
-						afterLine: finalEndLine,
-						lineDelta: -linesRemoved
-					)
-					adjustedUSRs.append(contentsOf: adjusted)
-				}
-			}
-		}
-
-		// Join lines back into string
-		let currentContents = lines.joined(separator: "\n")
-
-		// Determine if file should be deleted or if imports should be removed
-		var shouldDeleteFile = false
-		var shouldRemoveImports = false
-		var finalContents = currentContents
-
-		if let graph = sourceGraph {
-			let analysisResult = FileContentAnalyzer.shouldDeleteFile(
-				filePath: path,
-				modifiedContents: currentContents,
-				sourceGraph: graph,
-				removedWarningIDs: removedWarningIDs
+		// Add non-deletable count to the result
+		switch result {
+		case var .success(removalResult):
+			// Update deletion stats to include non-deletable count
+			var updatedStats = removalResult.deletionStats
+			updatedStats = DeletionStats(
+				totalWarningsInFile: totalWarningsInFile,
+				deletedCount: updatedStats.deletedCount,
+				nonDeletableCount: nonDeletableCount,
+				failedIgnoreCommentsCount: updatedStats.failedIgnoreCommentsCount
 			)
-			shouldDeleteFile = analysisResult.shouldDelete
-			shouldRemoveImports = analysisResult.shouldRemoveImports
 
-			// If keeping file only for comments, remove imports
-			if shouldRemoveImports {
-				finalContents = FileContentAnalyzer.removeImportStatements(from: currentContents)
-			}
-		}
+			let updatedResult = RemovalResult(
+				filePath: removalResult.filePath,
+				originalContents: removalResult.originalContents,
+				modifiedContents: removalResult.modifiedContents,
+				removedWarningIDs: removalResult.removedWarningIDs,
+				adjustedUSRs: removalResult.adjustedUSRs,
+				shouldDeleteFile: removalResult.shouldDeleteFile,
+				shouldRemoveImports: removalResult.shouldRemoveImports,
+				deletionStats: updatedStats
+			)
 
-		// Write modified contents to file
-		do {
-			try finalContents.write(toFile: path, atomically: true, encoding: .utf8)
-		} catch {
+			return .success(updatedResult)
+
+		case let .failure(error):
 			return .failure(error)
 		}
-
-		return .success(RemovalResult(
-			filePath: path,
-			originalContents: originalContents,
-			modifiedContents: finalContents,
-			removedWarningIDs: removedWarningIDs,
-			adjustedUSRs: adjustedUSRs,
-			shouldDeleteFile: shouldDeleteFile,
-			shouldRemoveImports: shouldRemoveImports,
-			deletionStats: DeletionStats(
-				totalWarningsInFile: totalWarningsInFile,
-				deletedCount: removedWarningIDs.count,
-				nonDeletableCount: nonDeletableCount,
-				failedIgnoreCommentsCount: failedIgnoreCommentsCount
-			)
-		))
 	}
 }
