@@ -306,7 +306,40 @@ final class Dumper: Sendable {
 		return result.sorted { $0.location < $1.location }
 	}
 
-	/// Builds a dictionary mapping each declaration to its referencers and their relation types.
+	/**
+	 Builds the core lookup table that maps each declaration to its parent declarations.
+
+	 ## Data Structure: [Declaration: [String: Relation]]
+
+	 This creates a dictionary where:
+	 - **Key**: A child declaration (the type being referenced)
+	 - **Value**: Dictionary of parent declarations that reference the child
+	   - **String key**: Parent declaration's name (e.g., "MyView", "ContentView")
+	   - **Relation value**: Relationship info containing:
+	     - `relationType`: How parent uses child (.embed, .subview, .prop, .param, .call, etc.)
+	     - `location`: Source location where the reference occurs
+	     - `declaration`: The parent Declaration object itself
+
+	 ## Example
+
+	 If `ButtonView` is used by both `ContentView` and `SettingsView`:
+	 ```
+	 typeToReferencers[ButtonView] = [
+	     "ContentView": Relation(relationType: .subview, location: ..., declaration: ContentView),
+	     "SettingsView": Relation(relationType: .subview, location: ..., declaration: SettingsView)
+	 ]
+	 ```
+
+	 ## Usage in Tree Building
+
+	 Both buildHierarchyNodes() and buildDeclarationNode() use this dictionary to find children:
+	 - To find children of `ParentDecl`, iterate through typeToReferencers
+	 - For each entry, check if `parentToRelation[ParentDecl.name]` exists
+	 - If it does, that declaration is a child of ParentDecl
+
+	 This reverse lookup pattern (child→parents map, used to find parent→children) allows
+	 efficient tree construction while handling multiple-parent scenarios (shared types).
+	 */
 	private nonisolated func buildTypeToReferencers(
 		from declarations: [Declaration],
 		sourceGraph: SourceGraph
@@ -457,6 +490,30 @@ final class Dumper: Sendable {
 
 	/**
 	 Build Categories with progressive streaming - yields each section as it completes.
+
+	 ## ARCHITECTURE OVERVIEW
+
+	 The tree display system has a two-level hierarchy:
+
+	 **Level 1: Categories (This Function)**
+	 - Partitions all declarations into 7 sections (tabs in the UI)
+	 - Each section groups declarations by usage pattern
+	 - Sections built sequentially, streaming results via callback
+
+	 **Level 2: Trees Within Sections (buildHierarchyNodes + buildDeclarationNode)**
+	 - buildHierarchyNodes(): Orchestrates tree structure (decides which nodes to show/skip)
+	 - buildDeclarationNode(): Constructs individual node objects with children
+	 - Both use typeToReferencers lookup table to find parent→child relationships
+
+	 ## THE 7 CATEGORY SECTIONS
+
+	 1. **HIERARCHY**: Main tree from root app, cascading dependencies
+	 2. **VIEW EXTENSIONS**: View protocol extensions with utility functions
+	 3. **SHARED TYPES**: Types used by multiple unrelated parents
+	 4. **ORPHANED TYPES**: Types with zero references (safe to delete)
+	 5. **PREVIEW-ONLY**: Types only referenced by makePreview()
+	 6. **BODY-GETTER**: Types only referenced by getter:body
+	 7. **UNATTACHED**: Everything else (used but not in hierarchy)
 
 	 DATA FLOW AND PARTITIONING:
 
@@ -637,6 +694,38 @@ final class Dumper: Sendable {
 		return sections
 	}
 
+	/**
+	 Orchestrates building a subtree of declaration nodes starting from a root declaration.
+
+	 This function is the **tree orchestrator** that decides whether to display a node or skip it
+	 while processing its children. It works recursively to build an entire subtree.
+
+	 Key difference from buildDeclarationNode():
+	 - This function: Orchestrates tree structure, decides which nodes to show/skip
+	 - buildDeclarationNode(): Constructs individual node objects with their children
+
+	 ## Filtering vs Skipping Logic
+
+	 When `viewsOnly=true` and a declaration isn't a View:
+	 - This function SKIPS the node (doesn't display it)
+	 - But processes the node's children recursively (lines 690-707)
+	 - Returns an array that may contain the children's nodes (without the parent)
+
+	 When a declaration should be displayed:
+	 - Calls buildDeclarationNode() to construct the actual node (line 674)
+	 - Returns array with single node (which contains all descendants as children)
+
+	 ## Return Type: [CategoriesNode]
+
+	 Returns an array (not single node) because:
+	 - Normal case: Returns array with one node (the root and its subtree)
+	 - Filtered case: Returns array with multiple nodes (the root's children, without root itself)
+
+	 ## Parameters
+
+	 - typeToReferencers: Lookup table mapping Declaration → [ParentName: Relation]
+	   Used to find which declarations are children of the current rootDeclaration
+	 */
 	private nonisolated func buildHierarchyNodes(
 		rootDeclaration: Declaration,
 		relationToParent: RelationshipType?,
@@ -653,6 +742,10 @@ final class Dumper: Sendable {
 			displayedTypes.insert(rootDeclaration)
 		}
 
+		// Find all children of the current node by looking up which declarations
+		// reference this rootDeclaration as their parent in the typeToReferencers map.
+		// The map structure is: [Child: [ParentName: Relation]]
+		// So we check if parentToRelation[rootDeclaration.name] exists for each child.
 		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
 			Declaration,
 			Location
@@ -666,11 +759,16 @@ final class Dumper: Sendable {
 		}.sorted(by: { $0.1 < $1.1 })
 			.map(\.0)
 
-		// NOTE: "Children" at this level is only the children of the top node!
-
+		// Decide whether to display this node or skip it (but still process children).
+		// When viewsOnly=true, only Views are displayed; other types are skipped but
+		// their children are still processed (they get "promoted" up in the tree).
 		let shouldDisplayThisNode = !viewsOnly || conformsToView(rootDeclaration)
 
 		if shouldDisplayThisNode {
+			// CASE 1: Display this node
+			// Call buildDeclarationNode() to construct the actual DeclarationNode object.
+			// Note: We pass viewsOnly=false because buildDeclarationNode handles its own
+			// children recursively and doesn't need the filtering logic here.
 			if let node = buildDeclarationNode(
 				rootDeclaration,
 				relationToParent: relationToParent,
@@ -685,11 +783,16 @@ final class Dumper: Sendable {
 				newNodes.append(.declaration(node))
 			}
 		} else {
+			// CASE 2: Skip this node (filtered out by viewsOnly), but process its children
+			// This "promotes" the children up in the tree hierarchy, removing the
+			// intermediate non-View type from the display.
 			visited.insert(rootDeclaration)
 
 			for child in children {
 				if !displayedTypes.contains(child) {
 					if let relation = typeToReferencers[child]?[rootDeclaration.name ?? ""] {
+						// Recursively call buildHierarchyNodes() for each child.
+						// This allows further filtering decisions for each child.
 						let newChildrenNodes: [CategoriesNode] = buildHierarchyNodes(
 							rootDeclaration: child,
 							relationToParent: relation.relationType,
@@ -701,6 +804,7 @@ final class Dumper: Sendable {
 							sourceGraph: sourceGraph,
 							projectRootPath: projectRootPath
 						)
+						// Add all returned nodes to our array (may be 0, 1, or multiple)
 						newNodes.append(contentsOf: newChildrenNodes)
 					}
 				}
@@ -911,6 +1015,39 @@ final class Dumper: Sendable {
 		)
 	}
 
+	/**
+	 Constructs a single DeclarationNode object and recursively builds all its children.
+
+	 This function is the **node constructor** that creates the actual DeclarationNode object
+	 representing one declaration in the visual tree, complete with all its metadata, icons,
+	 location info, and recursively-built child nodes.
+
+	 Key difference from buildHierarchyNodes():
+	 - buildHierarchyNodes(): Orchestrates tree structure, decides which nodes to show/skip
+	 - This function: Constructs individual node objects with their children
+
+	 ## Return Type: DeclarationNode?
+
+	 Returns a single node or nil:
+	 - Normal case: Returns a DeclarationNode with all children populated
+	 - Filtered case: Returns nil when viewsOnly=true and declaration isn't a View
+
+	 ## Recursion Pattern
+
+	 This function recursively calls itself for each child declaration (line 1029),
+	 building the entire subtree. Unlike buildHierarchyNodes(), this doesn't skip
+	 intermediate nodes; it either builds a node or returns nil.
+
+	 ## Children Discovery
+
+	 Lines 995-1006: Uses the same typeToReferencers lookup pattern as buildHierarchyNodes()
+	 to find declarations that reference this declaration as their parent.
+
+	 ## Parameters
+
+	 - typeToReferencers: Lookup table mapping Declaration → [ParentName: Relation]
+	   Used to find which declarations are children of the current declaration
+	 */
 	private nonisolated func buildDeclarationNode(
 		_ declaration: Declaration,
 		relationToParent: RelationshipType?,
@@ -945,6 +1082,9 @@ final class Dumper: Sendable {
 			relationToParent
 		}
 
+		// Find all children of this declaration using the same lookup pattern as buildHierarchyNodes().
+		// Look through the typeToReferencers map to find declarations that list this declaration
+		// as their parent: [Child: [ParentName: Relation]]
 		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
 			Declaration,
 			Location
@@ -960,6 +1100,9 @@ final class Dumper: Sendable {
 
 		let childrenLineCount = children.reduce(0) { $0 + ($1.location.endLine ?? 0) - $1.location.line + 1 }
 
+		// Early return nil if filtered out by viewsOnly.
+		// Unlike buildHierarchyNodes() which processes children when skipping,
+		// this function simply returns nil and lets the caller handle it.
 		if viewsOnly, !conformsToView(declaration) {
 			visited.insert(declaration)
 			return nil
@@ -975,10 +1118,13 @@ final class Dumper: Sendable {
 
 		visited.insert(declaration)
 
+		// Recursively build child nodes by calling buildDeclarationNode() for each child.
+		// This creates the full subtree of descendants beneath this declaration.
 		var childNodes: [CategoriesNode] = []
 		for child in children {
 			if !displayedTypes.contains(child) {
 				if let relation = typeToReferencers[child]?[declaration.name ?? ""] {
+					// Recursive call to build each child node and its descendants
 					if let childNode = buildDeclarationNode(
 						child,
 						relationToParent: relation.relationType,
@@ -992,6 +1138,7 @@ final class Dumper: Sendable {
 					) {
 						childNodes.append(.declaration(childNode))
 					}
+					// If childNode is nil (filtered out), it's simply not added to childNodes
 				}
 			}
 		}
