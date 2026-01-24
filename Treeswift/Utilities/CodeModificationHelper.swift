@@ -42,6 +42,37 @@ struct CodeModificationHelper {
 		}
 	}
 
+	// MARK: - Empty Container Detection
+
+	/**
+	 Finds the highest ancestor container that would become empty after deleting the given declaration.
+
+	 Walks up the parent chain to find containers that have only one child (the declaration being deleted,
+	 or its ancestor). Returns the highest such ancestor, or the original declaration if no parents would be empty.
+
+	 Example:
+	 ```
+	 extension Foo {
+	     struct Bar {
+	         var unused: Int  // Only member
+	     }
+	 }
+	 ```
+	 When deleting `unused`, this returns the `extension Foo` declaration since both `Bar` and the extension
+	 would become empty.
+	 */
+	static func findHighestEmptyAncestor(of declaration: Declaration) -> Declaration {
+		var current = declaration
+
+		while let parent = current.parent,
+		      parent.declarations.count == 1 {
+			// Parent would be empty after removing current
+			current = parent
+		}
+
+		return current
+	}
+
 	// MARK: - Access Control Modifications
 
 	/**
@@ -162,7 +193,7 @@ struct CodeModificationHelper {
 
 		case let .removeAccessibility(current):
 			// Remove any access keyword present
-			if let current {
+			if current != nil {
 				newLine = originalLine.replacing(#/\#(current)\s+/#, with: "")
 			} else {
 				// Try each keyword in order
@@ -350,11 +381,16 @@ struct CodeModificationHelper {
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) -> Result<Void, Error> {
-		guard let endLine = location.endLine else {
+		// Check if parent should be deleted instead (empty container removal)
+		let actualTarget = findHighestEmptyAncestor(of: declaration)
+
+		// Use the actual target's location for deletion
+		let targetLocation = actualTarget.location
+		guard let endLine = targetLocation.endLine else {
 			return .failure(CodeModificationError.missingEndLocation)
 		}
 
-		let filePath = location.file.path.string
+		let filePath = targetLocation.file.path.string
 
 		// Read original file contents
 		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
@@ -366,16 +402,16 @@ struct CodeModificationHelper {
 		// Find deletion boundaries using smart boundary detection
 		let startLine = DeclarationDeletionHelper.findDeletionStartLine(
 			lines: lines,
-			declarationLine: location.line,
-			attributes: declaration.attributes
+			declarationLine: targetLocation.line,
+			attributes: actualTarget.attributes
 		)
 
-		// Include trailing blanks only for multi-line declarations
-		let isMultiLine = endLine > location.line
-		let shouldIncludeTrailingBlanks = isMultiLine
-		let finalEndLine = shouldIncludeTrailingBlanks
-			? DeclarationDeletionHelper.findDeletionEndLine(lines: lines, declarationEndLine: endLine)
-			: endLine
+		// Determine ending line (includes smart blank line handling)
+		let finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
+			lines: lines,
+			declarationLine: startLine,
+			declarationEndLine: endLine
+		)
 
 		// Validate range
 		guard startLine > 0, finalEndLine > 0,
@@ -629,8 +665,8 @@ struct CodeModificationHelper {
 			return .failure(CodeModificationError.invalidLineRange(location.line, lines.count))
 		}
 
-		// Find the insertion line (same as deletion start line logic)
-		let insertionLine = DeclarationDeletionHelper.findDeletionStartLine(
+		// Find the insertion line (stops before documentation comments, unlike deletion logic)
+		let insertionLine = DeclarationDeletionHelper.findIgnoreCommentInsertionLine(
 			lines: lines,
 			declarationLine: location.line,
 			attributes: declaration.attributes
@@ -712,9 +748,32 @@ struct CodeModificationHelper {
 		var adjustedUSRs: [String] = []
 		var failedIgnoreCommentsCount = 0
 
+		// Pre-process operations to handle empty container removal
+		// Track declarations we've already included (by USR) to avoid duplicates when
+		// multiple siblings would all cause the parent to be empty
+		var processedOperations: [(scanResult: ScanResult, declaration: Declaration, location: Location)] = []
+		var seenUSRs = Set<String>()
+
+		for (scanResult, declaration, location) in operations {
+			// For full declaration deletions, check if parent should be deleted instead
+			let actualTarget: Declaration = if declaration.kind != .module,
+			                                   scanResult.annotation != .superfluousIgnoreCommand {
+				findHighestEmptyAncestor(of: declaration)
+			} else {
+				declaration
+			}
+
+			// Skip if we've already added this declaration (or its ancestor)
+			let usr = actualTarget.usrs.first ?? ""
+			if !seenUSRs.contains(usr) {
+				seenUSRs.insert(usr)
+				processedOperations.append((scanResult, actualTarget, actualTarget.location))
+			}
+		}
+
 		// Process each operation from bottom to top
 		// Since sorted bottom-to-top, each deletion automatically shifts remaining correctly
-		for (scanResult, declaration, location) in operations {
+		for (scanResult, declaration, location) in processedOperations {
 			let usr = declaration.usrs.first ?? ""
 			let warningID = "\(location.file.path.string):\(usr)"
 
@@ -787,14 +846,12 @@ struct CodeModificationHelper {
 					attributes: declaration.attributes
 				)
 
-				// Include trailing blanks for multi-line declarations
-				let isMultiLine = endLine > location.line
-				let finalEndLine = isMultiLine
-					? DeclarationDeletionHelper.findDeletionEndLine(
-						lines: lines,
-						declarationEndLine: endLine
-					)
-					: endLine
+				// Determine ending line (includes smart blank line handling)
+				let finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
+					lines: lines,
+					declarationLine: startLine,
+					declarationEndLine: endLine
+				)
 
 				// Validate range
 				let startIndex = startLine - 1

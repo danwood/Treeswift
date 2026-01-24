@@ -19,8 +19,9 @@ enum FileContentAnalyzer {
 
 	 Decision logic:
 	 1. If any non-import declarations remain → keep file as-is
-	 2. If no declarations remain but >5 meaningful comments → keep file, remove imports
-	 3. Otherwise → delete file
+	 2. If only compiler directives and imports remain → delete file
+	 3. If no declarations remain but >5 meaningful comments → keep file, remove imports
+	 4. Otherwise → delete file
 	 */
 	static func shouldDeleteFile(
 		filePath: String,
@@ -36,6 +37,12 @@ enum FileContentAnalyzer {
 		) {
 			// File has code, keep as-is
 			return (false, false)
+		}
+
+		// Check if file only contains compiler directives and imports
+		if hasOnlyDirectivesAndImports(modifiedContents) {
+			// Delete files that are just scaffolding with no actual code
+			return (true, false)
 		}
 
 		// Count meaningful comments (excluding copyright headers)
@@ -82,6 +89,43 @@ enum FileContentAnalyzer {
 		return remainingDeclarations.contains { declaration in
 			declaration.kind != .module
 		}
+	}
+
+	/**
+	 Checks if file contains only compiler directives, imports, and whitespace/comments.
+
+	 Files that only contain #if/#endif blocks with no executable code should be deleted.
+	 */
+	static func hasOnlyDirectivesAndImports(_ contents: String) -> Bool {
+		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
+
+		for line in lines {
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+			// Skip empty lines
+			if trimmed.isEmpty { continue }
+
+			// Skip comments
+			if trimmed.starts(with: "//") || trimmed.starts(with: "/*") || trimmed.starts(with: "*") || trimmed
+				.hasSuffix("*/") {
+				continue
+			}
+
+			// Skip imports
+			if trimmed.starts(with: "import ") { continue }
+
+			// Skip compiler directives
+			if trimmed.starts(with: "#if") || trimmed.starts(with: "#endif") || trimmed.starts(with: "#else") || trimmed
+				.starts(with: "#elseif") {
+				continue
+			}
+
+			// Found actual code
+			return false
+		}
+
+		// Only found directives, imports, comments, and whitespace
+		return true
 	}
 
 	/**

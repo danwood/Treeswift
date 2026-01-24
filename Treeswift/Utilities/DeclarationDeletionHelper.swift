@@ -72,7 +72,12 @@ struct DeclarationDeletionHelper {
 		}
 
 		// Build patterns to search for (e.g., @State, @FetchRequest, etc.)
-		let attributePatterns = attributes.map { "@\($0)" }
+		// Extract just the attribute name (before any parentheses)
+		let attributePatterns = attributes.map { attr -> String in
+			let attrDesc = attr.description
+			let attrName = attrDesc.components(separatedBy: "(").first ?? attrDesc
+			return "@\(attrName)"
+		}
 
 		// Track lines that are part of attributes
 		var attributeLines: [Int] = []
@@ -151,15 +156,112 @@ struct DeclarationDeletionHelper {
 			checkLine = attributeLines.first! - 1
 		}
 
-		// Then look backwards for adjacent comment lines (no blank lines between)
+		// Then look backwards for documentation comments
+		// Documentation comments can have one blank line between them and the declaration
+		var foundBlankLine = false
+		var lastCommentLine: Int?
+
 		while checkLine >= 1 {
 			let lineIndex = checkLine - 1
 			guard lineIndex >= 0 && lineIndex < lines.count else { break }
 
 			let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
 
-			// Stop at blank lines - we don't want to delete spacing
+			// Handle blank lines
 			if line.isEmpty {
+				if foundBlankLine {
+					// Second blank line - stop here
+					break
+				}
+				foundBlankLine = true
+				checkLine -= 1
+				continue
+			}
+
+			// Stop if we hit another declaration
+			if isDeclarationLine(line) {
+				break
+			}
+
+			// Check if this is a comment line
+			let isComment = line.hasPrefix("//") || line.hasPrefix("/*") || line.hasPrefix("*") || line.hasPrefix("/**")
+
+			if isComment {
+				// Include this comment
+				startLine = checkLine
+				lastCommentLine = checkLine
+				checkLine -= 1
+				// Reset blank line counter when we find a comment
+				foundBlankLine = false
+			} else {
+				// Not a comment and not blank - stop here
+				break
+			}
+		}
+
+		// If we found a blank line but then found comments before it,
+		// make sure we don't include the blank line in the deletion
+		if foundBlankLine, lastCommentLine != nil {
+			// The startLine is already set correctly to the comment line
+			// No adjustment needed
+		}
+
+		return startLine
+	}
+
+	/**
+	 Find the insertion point for periphery:ignore comments.
+
+	 Similar to findDeletionStartLine, but stops BEFORE documentation comments.
+	 This ensures the ignore directive appears above docs, preventing linter errors.
+
+	 Includes:
+	 - Attribute lines containing @AttributeName
+	 - Multi-line attribute continuations
+	 Excludes:
+	 - Documentation comments (triple-slash and multi-line doc comments)
+	 - Regular comments
+	 */
+	static func findIgnoreCommentInsertionLine(
+		lines: [String],
+		declarationLine: Int,
+		attributes: Set<DeclarationAttribute>
+	) -> Int {
+		guard declarationLine > 1 else { return declarationLine }
+
+		var startLine = declarationLine
+		var checkLine = declarationLine - 1
+
+		// If no attributes, return declaration line (insert right before it)
+		guard !attributes.isEmpty else {
+			return startLine
+		}
+
+		// Build patterns to search for (e.g., @State, @FetchRequest, etc.)
+		let attributePatterns = attributes.map { attr -> String in
+			let attrName = attr.description.components(separatedBy: "(").first ?? attr.description
+			return "@\(attrName)"
+		}
+
+		// Track lines that are part of attributes
+		var attributeLines: [Int] = []
+		var tempCheckLine = checkLine
+		var inMultiLineAttribute = false
+
+		// Look backwards for attribute lines ONLY (not comments)
+		var foundAttributeYet = false
+		while tempCheckLine >= 1 {
+			let lineIndex = tempCheckLine - 1
+			guard lineIndex >= 0 && lineIndex < lines.count else { break }
+			let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
+
+			// Stop at blank lines
+			if line.isEmpty {
+				break
+			}
+
+			// Stop at comment lines (this is the key difference from findDeletionStartLine)
+			if line.hasPrefix("//") || line.hasPrefix("/*") || line.hasPrefix("*") || line.hasPrefix("/**") {
 				break
 			}
 
@@ -168,29 +270,88 @@ struct DeclarationDeletionHelper {
 				break
 			}
 
-			// Include comment lines
-			if line.hasPrefix("//") || line.hasPrefix("/*") || line.hasPrefix("*") {
-				startLine = checkLine
-				checkLine -= 1
+			// Check if this line contains any of our attribute patterns
+			let containsAttribute = attributePatterns.contains { pattern in
+				line.contains(pattern)
+			}
+
+			if containsAttribute {
+				// Check if it's a complete declaration (another var/func with this attribute)
+				let declarationKeywords = [
+					"var ",
+					"let ",
+					"func ",
+					"class ",
+					"struct ",
+					"enum ",
+					"protocol ",
+					"actor ",
+					"init ",
+					"deinit ",
+					"subscript "
+				]
+				let isDeclaration = declarationKeywords.contains { line.contains($0) }
+
+				if isDeclaration {
+					break
+				} else {
+					attributeLines.insert(tempCheckLine, at: 0)
+					foundAttributeYet = true
+					// Check if this starts a multi-line attribute
+					inMultiLineAttribute = line.contains("(") && !line.contains(")")
+					tempCheckLine -= 1
+				}
+			} else if inMultiLineAttribute ||
+				(!foundAttributeYet && (line.contains(")") || line.contains(":") || line.contains(","))) {
+				attributeLines.insert(tempCheckLine, at: 0)
+				if line.contains(")"), !line.contains("(") {
+					inMultiLineAttribute = true
+				} else if line.contains("(") {
+					inMultiLineAttribute = false
+				}
+				tempCheckLine -= 1
 			} else {
 				break
 			}
 		}
 
+		// Use earliest attribute line if found, otherwise use declaration line
+		if !attributeLines.isEmpty {
+			startLine = attributeLines.first!
+		}
+
 		return startLine
 	}
 
-	// Find the last line to delete (including trailing blank lines)
+	/**
+	 Find the last line to delete (including trailing blank lines).
+
+	 If the deleted declaration has a blank line above AND below, remove the trailing blank.
+	 This prevents accumulation of extra whitespace.
+	 */
 	static func findDeletionEndLine(
 		lines: [String],
+		declarationLine: Int,
 		declarationEndLine: Int
 	) -> Int {
 		var endLine = declarationEndLine
+
+		// Check if there's a blank line before the declaration
+		let hasBlankAbove: Bool = {
+			guard declarationLine > 1 else { return false }
+			let lineIndex = declarationLine - 2
+			guard lineIndex >= 0, lineIndex < lines.count else { return false }
+			return lines[lineIndex].trimmingCharacters(in: .whitespaces).isEmpty
+		}()
+
+		// Look for blank lines after the declaration
 		var currentLine = declarationEndLine
+		var foundBlankBelow = false
 
 		while currentLine < lines.count {
 			let line = lines[currentLine]
 			if line.trimmingCharacters(in: .whitespaces).isEmpty {
+				foundBlankBelow = true
 				endLine = currentLine + 1
 				currentLine += 1
 			} else {
@@ -198,6 +359,12 @@ struct DeclarationDeletionHelper {
 			}
 		}
 
-		return endLine
+		// If blank above AND below, include the trailing blank in deletion
+		if hasBlankAbove, foundBlankBelow {
+			return endLine
+		}
+
+		// Otherwise, don't include trailing blanks (preserve spacing)
+		return declarationEndLine
 	}
 }
