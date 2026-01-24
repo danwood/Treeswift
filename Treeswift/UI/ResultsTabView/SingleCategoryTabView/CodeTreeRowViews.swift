@@ -13,7 +13,6 @@ struct SectionRowView: View {
 	let section: SectionNode
 	@Binding var expandedIDs: Set<String>
 	@Binding var selectedID: String?
-	@Binding var showOnlyViews: Bool
 	var indentLevel: Int
 	var projectRootPath: String?
 
@@ -26,28 +25,11 @@ struct SectionRowView: View {
 			DisclosureGroup(
 				isExpanded: expansionBinding(for: section.id.rawValue, in: $expandedIDs)
 			) {
-				if isHierarchySection {
-					HStack {
-						Toggle("Show only Views", isOn: Binding(
-							get: { showOnlyViews },
-							set: { newValue in
-								withAnimation(.easeInOut(duration: 0.3)) {
-									showOnlyViews = newValue
-								}
-							}
-						))
-						.toggleStyle(.switch)
-						.controlSize(.small)
-					}
-					.treeLabelPadding(indentLevel: indentLevel + 1)
-				}
-
 				ForEach(section.children, id: \.id) { child in
 					CategoriesNodeView(
 						node: child,
 						expandedIDs: $expandedIDs,
 						selectedID: $selectedID,
-						showOnlyViews: $showOnlyViews,
 						indentLevel: indentLevel + 1,
 						projectRootPath: projectRootPath
 					)
@@ -105,7 +87,6 @@ struct SyntheticRootRowView: View {
 	let root: SyntheticRootNode
 	@Binding var expandedIDs: Set<String>
 	@Binding var selectedID: String?
-	@Binding var showOnlyViews: Bool
 	var indentLevel: Int
 	var projectRootPath: String?
 
@@ -118,7 +99,6 @@ struct SyntheticRootRowView: View {
 					node: child,
 					expandedIDs: $expandedIDs,
 					selectedID: $selectedID,
-					showOnlyViews: $showOnlyViews,
 					indentLevel: indentLevel + 1,
 					projectRootPath: projectRootPath
 				)
@@ -176,7 +156,6 @@ struct DeclarationRowView: View {
 	let declaration: DeclarationNode
 	@Binding var expandedIDs: Set<String>
 	@Binding var selectedID: String?
-	@Binding var showOnlyViews: Bool
 	var indentLevel: Int
 	var projectRootPath: String?
 
@@ -216,7 +195,6 @@ struct DeclarationRowView: View {
 						node: child,
 						expandedIDs: $expandedIDs,
 						selectedID: $selectedID,
-						showOnlyViews: $showOnlyViews,
 						indentLevel: indentLevel + 1,
 						projectRootPath: projectRootPath
 					)

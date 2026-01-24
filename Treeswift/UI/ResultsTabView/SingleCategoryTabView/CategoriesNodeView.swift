@@ -12,7 +12,6 @@ struct CategoriesNodeView: View {
 	let node: CategoriesNode
 	@Binding var expandedIDs: Set<String>
 	@Binding var selectedID: String?
-	@Binding var showOnlyViews: Bool
 	var indentLevel: Int = 0
 	var projectRootPath: String?
 
@@ -23,7 +22,6 @@ struct CategoriesNodeView: View {
 				section: section,
 				expandedIDs: $expandedIDs,
 				selectedID: $selectedID,
-				showOnlyViews: $showOnlyViews,
 				indentLevel: indentLevel,
 				projectRootPath: projectRootPath
 			)
@@ -33,7 +31,6 @@ struct CategoriesNodeView: View {
 				declaration: decl,
 				expandedIDs: $expandedIDs,
 				selectedID: $selectedID,
-				showOnlyViews: $showOnlyViews,
 				indentLevel: indentLevel,
 				projectRootPath: projectRootPath
 			)
@@ -43,7 +40,6 @@ struct CategoriesNodeView: View {
 				root: root,
 				expandedIDs: $expandedIDs,
 				selectedID: $selectedID,
-				showOnlyViews: $showOnlyViews,
 				indentLevel: indentLevel,
 				projectRootPath: projectRootPath
 			)

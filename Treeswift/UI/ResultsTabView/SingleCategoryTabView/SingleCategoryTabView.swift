@@ -96,7 +96,6 @@ struct SingleCategoryTabView: View {
 								node: child,
 								expandedIDs: $expandedIDs,
 								selectedID: $selectedID,
-								showOnlyViews: $showOnlyViews,
 								indentLevel: 0,
 								projectRootPath: projectRootPath
 							)
