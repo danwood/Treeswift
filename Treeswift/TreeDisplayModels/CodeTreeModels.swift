@@ -103,8 +103,6 @@ enum RelationshipType: String {
 	case constructs = "CONSTRUCTS"
 	case type = "TYPE"
 	case inherit = "INHERIT"
-	case conform = "CONFORM"
-	case generic = "GENERIC"
 	case ref = "REF"
 }
 

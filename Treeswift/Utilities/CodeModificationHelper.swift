@@ -61,7 +61,7 @@ struct CodeModificationHelper {
 	 When deleting `unused`, this returns the `extension Foo` declaration since both `Bar` and the extension
 	 would become empty.
 	 */
-	static func findHighestEmptyAncestor(of declaration: Declaration) -> Declaration {
+	private static func findHighestEmptyAncestor(of declaration: Declaration) -> Declaration {
 		var current = declaration
 
 		while let parent = current.parent,
