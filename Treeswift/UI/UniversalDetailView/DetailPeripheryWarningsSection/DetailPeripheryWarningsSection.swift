@@ -11,10 +11,10 @@ import SwiftUI
 import SystemPackage
 
 struct DetailPeripheryWarningsSection: View {
-	let filePath: String
-	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
-	let filterState: FilterState?
+	private let filePath: String
+	private let scanResults: [ScanResult]
+	private let sourceGraph: SourceGraph?
+	private let filterState: FilterState?
 
 	@AppStorage("showPeripheryWarningDetails") private var showDetails: Bool = false
 	@State private var expandedWarnings: Set<String> = []
@@ -134,14 +134,14 @@ private struct PeripheryWarningRow: View {
 	@Binding var refreshTrigger: Int
 	@Binding var removingWarnings: Set<String>
 	@Binding var ignoringWarnings: Set<String>
-	@Environment(\.undoManager) private var undoManager
+	@Environment(\.undoManager) var undoManager
 
 	// Read location from declaration so it updates when declaration.location changes
-	private var location: Location {
+	var location: Location {
 		ScanResultHelper.location(from: declaration)
 	}
 
-	private var badge: Badge {
+	var badge: Badge {
 		let swiftType = SwiftType.from(declarationKind: declaration.kind)
 
 		return Badge(
@@ -152,14 +152,14 @@ private struct PeripheryWarningRow: View {
 		)
 	}
 
-	private var warningText: AttributedString {
+	var warningText: AttributedString {
 		ScanResultHelper.formatAttributedDescription(
 			declaration: declaration,
 			scanResult: scanResult
 		)
 	}
 
-	private var sourceLine: AttributedString? {
+	var sourceLine: AttributedString? {
 		guard showDetails else { return nil }
 
 		guard let lineText = SourceFileReader.readLine(
@@ -305,29 +305,29 @@ private struct PeripheryWarningRow: View {
 	}
 
 	// Generate unique ID for this warning using stable USR
-	private var warningID: String {
+	var warningID: String {
 		let usr = declaration.usrs.first ?? ""
 		return "\(location.file.path.string):\(usr)"
 	}
 
 	// Check if location has full range info for deletion
-	private var hasFullRange: Bool {
+	var hasFullRange: Bool {
 		location.endLine != nil && location.endColumn != nil
 	}
 
 	// Check if this is an import declaration
-	private var isImport: Bool {
+	var isImport: Bool {
 		declaration.kind == .module
 	}
 
 	// Check if declaration can be deleted (has full range or is import)
-	private var canDelete: Bool {
+	var canDelete: Bool {
 		hasFullRange || isImport
 	}
 
 	// Check if an action is available for this warning type
 	// Check if source preview has multiple lines (including attributes)
-	private var hasMultiLineSource: Bool {
+	var hasMultiLineSource: Bool {
 		guard let endLine = location.endLine else { return false }
 
 		// Multi-line if the declaration itself spans multiple lines
@@ -354,7 +354,7 @@ private struct PeripheryWarningRow: View {
 	}
 
 	// Load source code preview for a declaration
-	private func loadSourcePreview() -> String? {
+	func loadSourcePreview() -> String? {
 		guard let endLine = location.endLine else { return nil }
 
 		let filePath = location.file.path.string
@@ -379,7 +379,7 @@ private struct PeripheryWarningRow: View {
 	}
 
 	// Delete declaration from source file
-	private func deleteDeclaration() {
+	func deleteDeclaration() {
 		// Start fade-out animation
 		_ = withAnimation(.easeInOut(duration: 0.3)) {
 			removingWarnings.insert(warningID)
@@ -476,7 +476,7 @@ private struct PeripheryWarningRow: View {
 	 Places the comment before attributes, comments, and the declaration itself,
 	 similar to how deletion works. Supports undo/redo.
 	 */
-	private func insertIgnoreDirective() {
+	func insertIgnoreDirective() {
 		// Start animation (strikethrough + fade)
 		withAnimation(.easeInOut(duration: 0.3)) {
 			removingWarnings.insert(warningID)
@@ -528,7 +528,7 @@ private struct PeripheryWarningRow: View {
 	 Scans backwards from declaration to find and remove the ignore directive.
 	 Handles all Periphery ignore formats and removes trailing blank lines.
 	 */
-	private func fixSuperfluousIgnoreCommand() {
+	func fixSuperfluousIgnoreCommand() {
 		let result = CodeModificationHelper.removeSuperfluousIgnoreComment(
 			declaration: declaration,
 			location: location
@@ -562,7 +562,7 @@ private struct PeripheryWarningRow: View {
 	}
 
 	// Fix redundant access control by removing or inserting keywords
-	private func fixAccessControl() {
+	func fixAccessControl() {
 		let fix: AccessControlFix
 
 		switch scanResult.annotation {
@@ -613,7 +613,7 @@ private struct PeripheryWarningRow: View {
 	/**
 	 Registers undo for a simple modification (no line number adjustments).
 	 */
-	private func registerModificationUndo(
+	func registerModificationUndo(
 		modification: CodeModificationHelper.ModificationResult,
 		actionName: String
 	) {
@@ -642,7 +642,7 @@ private struct PeripheryWarningRow: View {
 	/**
 	 Registers undo for a modification that includes line number adjustments.
 	 */
-	private func registerModificationUndoWithLineAdjustment(
+	func registerModificationUndoWithLineAdjustment(
 		modification: CodeModificationHelper.ModificationResult,
 		adjustedUSRs: [String],
 		actionName: String
@@ -674,7 +674,7 @@ private struct PeripheryWarningRow: View {
 	/**
 	 Marks a warning as completed and posts notification.
 	 */
-	private func completeWarning() {
+	func completeWarning() {
 		WarningStateManager.completeWarning(
 			warningID: warningID,
 			completedActions: &completedActions,
@@ -688,7 +688,7 @@ private struct PeripheryWarningRow: View {
 	 Returns true if the ignore comment can be found, false otherwise.
 	 For non-superfluous-ignore warnings, always returns true.
 	 */
-	private var canDeleteSuperfluousIgnore: Bool {
+	var canDeleteSuperfluousIgnore: Bool {
 		if scanResult.annotation != .superfluousIgnoreCommand {
 			return true
 		}
@@ -701,7 +701,7 @@ private struct PeripheryWarningRow: View {
 	 Searches backward from the declaration line using the same logic as
 	 CodeModificationHelper.removeSuperfluousIgnoreComment().
 	 */
-	private func canFindSuperfluousIgnoreComment() -> Bool {
+	func canFindSuperfluousIgnoreComment() -> Bool {
 		let filePath = location.file.path.string
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
 			return false
@@ -715,7 +715,7 @@ private struct PeripheryWarningRow: View {
 		) != nil
 	}
 
-	private func DeleteButton() -> some View {
+	func DeleteButton() -> some View {
 		let label = switch scanResult.annotation {
 		case .unused: "Delete declaration"
 		case .redundantPublicAccessibility: "Remove public keyword"
@@ -795,7 +795,7 @@ private struct PeripheryWarningRow: View {
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
 
-	private func IgnoreButton() -> some View {
+	func IgnoreButton() -> some View {
 		Button("Ignore warning", systemImage: "bell.slash") {
 			insertIgnoreDirective()
 		}
@@ -807,7 +807,7 @@ private struct PeripheryWarningRow: View {
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
 
-	private func ActionButtons() -> some View {
+	func ActionButtons() -> some View {
 		HStack(spacing: 4) {
 			if scanResult.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
 				DeleteButton()
@@ -819,7 +819,7 @@ private struct PeripheryWarningRow: View {
 		}
 	}
 
-	private func source(_ sourceLine: AttributedString) -> some View {
+	func source(_ sourceLine: AttributedString) -> some View {
 		let isExpanded = expandedWarnings.contains(warningID)
 		return HStack(alignment: .top, spacing: 0) {
 			// Source line or full preview
@@ -1034,7 +1034,7 @@ private struct AssignmentLocationRow: View {
 
 	 For initializers with long parameter lists, shows just "init(...)" instead of the full signature.
 	 */
-	private func truncateInitializer(_ name: String, maxLength: Int) -> String {
+	func truncateInitializer(_ name: String, maxLength: Int) -> String {
 		guard name.count > maxLength else { return name }
 
 		// For initializers, just show "init(...)"

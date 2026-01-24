@@ -42,7 +42,7 @@ final class ScanResultIndex {
 	 - Parameter path: The file path to look up
 	 - Returns: Array of scan results for the file, or empty array if none exist
 	 */
-	func results(forFile path: String) -> [ScanResult] {
+	private func results(forFile path: String) -> [ScanResult] {
 		filePathIndex[path] ?? []
 	}
 

@@ -13,16 +13,16 @@ nonisolated enum WarningSeverity: Hashable, Sendable {
 }
 
 nonisolated struct AnalysisWarning: Hashable, Sendable {
-	let severity: WarningSeverity
-	let message: String
+	private let severity: WarningSeverity
+	private let message: String
 	/// Dictionary mapping suggested actions to their completion status.
 	/// Bool value indicates whether the action has been completed:
 	/// - false (default): Action has not been performed yet
 	/// - true: Action has been completed
 	/// This allows tracking which suggested actions have been applied.
-	let suggestedActions: [SuggestedAction: Bool]
-	let details: [String]?
-	let symbolReferences: [SymbolReference]?
+	private let suggestedActions: [SuggestedAction: Bool]
+	private let details: [String]?
+	private let symbolReferences: [SymbolReference]?
 
 	init(
 		severity: WarningSeverity,

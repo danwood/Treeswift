@@ -40,7 +40,7 @@ struct SingleCategoryTabView: View {
 		)
 	}
 
-	var copyableText: String? {
+	private var copyableText: String? {
 		guard let selectedID,
 		      let section,
 		      let node = TreeNodeFinder.findCategoriesNode(withID: selectedID, in: [section]) else {

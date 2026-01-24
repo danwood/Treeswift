@@ -66,7 +66,7 @@ struct SidebarView: View {
 
 	// MARK: - Actions
 
-	func addConfiguration() {
+	private func addConfiguration() {
 		let newConfig = PeripheryConfiguration(
 			name: "New Configuration",
 			project: nil,
@@ -76,7 +76,7 @@ struct SidebarView: View {
 		selectedConfigID = newConfig.id
 	}
 
-	func deleteSelectedConfiguration() {
+	private func deleteSelectedConfiguration() {
 		guard let selectedID = selectedConfigID,
 		      let index = configManager.configurations.firstIndex(where: { $0.id == selectedID }) else {
 			return
@@ -96,11 +96,11 @@ struct SidebarView: View {
 		}
 	}
 
-	func moveConfigurations(from source: IndexSet, to destination: Int) {
+	private func moveConfigurations(from source: IndexSet, to destination: Int) {
 		configManager.moveConfiguration(from: source, to: destination)
 	}
 
-	func handleSidebarDrop(providers: [NSItemProvider]) -> Bool {
+	private func handleSidebarDrop(providers: [NSItemProvider]) -> Bool {
 		guard let provider = providers.first else { return false }
 
 		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -168,7 +168,7 @@ struct SidebarView: View {
 
 	// MARK: - Helpers
 
-	func projectNameForConfig(_ config: PeripheryConfiguration) -> String {
+	private func projectNameForConfig(_ config: PeripheryConfiguration) -> String {
 		guard let projectPath = config.project else {
 			return config.name
 		}
@@ -185,7 +185,7 @@ struct SidebarView: View {
 		}
 	}
 
-	func tooltipForConfig(_ config: PeripheryConfiguration) -> String? {
+	private func tooltipForConfig(_ config: PeripheryConfiguration) -> String? {
 		guard let projectPath = config.project else {
 			return nil
 		}
@@ -195,7 +195,7 @@ struct SidebarView: View {
 	}
 
 	@ViewBuilder
-	func iconForConfig(_ config: PeripheryConfiguration) -> some View {
+	private func iconForConfig(_ config: PeripheryConfiguration) -> some View {
 		if let projectPath = config.project {
 			switch config.projectType {
 			case .xcode:

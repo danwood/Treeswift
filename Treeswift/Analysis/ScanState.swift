@@ -33,7 +33,7 @@ final class ScanState {
 		}
 	}
 
-	var categoriesOutput: String = ""
+	private var categoriesOutput: String = ""
 	var projectPath: String?
 
 	// Lookup dictionaries for O(1) node access
@@ -45,14 +45,14 @@ final class ScanState {
 	var errorMessage: String?
 
 	// Task management
-	var scanTask: Task<Void, Never>?
-	let scanner = PeripheryScanRunner()
+	private var scanTask: Task<Void, Never>?
+	private let scanner = PeripheryScanRunner()
 
 	// Background task tracking
-	var backgroundTasks: [Task<Void, Never>] = []
-	var backgroundTasksTotal: Int = 0
-	var backgroundTasksCompleted: Int = 0
-	var streamCompleted: Bool = false
+	private var backgroundTasks: [Task<Void, Never>] = []
+	private var backgroundTasksTotal: Int = 0
+	private var backgroundTasksCompleted: Int = 0
+	private var streamCompleted: Bool = false
 
 	init(configurationID _: UUID) {}
 

@@ -63,7 +63,7 @@ enum FileContentAnalyzer {
 	 Uses SourceGraph to find all declarations in the file, excludes removed declarations,
 	 and checks if any remaining declarations are not imports (kind != .module).
 	 */
-	static func hasNonImportDeclarations(
+	private static func hasNonImportDeclarations(
 		filePath: String,
 		sourceGraph: SourceGraph,
 		removedWarningIDs: [String]
@@ -96,7 +96,7 @@ enum FileContentAnalyzer {
 
 	 Files that only contain #if/#endif blocks with no executable code should be deleted.
 	 */
-	static func hasOnlyDirectivesAndImports(_ contents: String) -> Bool {
+	private static func hasOnlyDirectivesAndImports(_ contents: String) -> Bool {
 		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
 
 		for line in lines {
@@ -133,7 +133,7 @@ enum FileContentAnalyzer {
 
 	 Copyright headers are comments that appear before the first import statement.
 	 */
-	static func countMeaningfulComments(in contents: String) -> Int {
+	private static func countMeaningfulComments(in contents: String) -> Int {
 		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
 
 		// Find index of first import statement

@@ -11,7 +11,7 @@ struct LineSizeGraph: View {
 	let line: Int
 	let endLine: Int?
 
-	let maxCount = 200
+	private let maxCount = 200
 
 	var body: some View {
 		let rawFraction: CGFloat = if let endLine {

@@ -94,7 +94,7 @@ class SchemeCache {
 	}
 
 	/// Invalidate cache entry for a specific path
-	func invalidate(path: String) {
+	private func invalidate(path: String) {
 		storage.entries.removeValue(forKey: path)
 		saveToDisk()
 	}

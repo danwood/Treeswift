@@ -28,7 +28,7 @@ struct ScanResultHelper {
 		return declaration.location
 	}
 
-	nonisolated static func kindDisplayName(from declaration: Declaration) -> String {
+	private nonisolated static func kindDisplayName(from declaration: Declaration) -> String {
 		// Check for comment command overrides first
 		for command in declaration.commentCommands {
 			if case let .override(overrides) = command {
@@ -114,7 +114,7 @@ struct ScanResultHelper {
 	 Returns the line as an AttributedString with the matched text highlighted.
 	 Optionally makes the entire declaration portion bold when makeDeclarationBold is true.
 	 */
-	nonisolated static func highlightTextInLine(
+	private nonisolated static func highlightTextInLine(
 		line: String,
 		text: String,
 		nearColumn: Int,

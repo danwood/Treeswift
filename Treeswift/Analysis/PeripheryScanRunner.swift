@@ -40,7 +40,7 @@ private final class GUIShell: Shell {
 		return status
 	}
 
-	private func execute(
+	func execute(
 		_ cmd: [String],
 		captureOutput: Bool = true
 	) throws -> (Int32, String, String) {
@@ -167,7 +167,7 @@ final class PeripheryScanRunner: Sendable {
 
 	/// Run a scan with full Periphery configuration
 	/// This API matches ScanCommand.run() functionality
-	nonisolated func runScan(
+	private nonisolated func runScan(
 		configuration: Configuration,
 		progressHandler: (@Sendable (String) -> Void)? = nil
 	) async throws -> ([ScanResult], SourceGraph) {

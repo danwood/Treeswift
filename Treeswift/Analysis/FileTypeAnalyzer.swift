@@ -239,7 +239,7 @@ final class FileTypeAnalyzer: Sendable {
 	}
 }
 
-extension Declaration {
+private extension Declaration {
 	/* Returns true if this declaration is accessible across files within the module.
 	 Excludes private and fileprivate, includes internal, public, open, and package.
 

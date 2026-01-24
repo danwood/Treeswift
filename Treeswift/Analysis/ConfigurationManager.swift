@@ -16,7 +16,7 @@ final class ConfigurationManager {
 	private static let currentConfigurationIndexKey = "currentConfigurationIndex"
 
 	var configurations: [PeripheryConfiguration] = []
-	var currentConfigurationIndex: Int = 0
+	private var currentConfigurationIndex: Int = 0
 
 	init() {
 		loadConfigurations()

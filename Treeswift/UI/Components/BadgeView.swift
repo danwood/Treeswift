@@ -14,12 +14,12 @@ struct Badge: Hashable, Identifiable, Sendable {
 	let swiftType: SwiftType
 	let isUnused: Bool
 
-	var color: NSColor {
+	fileprivate var color: NSColor {
 		let baseColor = swiftType.color
 		return isUnused ? baseColor : baseColor.lighter()
 	}
 
-	var textColor: NSColor {
+	fileprivate var textColor: NSColor {
 		isUnused ? .white : .black
 	}
 }

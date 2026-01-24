@@ -11,11 +11,11 @@ import SwiftUI
 @MainActor
 final class FileInspectorState {
 	// Currently inspected file path
-	var inspectedFilePath: String?
+	private var inspectedFilePath: String?
 
 	// Original file metadata when first inspected
-	var originalModificationDate: Date?
-	var originalFileSize: Int64?
+	private var originalModificationDate: Date?
+	private var originalFileSize: Int64?
 
 	// Whether the inspected file has changed externally
 	var fileHasChanged: Bool = false

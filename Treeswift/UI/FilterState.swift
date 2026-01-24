@@ -284,7 +284,7 @@ extension ScanResult.Annotation {
 	}
 }
 
-extension SwiftType {
+private extension SwiftType {
 	/**
 	 Returns the set of warning types that can apply to a given Swift type.
 	 Used to determine which type filters should be enabled based on selected warning filters.

@@ -13,7 +13,7 @@ nonisolated struct FileTypeInfo: Hashable, Sendable {
 	let matchesFileName: Bool
 	let warningTypes: Set<FilterState.WarningType>
 	let isExtension: Bool
-	let referencingFileNames: [String]
+	private let referencingFileNames: [String]
 	let startLine: Int
 
 	init(

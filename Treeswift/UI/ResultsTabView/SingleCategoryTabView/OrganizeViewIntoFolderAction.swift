@@ -11,8 +11,8 @@ import SwiftUI
 struct OrganizeViewIntoFolderAction: View {
 	let declaration: DeclarationNode
 	let projectRootPath: String?
-	@Environment(\.undoManager) var undoManager
-	@Environment(\.refreshFileTree) var refreshFileTree
+	@Environment(\.undoManager) private var undoManager
+	@Environment(\.refreshFileTree) private var refreshFileTree
 
 	private var isView: Bool {
 		declaration.isView

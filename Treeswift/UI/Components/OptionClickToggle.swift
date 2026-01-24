@@ -8,9 +8,9 @@
 import SwiftUI
 
 struct OptionClickToggle<Content: View>: View {
-	let isEnabled: Binding<Bool>
-	let onOptionClick: (Bool) -> Void
-	let content: Content
+	private let isEnabled: Binding<Bool>
+	private let onOptionClick: (Bool) -> Void
+	private let content: Content
 
 	init(
 		isEnabled: Binding<Bool>,

@@ -102,7 +102,7 @@ nonisolated enum ReferenceAnalysisUtility {
 	/* Find the top-level container (class, struct, enum, protocol) for a declaration.
 	 Walks up the parent chain to find the outermost type container.
 	 Extensions are treated as separate containers from their base types. */
-	static func findTopLevelContainer(for declaration: Declaration) -> Declaration {
+	private static func findTopLevelContainer(for declaration: Declaration) -> Declaration {
 		var current = declaration
 		var topContainer = declaration
 

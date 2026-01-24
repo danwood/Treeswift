@@ -57,7 +57,7 @@ struct TreeswiftApp: App {
 }
 
 private struct CopyCommand: View {
-	@FocusedValue(\.copyMenuTitle) private var copyMenuTitle: String?
+	@FocusedValue(\.copyMenuTitle) var copyMenuTitle: String?
 
 	var body: some View {
 		Button(copyMenuTitle ?? "Copy") {

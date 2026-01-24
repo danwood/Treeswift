@@ -8,7 +8,7 @@
 import Foundation
 
 struct PeripheryIgnoreCommentInserter {
-	enum InsertionError: Error {
+	private enum InsertionError: Error {
 		case readFailed
 		case writeFailed
 	}
