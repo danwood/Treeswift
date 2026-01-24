@@ -30,7 +30,6 @@ struct PeripheryTreeView: View {
 	@State private var cachedVisibleItems: [String] = []
 	@State private var removalSummary: RemovalSummary?
 	@Environment(\.undoManager) private var undoManager
-	@Environment(FileInspectorState.self) private var inspectorState
 
 	/**
 	 Summary of deletion operations for alert display.

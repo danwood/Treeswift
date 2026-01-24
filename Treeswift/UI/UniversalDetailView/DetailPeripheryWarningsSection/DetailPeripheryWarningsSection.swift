@@ -563,7 +563,7 @@ private struct PeripheryWarningRow: View {
 
 	// Fix redundant access control by removing or inserting keywords
 	private func fixAccessControl() {
-		let fix: ModificationOperation.AccessControlFix
+		let fix: AccessControlFix
 
 		switch scanResult.annotation {
 		case .redundantPublicAccessibility:

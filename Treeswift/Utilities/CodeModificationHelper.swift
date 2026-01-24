@@ -135,7 +135,7 @@ struct CodeModificationHelper {
 	static func fixAccessControl(
 		declaration: Declaration,
 		location: Location,
-		fix: ModificationOperation.AccessControlFix
+		fix: AccessControlFix
 	) -> Result<ModificationResult, Error> {
 		let filePath = location.file.path.string
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {

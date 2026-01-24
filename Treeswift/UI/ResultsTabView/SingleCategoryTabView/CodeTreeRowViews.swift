@@ -16,10 +16,6 @@ struct SectionRowView: View {
 	var indentLevel: Int
 	var projectRootPath: String?
 
-	private var isHierarchySection: Bool {
-		section.id == .hierarchy
-	}
-
 	var body: some View {
 		VStack(alignment: .leading, spacing: 0) {
 			DisclosureGroup(
