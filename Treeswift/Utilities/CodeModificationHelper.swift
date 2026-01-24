@@ -723,6 +723,38 @@ struct CodeModificationHelper {
 	// MARK: - Batch Operations
 
 	/**
+	 Determines whether to check for empty ancestors for a given annotation and declaration kind.
+
+	 Returns false for:
+	 - Module imports (no ancestors)
+	 - Superfluous ignore comments (not deleting declarations)
+	 - Redundant access control (not deleting, just modifying)
+
+	 Returns true for:
+	 - Unused declarations (.unused)
+	 - Other deletion cases (.assignOnlyProperty, .redundantProtocol)
+	 */
+	private static func shouldCheckEmptyAncestor(
+		_ annotation: ScanResult.Annotation,
+		_ kind: Declaration.Kind
+	) -> Bool {
+		if kind == .module {
+			return false
+		}
+
+		switch annotation {
+		case .superfluousIgnoreCommand,
+		     .redundantPublicAccessibility,
+		     .redundantInternalAccessibility,
+		     .redundantFilePrivateAccessibility,
+		     .redundantAccessibility:
+			return false
+		case .unused, .assignOnlyProperty, .redundantProtocol:
+			return true
+		}
+	}
+
+	/**
 	 Executes multiple modifications on a single file in a single operation.
 
 	 Reads the file once, applies all modifications in-memory from bottom to top,
@@ -756,8 +788,7 @@ struct CodeModificationHelper {
 
 		for (scanResult, declaration, location) in operations {
 			// For full declaration deletions, check if parent should be deleted instead
-			let actualTarget: Declaration = if declaration.kind != .module,
-			                                   scanResult.annotation != .superfluousIgnoreCommand {
+			let actualTarget: Declaration = if shouldCheckEmptyAncestor(scanResult.annotation, declaration.kind) {
 				findHighestEmptyAncestor(of: declaration)
 			} else {
 				declaration
@@ -784,6 +815,43 @@ struct CodeModificationHelper {
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 
 				let modifiedLine = lines[lineIndex].replacing(#/public\s+/#, with: "")
+				lines[lineIndex] = modifiedLine
+				removedWarningIDs.append(warningID)
+
+			} else if case let .redundantInternalAccessibility(_, suggestedAccessibility) = scanResult.annotation {
+				// Replace "internal" with suggested keyword or remove if nil
+				let lineIndex = location.line - 1
+				guard lineIndex >= 0, lineIndex < lines.count else { continue }
+
+				let modifiedLine: String = if let suggested = suggestedAccessibility {
+					// Replace internal with suggested accessibility
+					lines[lineIndex].replacing(#/internal\s+/#, with: "\(suggested.rawValue) ")
+				} else {
+					// Remove internal keyword
+					lines[lineIndex].replacing(#/internal\s+/#, with: "")
+				}
+				lines[lineIndex] = modifiedLine
+				removedWarningIDs.append(warningID)
+
+			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
+				// Replace "fileprivate" with "private" (more restrictive)
+				let lineIndex = location.line - 1
+				guard lineIndex >= 0, lineIndex < lines.count else { continue }
+
+				let modifiedLine = lines[lineIndex].replacing(#/fileprivate\s+/#, with: "private ")
+				lines[lineIndex] = modifiedLine
+				removedWarningIDs.append(warningID)
+
+			} else if case .redundantAccessibility = scanResult.annotation {
+				// Remove any access keyword (same as container)
+				let lineIndex = location.line - 1
+				guard lineIndex >= 0, lineIndex < lines.count else { continue }
+
+				var modifiedLine = lines[lineIndex]
+				modifiedLine = modifiedLine.replacing(#/public\s+/#, with: "")
+				modifiedLine = modifiedLine.replacing(#/internal\s+/#, with: "")
+				modifiedLine = modifiedLine.replacing(#/fileprivate\s+/#, with: "")
+				modifiedLine = modifiedLine.replacing(#/private\s+/#, with: "")
 				lines[lineIndex] = modifiedLine
 				removedWarningIDs.append(warningID)
 

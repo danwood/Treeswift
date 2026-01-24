@@ -157,9 +157,11 @@ struct DeclarationDeletionHelper {
 		}
 
 		// Then look backwards for documentation comments
-		// Documentation comments can have one blank line between them and the declaration
+		// Doc comments directly above declarations (no blank lines) are removed
+		// Section markers (MARK, TODO, FIXME) are preserved
 		var foundBlankLine = false
 		var lastCommentLine: Int?
+		var inBlockComment = false // Track if we're in a /* ... */ block
 
 		while checkLine >= 1 {
 			let lineIndex = checkLine - 1
@@ -169,8 +171,8 @@ struct DeclarationDeletionHelper {
 
 			// Handle blank lines
 			if line.isEmpty {
-				if foundBlankLine {
-					// Second blank line - stop here
+				if lastCommentLine != nil {
+					// Found blank line after seeing comments - stop here
 					break
 				}
 				foundBlankLine = true
@@ -183,27 +185,60 @@ struct DeclarationDeletionHelper {
 				break
 			}
 
-			// Check if this is a comment line
-			let isComment = line.hasPrefix("//") || line.hasPrefix("/*") || line.hasPrefix("*") || line.hasPrefix("/**")
+			// Check for section markers (MARK, TODO, FIXME) - these are NOT part of declarations
+			if line.hasPrefix("// MARK:") ||
+				line.hasPrefix("// TODO:") ||
+				line.hasPrefix("// FIXME:") {
+				break
+			}
 
-			if isComment {
-				// Include this comment
+			// Check comment type
+			let isDocComment = line.hasPrefix("///") || line.hasPrefix("/**") || line.hasPrefix("*/")
+			let isBlockCommentLine = line.hasPrefix("*") && !line.hasPrefix("*/")
+			let isRegularComment = line.hasPrefix("//") && !line.hasPrefix("///")
+			let isBlockCommentStart = line.hasPrefix("/*") && !line.hasPrefix("/**")
+
+			if isDocComment {
+				// Doc comments are always part of the declaration
 				startLine = checkLine
 				lastCommentLine = checkLine
 				checkLine -= 1
-				// Reset blank line counter when we find a comment
 				foundBlankLine = false
+
+				// Track block comment state
+				if line.hasPrefix("/**"), !line.contains("*/") {
+					inBlockComment = true
+				}
+				if line.hasPrefix("*/") {
+					inBlockComment = true // We're scanning backward, so */ comes before /*
+				}
+
+			} else if isBlockCommentLine, inBlockComment {
+				// Middle line of a block comment (starts with * but not */)
+				startLine = checkLine
+				lastCommentLine = checkLine
+				checkLine -= 1
+				foundBlankLine = false
+
+			} else if isBlockCommentStart {
+				// Found start of block comment (scanning backward, so this is the opening of the comment)
+				startLine = checkLine
+				lastCommentLine = checkLine
+				inBlockComment = false
+				checkLine -= 1
+				foundBlankLine = false
+
+			} else if isRegularComment {
+				// Regular comments only included if directly adjacent (will break on blank line above)
+				startLine = checkLine
+				lastCommentLine = checkLine
+				checkLine -= 1
+				foundBlankLine = false
+
 			} else {
 				// Not a comment and not blank - stop here
 				break
 			}
-		}
-
-		// If we found a blank line but then found comments before it,
-		// make sure we don't include the blank line in the deletion
-		if foundBlankLine, lastCommentLine != nil {
-			// The startLine is already set correctly to the comment line
-			// No adjustment needed
 		}
 
 		return startLine
