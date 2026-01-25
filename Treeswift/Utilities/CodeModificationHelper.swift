@@ -182,10 +182,14 @@ struct CodeModificationHelper {
 			}
 
 		case .insertPrivate:
-			newLine = insertAccessKeyword("private", before: declaration.kind, in: originalLine)
+			// Remove any explicit 'internal' keyword before inserting 'private'
+			let lineWithoutInternal = removeAccessKeyword("internal", from: originalLine)
+			newLine = insertAccessKeyword("private", before: declaration.kind, in: lineWithoutInternal)
 
 		case .insertFilePrivate:
-			newLine = insertAccessKeyword("fileprivate", before: declaration.kind, in: originalLine)
+			// Remove any explicit 'internal' keyword before inserting 'fileprivate'
+			let lineWithoutInternal = removeAccessKeyword("internal", from: originalLine)
+			newLine = insertAccessKeyword("fileprivate", before: declaration.kind, in: lineWithoutInternal)
 		}
 
 		lines[lineIndex] = newLine
