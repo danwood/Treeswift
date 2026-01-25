@@ -79,7 +79,8 @@ struct CodeModificationHelper {
 	 Removes an access keyword from a line, preserving whitespace.
 	 */
 	private static func removeAccessKeyword(_ keyword: String, from line: String) -> String {
-		line.replacing(#/\#(keyword)(\s+)/#) { String($0.output.2) }
+		guard let pattern = try? Regex("\\b\(keyword)\\s+") else { return line }
+		return line.replacing(pattern, with: "")
 	}
 
 	/**
@@ -90,7 +91,8 @@ struct CodeModificationHelper {
 		with newKeyword: String,
 		in line: String
 	) -> String {
-		line.replacing(#/\#(oldKeyword)(\s+)/#) { "\(newKeyword)\($0.output.2)" }
+		guard let pattern = try? Regex("\\b\(oldKeyword)\\s+") else { return line }
+		return line.replacing(pattern, with: "\(newKeyword) ")
 	}
 
 	/**
@@ -98,10 +100,11 @@ struct CodeModificationHelper {
 	 */
 	private static func removeAnyAccessKeyword(from line: String) -> String {
 		var modifiedLine = line
-		modifiedLine = modifiedLine.replacing(#/public(\s+)/#) { String($0.output.1) }
-		modifiedLine = modifiedLine.replacing(#/internal(\s+)/#) { String($0.output.1) }
-		modifiedLine = modifiedLine.replacing(#/fileprivate(\s+)/#) { String($0.output.1) }
-		modifiedLine = modifiedLine.replacing(#/private(\s+)/#) { String($0.output.1) }
+		for keyword in ["public", "internal", "fileprivate", "private"] {
+			if let pattern = try? Regex("\\b\(keyword)\\s+") {
+				modifiedLine = modifiedLine.replacing(pattern, with: "")
+			}
+		}
 		return modifiedLine
 	}
 
@@ -115,7 +118,9 @@ struct CodeModificationHelper {
 		declarationKind: Declaration.Kind,
 		in line: String
 	) -> String {
-		if let oldKeyword, line.contains(#/\#(oldKeyword)\s+/#) {
+		if let oldKeyword,
+		   let pattern = try? Regex("\\b\(oldKeyword)\\s+"),
+		   line.contains(pattern) {
 			replaceAccessKeyword(oldKeyword, with: newKeyword, in: line)
 		} else {
 			insertAccessKeyword(newKeyword, before: declarationKind, in: line)
