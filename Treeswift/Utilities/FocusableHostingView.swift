@@ -10,9 +10,9 @@ import SwiftUI
 
 /// Invisible NSView that can become first responder and handle keyboard events
 class FocusableNSView: NSView {
-	var onArrowKey: ((KeyboardKey) -> Void)?
+	fileprivate var onArrowKey: ((KeyboardKey) -> Void)?
 
-	enum KeyboardKey {
+	fileprivate enum KeyboardKey {
 		case up, down
 	}
 
@@ -75,17 +75,17 @@ struct FocusClaimingView: NSViewRepresentable {
 	}
 
 	class Coordinator {
-		var selectedID: Binding<String?>
-		var visibleItems: [String]
-		var claimFocusTrigger: Binding<Bool>?
+		fileprivate var selectedID: Binding<String?>
+		private var visibleItems: [String]
+		fileprivate var claimFocusTrigger: Binding<Bool>?
 
-		init(selectedID: Binding<String?>, visibleItems: [String], claimFocusTrigger: Binding<Bool>?) {
+		fileprivate init(selectedID: Binding<String?>, visibleItems: [String], claimFocusTrigger: Binding<Bool>?) {
 			self.selectedID = selectedID
 			self.visibleItems = visibleItems
 			self.claimFocusTrigger = claimFocusTrigger
 		}
 
-		func updateBindings(
+		fileprivate func updateBindings(
 			selectedID: Binding<String?>,
 			visibleItems: [String],
 			claimFocusTrigger: Binding<Bool>?
@@ -95,7 +95,7 @@ struct FocusClaimingView: NSViewRepresentable {
 			self.claimFocusTrigger = claimFocusTrigger
 		}
 
-		func handleArrowKey(_ key: FocusableNSView.KeyboardKey) {
+		fileprivate func handleArrowKey(_ key: FocusableNSView.KeyboardKey) {
 			switch key {
 			case .up:
 				selectedID.wrappedValue = TreeKeyboardNavigation.moveSelectionUp(
