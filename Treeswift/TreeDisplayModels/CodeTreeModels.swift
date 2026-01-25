@@ -173,7 +173,6 @@ struct LocationInfo: Hashable, Sendable {
 		case tooBigForSameFile
 	}
 
-	// periphery:ignore - kept for future use even though currently unused
 	let type: LocationType
 	let icon: TreeIcon?
 	let fileName: String?

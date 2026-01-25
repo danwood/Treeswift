@@ -34,7 +34,7 @@ struct PeripheryTreeView: View {
 	/**
 	 Summary of deletion operations for alert display.
 	 */
-	struct RemovalSummary: Identifiable {
+	private struct RemovalSummary: Identifiable {
 		let id = UUID()
 		let deletedCount: Int
 		let nonDeletableCount: Int

@@ -21,8 +21,8 @@ struct CodeModificationHelper {
 		let originalContents: String
 		let modifiedContents: String
 		let linesRemoved: Int // 0 for replacements, >0 for deletions
-		let startLine: Int
-		let endLine: Int
+		fileprivate let startLine: Int
+		fileprivate let endLine: Int
 
 		/**
 		 Finds declarations affected by this modification and adjusts their line numbers.
@@ -762,7 +762,7 @@ struct CodeModificationHelper {
 		var processedOperations: [(scanResult: ScanResult, declaration: Declaration, location: Location)] = []
 		var seenUSRs = Set<String>()
 
-		for (scanResult, declaration, location) in operations {
+		for (scanResult, declaration, _) in operations {
 			// For full declaration deletions, check if parent should be deleted instead
 			let actualTarget: Declaration = if shouldCheckEmptyAncestor(scanResult.annotation, declaration.kind) {
 				findHighestEmptyAncestor(of: declaration)
