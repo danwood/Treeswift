@@ -366,6 +366,58 @@ struct CodeModificationHelper {
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
 	) -> Result<Void, Error> {
+		let filePath = location.file.path.string
+
+		// Read original file contents
+		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
+			return .failure(CodeModificationError.cannotReadFile(filePath))
+		}
+
+		var lines = originalContents.components(separatedBy: .newlines)
+
+		// Special handling for enum cases on the same line as other cases
+		if declaration.kind == .enumelement {
+			// Extract the case name from the declaration
+			let caseName = declaration.name ?? ""
+			if !caseName.isEmpty,
+			   let modifiedLines = DeclarationDeletionHelper.handleInlineEnumCaseDeletion(
+			   	lines: lines,
+			   	declarationLine: location.line,
+			   	caseName: caseName
+			   ) {
+				// Successfully handled inline case deletion
+				let modifiedContents = modifiedLines.joined(separator: "\n")
+
+				// Write back to file
+				do {
+					try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
+				} catch {
+					return .failure(CodeModificationError.cannotWriteFile(filePath))
+				}
+
+				// Invalidate cache
+				SourceFileReader.invalidateCache(for: filePath)
+
+				// Register undo (no line number adjustments needed - we only modified one line)
+				UndoRedoHelper.registerDeletionUndo(
+					undoManager: undoManager,
+					originalContents: originalContents,
+					modifiedContents: modifiedContents,
+					filePath: filePath,
+					warningID: warningID,
+					adjustedUSRs: [],
+					lineAdjustment: 0,
+					sourceGraph: sourceGraph,
+					actionName: "Delete Enum Case",
+					onComplete: onComplete,
+					onRestore: onRestore
+				)
+
+				onComplete()
+				return .success(())
+			}
+		}
+
 		// Check if parent should be deleted instead (empty container removal)
 		let actualTarget = findHighestEmptyAncestor(of: declaration)
 
@@ -375,15 +427,6 @@ struct CodeModificationHelper {
 			return .failure(CodeModificationError.missingEndLocation)
 		}
 
-		let filePath = targetLocation.file.path.string
-
-		// Read original file contents
-		guard let originalContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
-			return .failure(CodeModificationError.cannotReadFile(filePath))
-		}
-
-		var lines = originalContents.components(separatedBy: .newlines)
-
 		// Find deletion boundaries using smart boundary detection
 		let startLine = DeclarationDeletionHelper.findDeletionStartLine(
 			lines: lines,
@@ -392,21 +435,32 @@ struct CodeModificationHelper {
 		)
 
 		// Determine ending line (includes smart blank line handling)
-		let finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
+		var finalStartLine = startLine
+		var finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
 			lines: lines,
 			declarationLine: startLine,
 			declarationEndLine: endLine
 		)
 
+		// Check if we're inside an empty #if block
+		if let adjustedRange = DeclarationDeletionHelper.checkForEmptyConditionalBlock(
+			lines: lines,
+			startLine: finalStartLine,
+			endLine: finalEndLine
+		) {
+			finalStartLine = adjustedRange.newStartLine
+			finalEndLine = adjustedRange.newEndLine
+		}
+
 		// Validate range
-		guard startLine > 0, finalEndLine > 0,
-		      startLine <= lines.count, finalEndLine <= lines.count,
-		      startLine <= finalEndLine else {
-			return .failure(CodeModificationError.invalidLineRange(startLine, lines.count))
+		guard finalStartLine > 0, finalEndLine > 0,
+		      finalStartLine <= lines.count, finalEndLine <= lines.count,
+		      finalStartLine <= finalEndLine else {
+			return .failure(CodeModificationError.invalidLineRange(finalStartLine, lines.count))
 		}
 
 		// Delete the range
-		let startIndex = startLine - 1
+		let startIndex = finalStartLine - 1
 		let endIndex = finalEndLine - 1
 		lines.removeSubrange(startIndex ... endIndex)
 
@@ -422,7 +476,7 @@ struct CodeModificationHelper {
 		SourceFileReader.invalidateCache(for: filePath)
 
 		// Adjust line numbers and track which declarations were adjusted
-		let linesRemoved = finalEndLine - startLine + 1
+		let linesRemoved = finalEndLine - finalStartLine + 1
 		let afterLine = finalEndLine
 
 		let adjustedUSRs: [String] = if let sourceGraph {
@@ -886,6 +940,24 @@ struct CodeModificationHelper {
 
 			} else {
 				// Delete full declaration (struct, property, function, etc.)
+
+				// Special handling for enum cases on the same line as other cases
+				if declaration.kind == .enumelement {
+					let caseName = declaration.name ?? ""
+					if !caseName.isEmpty,
+					   let modifiedLines = DeclarationDeletionHelper.handleInlineEnumCaseDeletion(
+					   	lines: lines,
+					   	declarationLine: location.line,
+					   	caseName: caseName
+					   ) {
+						// Successfully handled inline case deletion
+						lines = modifiedLines
+						removedWarningIDs.append(warningID)
+						// No line number adjustments needed - we only modified one line
+						continue
+					}
+				}
+
 				guard let endLine = location.endLine else { continue }
 
 				// Find actual start line (including attributes and comments)
@@ -896,14 +968,25 @@ struct CodeModificationHelper {
 				)
 
 				// Determine ending line (includes smart blank line handling)
-				let finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
+				var finalStartLine = startLine
+				var finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
 					lines: lines,
 					declarationLine: startLine,
 					declarationEndLine: endLine
 				)
 
+				// Check if we're inside an empty #if block
+				if let adjustedRange = DeclarationDeletionHelper.checkForEmptyConditionalBlock(
+					lines: lines,
+					startLine: finalStartLine,
+					endLine: finalEndLine
+				) {
+					finalStartLine = adjustedRange.newStartLine
+					finalEndLine = adjustedRange.newEndLine
+				}
+
 				// Validate range
-				let startIndex = startLine - 1
+				let startIndex = finalStartLine - 1
 				let endIndex = finalEndLine - 1
 				guard startIndex >= 0, endIndex < lines.count, startIndex <= endIndex else {
 					continue

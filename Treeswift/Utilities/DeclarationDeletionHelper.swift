@@ -5,6 +5,71 @@ import SystemPackage
 // Helper for intelligently deleting declarations from source files
 struct DeclarationDeletionHelper {
 	/**
+	 Handles deletion of an enum case when multiple cases are on the same line.
+
+	 Returns modified file contents if successful, nil if the case should use normal deletion logic.
+	 Handles patterns like: "case foo, bar, baz" or "enum Foo { case info, celebration }"
+	 */
+	static func handleInlineEnumCaseDeletion(
+		lines: [String],
+		declarationLine: Int,
+		caseName: String
+	) -> [String]? {
+		guard declarationLine > 0, declarationLine <= lines.count else { return nil }
+
+		let lineIndex = declarationLine - 1
+		let line = lines[lineIndex]
+		let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+		// Check if this line contains "case" keyword and multiple comma-separated cases
+		guard trimmed.contains("case "), trimmed.contains(",") else { return nil }
+
+		// Extract the case list portion
+		// Handle both "case foo, bar" and "enum X { case foo, bar }"
+		guard let caseKeywordRange = trimmed.range(of: "case ") else { return nil }
+		let afterCase = String(trimmed[caseKeywordRange.upperBound...])
+
+		// Split by comma to get individual cases
+		var cases = afterCase.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+
+		// Find and remove the matching case
+		// The case name might have associated values or raw values, so we check if it starts with the case name
+		var foundIndex: Int?
+		for (index, caseItem) in cases.enumerated() {
+			// Extract just the case name (before any '(' or '=' or whitespace)
+			let caseItemName = caseItem.components(separatedBy: CharacterSet(charactersIn: "(= \t")).first ?? caseItem
+			if caseItemName == caseName {
+				foundIndex = index
+				break
+			}
+		}
+
+		guard let indexToRemove = foundIndex else { return nil }
+
+		// If this is the only case on the line, use normal deletion
+		if cases.count == 1 {
+			return nil
+		}
+
+		// Remove the case from the array
+		cases.remove(at: indexToRemove)
+
+		// Reconstruct the line
+		let beforeCase = String(trimmed[..<caseKeywordRange.lowerBound])
+		let newCaseList = cases.joined(separator: ", ")
+
+		// Preserve original indentation
+		let leadingWhitespace = String(line.prefix(while: { $0.isWhitespace }))
+		let newLine = leadingWhitespace + beforeCase + "case " + newCaseList
+
+		// Update the line in the array
+		var modifiedLines = lines
+		modifiedLines[lineIndex] = newLine
+
+		return modifiedLines
+	}
+
+	/**
 	 Detects if a line contains a complete declaration.
 
 	 A declaration line contains keywords like var, let, func, struct, etc.
@@ -359,10 +424,13 @@ struct DeclarationDeletionHelper {
 	}
 
 	/**
-	 Find the last line to delete (including trailing blank lines).
+	 Find the last line to delete (including trailing blank lines and empty #if blocks).
 
 	 If the deleted declaration has a blank line above AND below, remove the trailing blank.
 	 This prevents accumulation of extra whitespace.
+
+	 Also checks if the declaration is inside a #if block that would become empty after deletion.
+	 If so, includes the entire #if/#endif block in the deletion range.
 	 */
 	static func findDeletionEndLine(
 		lines: [String],
@@ -401,5 +469,104 @@ struct DeclarationDeletionHelper {
 
 		// Otherwise, don't include trailing blanks (preserve spacing)
 		return declarationEndLine
+	}
+
+	/**
+	 Checks if a declaration is inside a #if block and if that block would become empty after deletion.
+
+	 Returns the adjusted deletion range if an empty #if block should be removed, otherwise returns nil.
+	 */
+	static func checkForEmptyConditionalBlock(
+		lines: [String],
+		startLine: Int,
+		endLine: Int
+	) -> (newStartLine: Int, newEndLine: Int)? {
+		// Look backward for #if
+		var ifLine: Int?
+		var checkLine = startLine - 1
+
+		while checkLine >= 1 {
+			let lineIndex = checkLine - 1
+			guard lineIndex >= 0, lineIndex < lines.count else { break }
+			let trimmed = lines[lineIndex].trimmingCharacters(in: .whitespaces)
+
+			if trimmed.isEmpty {
+				checkLine -= 1
+				continue
+			}
+
+			if trimmed.starts(with: "#if") {
+				ifLine = checkLine
+				break
+			}
+
+			// Stop if we hit non-empty, non-#if content
+			if !trimmed.starts(with: "//") {
+				break
+			}
+
+			checkLine -= 1
+		}
+
+		guard let foundIfLine = ifLine else { return nil }
+
+		// Look forward for #endif
+		var endifLine: Int?
+		checkLine = endLine + 1
+
+		while checkLine <= lines.count {
+			let lineIndex = checkLine - 1
+			guard lineIndex >= 0, lineIndex < lines.count else { break }
+			let trimmed = lines[lineIndex].trimmingCharacters(in: .whitespaces)
+
+			if trimmed.isEmpty {
+				checkLine += 1
+				continue
+			}
+
+			if trimmed.starts(with: "#endif") {
+				endifLine = checkLine
+				break
+			}
+
+			// Stop if we hit non-empty, non-#endif content
+			if !trimmed.starts(with: "//") {
+				break
+			}
+
+			checkLine += 1
+		}
+
+		guard let foundEndifLine = endifLine else { return nil }
+
+		// Check if the block contains ONLY the declaration being deleted (and whitespace/comments)
+		var hasOtherContent = false
+		for lineNum in foundIfLine + 1 ..< foundEndifLine {
+			// Skip the lines we're deleting
+			if lineNum >= startLine, lineNum <= endLine {
+				continue
+			}
+
+			let lineIndex = lineNum - 1
+			guard lineIndex >= 0, lineIndex < lines.count else { continue }
+			let trimmed = lines[lineIndex].trimmingCharacters(in: .whitespaces)
+
+			// Skip empty lines and comments
+			if trimmed.isEmpty || trimmed.starts(with: "//") || trimmed.starts(with: "/*") || trimmed
+				.starts(with: "*") {
+				continue
+			}
+
+			// Found other content
+			hasOtherContent = true
+			break
+		}
+
+		// If block would be empty, expand deletion to include #if and #endif
+		if !hasOtherContent {
+			return (newStartLine: foundIfLine, newEndLine: foundEndifLine)
+		}
+
+		return nil
 	}
 }

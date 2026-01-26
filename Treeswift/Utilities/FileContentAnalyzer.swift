@@ -95,9 +95,11 @@ enum FileContentAnalyzer {
 	 Checks if file contains only compiler directives, imports, and whitespace/comments.
 
 	 Files that only contain #if/#endif blocks with no executable code should be deleted.
+	 This includes files with only header comments (copyright, file name, etc.) plus imports.
 	 */
 	private static func hasOnlyDirectivesAndImports(_ contents: String) -> Bool {
 		let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
+		var inMultiLineComment = false
 
 		for line in lines {
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -105,9 +107,22 @@ enum FileContentAnalyzer {
 			// Skip empty lines
 			if trimmed.isEmpty { continue }
 
-			// Skip comments
-			if trimmed.starts(with: "//") || trimmed.starts(with: "/*") || trimmed.starts(with: "*") || trimmed
-				.hasSuffix("*/") {
+			// Track multi-line comments
+			if trimmed.starts(with: "/*") {
+				inMultiLineComment = true
+			}
+			if trimmed.hasSuffix("*/") || trimmed.starts(with: "*/") {
+				inMultiLineComment = false
+				continue
+			}
+
+			// Skip comments (single-line, multi-line, and doc comments)
+			if inMultiLineComment ||
+				trimmed.starts(with: "//") ||
+				trimmed.starts(with: "/*") ||
+				trimmed.starts(with: "*") ||
+				trimmed.starts(with: "/**") ||
+				trimmed.starts(with: "///") {
 				continue
 			}
 
@@ -115,8 +130,10 @@ enum FileContentAnalyzer {
 			if trimmed.starts(with: "import ") { continue }
 
 			// Skip compiler directives
-			if trimmed.starts(with: "#if") || trimmed.starts(with: "#endif") || trimmed.starts(with: "#else") || trimmed
-				.starts(with: "#elseif") {
+			if trimmed.starts(with: "#if") ||
+				trimmed.starts(with: "#endif") ||
+				trimmed.starts(with: "#else") ||
+				trimmed.starts(with: "#elseif") {
 				continue
 			}
 
