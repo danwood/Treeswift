@@ -962,7 +962,6 @@ struct CodeModificationHelper {
 		SourceFileReader.invalidateCache(for: filePath)
 
 		// Count total and non-deletable warnings (caller provides these via operations list)
-		let totalWarningsInFile = operations.count
 		let deletedCount = removedWarningIDs.count
 		let nonDeletableCount = 0 // Caller pre-filters, so all were deletable
 
@@ -975,7 +974,6 @@ struct CodeModificationHelper {
 			shouldDeleteFile: shouldDeleteFile,
 			shouldRemoveImports: shouldRemoveImports,
 			deletionStats: FileNode.DeletionStats(
-				totalWarningsInFile: totalWarningsInFile,
 				deletedCount: deletedCount,
 				nonDeletableCount: nonDeletableCount,
 				failedIgnoreCommentsCount: failedIgnoreCommentsCount
