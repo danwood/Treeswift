@@ -78,6 +78,9 @@ struct ScanCommand: ParsableCommand {
     @Flag(help: "Disable identification of unused imports")
     private var disableUnusedImportAnalysis: Bool = defaultConfiguration.$disableUnusedImportAnalysis.defaultValue
 
+    @Flag(inversion: .prefixedNo, help: "Report superfluous ignore comments")
+    private var superfluousIgnoreComments: Bool = defaultConfiguration.$superfluousIgnoreComments.defaultValue
+
     @Option(parsing: .upToNextOption, help: "Names of unused imported modules to retain")
     private var retainUnusedImportedModules: [String] = defaultConfiguration.$retainUnusedImportedModules.defaultValue
 
@@ -204,6 +207,7 @@ struct ScanCommand: ParsableCommand {
         configuration.apply(\.$showNestedRedundantAccessibility, showNestedRedundantAccessibility)
         configuration.apply(\.$disableRedundantAccessAnalysis, disableRedundantAccessAnalysis)
         configuration.apply(\.$disableUnusedImportAnalysis, disableUnusedImportAnalysis)
+        configuration.apply(\.$superfluousIgnoreComments, superfluousIgnoreComments)
         configuration.apply(\.$retainUnusedImportedModules, retainUnusedImportedModules)
         configuration.apply(\.$externalEncodableProtocols, externalEncodableProtocols)
         configuration.apply(\.$externalCodableProtocols, externalCodableProtocols)

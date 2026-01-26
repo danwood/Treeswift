@@ -105,7 +105,7 @@ final class Scan {
     private func buildResults() -> [ScanResult] {
         try? Task.checkCancellation()
         let resultInterval = logger.beginInterval("result:build")
-        let results = ScanResultBuilder.build(for: graph)
+        let results = ScanResultBuilder.build(for: graph, configuration: configuration)
         logger.endInterval(resultInterval)
         return results
     }
