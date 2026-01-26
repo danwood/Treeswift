@@ -4,13 +4,13 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 ## Base Version
 
-- **Upstream**: https://github.com/danwood/periphery (branch: all-fixes)
+- **Upstream**: https://github.com/danwood/periphery (branch: redundant-nested)
 - **Base commit**: 8ebf4a42 (includes post-3.4.0 + additional fixes)
 - **Previous upstream**: https://github.com/peripheryapp/periphery (commit 5a4ac8b)
 - **Current modifications**: 17 files changed, 488 insertions, 25 deletions
-- **Migration**: Switched from peripheryapp/periphery to danwood/periphery all-fixes branch
+- **Migration**: Switched from peripheryapp/periphery to danwood/periphery redundant-nested branch
 
-**What's in the all-fixes branch:**
+**What's in the redundant-nested branch:**
 - All changes from upstream periphery post-3.4.0
 - #Preview macro unused code detection (unless --retain-swift-ui-previews)
 - Redundant nested access detection
@@ -297,22 +297,22 @@ The `PeripherySource/periphery` directory is managed as a **git subtree** tracki
 git remote add periphery-upstream https://github.com/peripheryapp/periphery.git  # Original upstream
 git remote add danwood-fork https://github.com/danwood/periphery                 # Current source
 
-# Current baseline: 8ebf4a42 from danwood/periphery all-fixes branch
+# Current baseline: 8ebf4a42 from danwood/periphery redundant-nested branch
 ```
 
-**To update to the latest all-fixes branch:**
+**To update to the latest redundant-nested branch:**
 
 ```bash
-# Pull the latest all-fixes branch from danwood fork
-git fetch danwood-fork all-fixes
-git subtree pull --prefix=PeripherySource/periphery danwood-fork all-fixes --squash
+# Pull the latest redundant-nested branch from danwood fork
+git fetch danwood-fork redundant-nested
+git subtree pull --prefix=PeripherySource/periphery danwood-fork redundant-nested --squash
 
 # After the merge, verify local modifications are still present
 # Resolve any conflicts, prioritizing Treeswift modifications
 
 # Stage changes
 git add PeripherySource/periphery/
-git commit -m "Update subtree to latest danwood/periphery all-fixes"
+git commit -m "Update subtree to latest danwood/periphery redundant-nested"
 ```
 
 **To switch back to upstream peripheryapp/periphery:**
@@ -427,19 +427,19 @@ When updating to a newer Periphery version:
 ## Viewing Current Modifications
 
 To see all Treeswift modifications to Periphery (excluding upstream changes):
-
+redundant-nested
 ```bash
 # View all local modifications against danwood fork baseline
-git diff danwood-fork/all-fixes HEAD -- PeripherySource/periphery/
+git diff danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/
 
 # Generate patch file
-git diff danwood-fork/all-fixes HEAD -- PeripherySource/periphery/ > current_modifications.patch
+git diff danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/ > current_modifications.patch
 
 # View statistics
-git diff --stat danwood-fork/all-fixes HEAD -- PeripherySource/periphery/
+git diff --stat danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/
 ```
 
-**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery all-fixes branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
+**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery redundant-nested branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
 
 ## References
 
