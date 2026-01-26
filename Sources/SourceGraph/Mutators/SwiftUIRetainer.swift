@@ -15,8 +15,8 @@ final class SwiftUIRetainer: SourceGraphMutator {
 
     func mutate() {
         retainSpecialProtocolConformances()
-        retainPreviewMacros()
         retainApplicationDelegateAdaptors()
+        unretainPreviewMacroExpansions()
     }
 
     // MARK: - Private
@@ -39,35 +39,6 @@ final class SwiftUIRetainer: SourceGraphMutator {
             .forEach { graph.markRetained($0) }
     }
 
-    private func retainPreviewMacros() {
-        // #Preview macros are expanded by the compiler before indexing, creating
-        // wrapper structs we detect by their mangled names and characteristic patterns
-        let previewDecls = graph.allDeclarations.filter { self.isPreviewMacro($0) }
-
-        if configuration.retainSwiftUIPreviews {
-            // With flag: retain preview macros
-            // Their references will be processed normally by UsedDeclarationMarker
-            previewDecls.forEach { graph.markRetained($0) }
-        } else {
-            // Without flag: mark preview machinery AND child declarations as ignored
-            // This includes the makePreview() function and any other generated code
-            // UsedDeclarationMarker will skip processing their references
-            for preview in previewDecls {
-                graph.markIgnored(preview)
-                preview.descendentDeclarations.forEach { graph.markIgnored($0) }
-            }
-        }
-    }
-
-    private func isPreviewMacro(_ decl: Declaration) -> Bool {
-        // Match compiler-generated preview wrapper structs with mangled names
-        // starting with "$s" and containing "PreviewRegistry". We only detect the parent
-        // struct - children (like makePreview()) are handled via descendentDeclarations.
-        guard let name = decl.name else { return false }
-
-        return name.hasPrefix("$s") && name.contains("PreviewRegistry")
-    }
-
     private func retainApplicationDelegateAdaptors() {
         graph
             .mainAttributedDeclarations
@@ -80,5 +51,23 @@ final class SwiftUIRetainer: SourceGraphMutator {
                 }
             }
             .forEach { graph.markRetained($0) }
+    }
+
+    private func unretainPreviewMacroExpansions() {
+        guard !configuration.retainSwiftUIPreviews else { return }
+
+        let previewRegistryUsr = "s:21DeveloperToolsSupport15PreviewRegistryP"
+        let macroReferences = graph.references(to: previewRegistryUsr)
+        guard !macroReferences.isEmpty else { return }
+
+        for reference in macroReferences {
+            if let parent = reference.parent, parent.isImplicit {
+                graph.unmarkRetained(parent)
+
+                for decl in parent.declarations {
+                    graph.unmarkRetained(decl)
+                }
+            }
+        }
     }
 }

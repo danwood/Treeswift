@@ -95,6 +95,9 @@ public final class Configuration {
     @Setting(key: "disable_unused_import_analysis", defaultValue: false)
     public var disableUnusedImportAnalysis: Bool
 
+    @Setting(key: "superfluous_ignore_comments", defaultValue: true)
+    public var superfluousIgnoreComments: Bool
+
     @Setting(key: "retain_unused_imported_modules", defaultValue: [])
     public var retainUnusedImportedModules: [String]
 
@@ -225,9 +228,10 @@ public final class Configuration {
         $project, $schemes, $excludeTargets, $excludeTests, $indexExclude, $reportExclude, $reportInclude, $outputFormat,
         $retainPublic, $noRetainSPI, $retainFiles, $retainAssignOnlyProperties, $retainAssignOnlyPropertyTypes, $retainObjcAccessible,
         $retainObjcAnnotated, $retainUnusedProtocolFuncParams, $retainSwiftUIPreviews, $disableRedundantPublicAnalysis,
-        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility, $disableRedundantAccessAnalysis,
-        $disableUnusedImportAnalysis, $retainUnusedImportedModules, $externalEncodableProtocols, $externalCodableProtocols,
-        $externalTestCaseClasses, $verbose, $quiet, $color, $disableUpdateCheck, $strict, $indexStorePath,
+        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility,  $disableRedundantAccessAnalysis,
+        $disableUnusedImportAnalysis, $superfluousIgnoreComments, $retainUnusedImportedModules,
+        $externalEncodableProtocols, $externalCodableProtocols, $externalTestCaseClasses, $verbose, $quiet, $color,
+        $disableUpdateCheck, $strict, $indexStorePath,
         $skipBuild, $skipSchemesValidation, $cleanBuild, $buildArguments, $xcodeListArguments, $relativeResults,
         $jsonPackageManifestPath, $retainCodableProperties, $retainEncodableProperties, $baseline, $writeBaseline,
         $writeResults, $genericProjectConfig, $bazel, $bazelFilter, $bazelIndexStore,
