@@ -819,13 +819,56 @@ struct CodeModificationHelper {
 		var adjustedUSRs: [String] = []
 		var failedIgnoreCommentsCount = 0
 
+		// Pre-process operations to handle preview cleanup for deleted Views
+		// Use SourceGraph to find #Preview macros that reference Views being deleted
+		var operationsWithPreviews: [(scanResult: ScanResult, declaration: Declaration, location: Location)] = []
+
+		// Only run preview detection if we have a sourceGraph
+		if let sourceGraph {
+			// Find SwiftUI Views being deleted and their scan results
+			var viewOperations: [(scanResult: ScanResult, declaration: Declaration)] = []
+			for op in operations {
+				let (scanResult, declaration, _) = op
+				guard declaration.kind == .struct,
+				      DeclarationIconHelper.conformsToView(declaration) else {
+					continue
+				}
+				viewOperations.append((scanResult, declaration))
+			}
+
+			// Find all previews for these Views using SourceGraph
+			var previewDeclarations: [Declaration] = []
+			for (_, viewDecl) in viewOperations {
+				let previews = PreviewDetectionHelper.findPreviewsForView(
+					viewDeclaration: viewDecl,
+					sourceGraph: sourceGraph
+				)
+				previewDeclarations.append(contentsOf: previews)
+			}
+
+			// Add original operations
+			operationsWithPreviews.append(contentsOf: operations)
+
+			// Add preview deletion operations
+			// Reuse the ScanResult from the first View deletion for preview deletions
+			// (The specific ScanResult doesn't matter since we're just deleting the declarations)
+			if let firstViewOp = viewOperations.first, !previewDeclarations.isEmpty {
+				for previewDecl in previewDeclarations {
+					operationsWithPreviews.append((firstViewOp.scanResult, previewDecl, previewDecl.location))
+				}
+			}
+		} else {
+			// No source graph available, skip preview detection
+			operationsWithPreviews = operations
+		}
+
 		// Pre-process operations to handle empty container removal
 		// Track declarations we've already included (by USR) to avoid duplicates when
 		// multiple siblings would all cause the parent to be empty
 		var processedOperations: [(scanResult: ScanResult, declaration: Declaration, location: Location)] = []
 		var seenUSRs = Set<String>()
 
-		for (scanResult, declaration, _) in operations {
+		for (scanResult, declaration, _) in operationsWithPreviews {
 			// For full declaration deletions, check if parent should be deleted instead
 			let actualTarget: Declaration = if shouldCheckEmptyAncestor(scanResult.annotation, declaration.kind) {
 				findHighestEmptyAncestor(of: declaration)
