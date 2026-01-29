@@ -16,6 +16,12 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 - Redundant nested access detection (redundant-nested branch)
 - Fix to issue 1062 (fix-1062 branch)
 
+## What Belongs Here vs. Upstream
+
+**Only Treeswift-specific integration changes** should be applied directly to this subtree. These are changes required for Periphery to work as a library consumed by the Treeswift GUI — exposing public APIs, adding progress delegates, end-position tracking, etc.
+
+**General Periphery analysis changes** (new scan rules, bug fixes in mutators, new detection patterns) must NOT be applied here. They belong in the upstream repository (danwood/periphery) and should be pulled into Treeswift via `git subtree pull`. If a task requires such a change, stop and make a plan to apply it to the correct upstream branch first.
+
 ## Modification Categories
 
 ### 1. Package Structure Changes (CRITICAL)

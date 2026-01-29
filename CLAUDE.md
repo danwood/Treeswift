@@ -51,10 +51,22 @@ Shared helper functions belong in `Utilities/` folder, not scattered across view
 
 ## Modifying PeripherySource/periphery Files
 
-When modifying files in `PeripherySource/periphery/`, follow the diff minimization strategy and document all changes in [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md).
+**CRITICAL: Two categories of changes — different workflows.**
 
-See that file for complete details on:
-- Diff minimization patterns and examples
-- Current modifications to Periphery
-- Update workflow for new Periphery versions
-- Git subtree management
+### Treeswift-specific changes (apply directly here)
+
+Changes required *only* for Periphery to work as a library consumed by Treeswift (e.g., exposing public APIs, adding progress delegates, end-position tracking). These are applied directly to the subtree in this repository.
+
+When making such changes, follow the diff minimization strategy and document all changes in [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md).
+
+### General analysis changes (DO NOT apply here)
+
+Changes to Periphery's core analysis logic (e.g., new scan rules, bug fixes in existing mutators, new detection patterns) must NOT be applied directly to the subtree. These belong in the upstream Periphery repository (danwood/periphery). Instead:
+
+1. **Stop and plan** — identify which upstream branch the change belongs on
+2. **Apply the change in the upstream repository** (danwood/periphery)
+3. **Pull the subtree** to bring the change into Treeswift via `git subtree pull`
+
+This ensures analysis improvements are properly tracked upstream and avoids divergence that complicates future subtree pulls.
+
+See [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md) for complete details on diff minimization patterns, current modifications, update workflow, and git subtree management.
