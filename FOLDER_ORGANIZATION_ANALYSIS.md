@@ -66,6 +66,8 @@ Shared UI/
 - Subfolders have full access to parent or ancestor folder's `internal` symbols
 - Parent folders only access the main symbol of child symbol folders (not their support code)
 
+> See **Symbol Folders: Folderprivate Access Rules** below for complete details on access patterns.
+
 **Example**:
 ```
 EditorView/                          // Symbol folder
@@ -81,6 +83,214 @@ In this example:
 - `EditorView.swift` can reference `ButtonView` (the main symbol)
 - `EditorView.swift` should NOT reference `ButtonStyle` (support code for ButtonView)
 - `ButtonView.swift` CAN reference `EditorToolbar` (parent folder's symbols)
+
+### Symbol Folders: Folderprivate Access Rules
+
+When a folder follows the Symbol Folder pattern (matching folder/file/symbol names), it establishes a "folderprivate" encapsulation boundary. This section formalizes the access rules for these folders.
+
+#### What Makes a Folder "Folderprivate"?
+
+A folder is considered "folderprivate" when it meets these criteria:
+
+1. **Matching names**: The folder name matches a Swift file name (without `.swift`) within that folder
+2. **Main symbol**: That file contains an `internal` declaration matching the folder name
+3. **Encapsulation**: All other symbols in the folder are NOT referenced from outside the folder (except by descendant folders)
+
+The `/* folderprivate */` annotation (placed before the main symbol declaration) is recommended for documentation but not required—the naming pattern itself defines the behavior.
+
+**Example:**
+```swift
+// In EditorView/EditorView.swift
+/* folderprivate */
+struct EditorView: View {
+	// This is the main symbol - the public interface for this folder
+}
+```
+
+#### Access Rules by Location
+
+The following table defines what code in different locations can access within a folderprivate folder:
+
+| Accessor Location | Can Access Main Symbol? | Can Access Support Symbols? | Rationale |
+|---|---|---|---|
+| **Same folder** | ✅ Yes | ✅ Yes | Full internal access within the folder |
+| **Sibling folder** | ✅ Yes | ❌ No | Siblings see only the public interface |
+| **Parent folder** | ✅ Yes | ❌ No | Parents see only the public interface |
+| **Child/descendant** | ✅ Yes | ✅ Yes (all ancestors) | Children integrate with parent implementation |
+| **Unrelated folder** | ✅ Yes | ❌ No | Only public interface is visible |
+
+**Key Principle:** The main symbol is the **only** part of a folderprivate folder that should be referenced from outside, with one exception: descendant folders have full access to ancestor symbols.
+
+#### Hierarchical Access Rules
+
+##### Upward Access (Child → Ancestors)
+
+A folder has **full access** to ALL `internal` symbols in ALL ancestor folders (parent, grandparent, great-grandparent, etc.).
+
+**Why:** Descendant components need to integrate deeply with their ancestor's implementation. Restricting this access would make nested folder hierarchies impractical.
+
+**Example:**
+```
+SettingsView/                          // Level 1
+├─ SettingsView.swift                  // Main + support symbols
+├─ SettingsUtilities.swift             // Support symbol
+└─ AdvancedPanel/                      // Level 2
+    ├─ AdvancedPanel.swift             // Can access SettingsUtilities
+    └─ ColorPicker/                    // Level 3
+        └─ ColorPicker.swift           // Can access both SettingsUtilities and AdvancedPanel support symbols
+```
+
+##### Downward Access (Parent → Children)
+
+A folder can **only access the main symbol** of its child folders. It cannot access support symbols or other internal code within child folders.
+
+**Why:** This preserves encapsulation of the child's implementation details.
+
+**Example:**
+```
+EditorView/
+├─ EditorView.swift                    // Can reference ButtonView
+└─ ButtonView/
+    ├─ ButtonView.swift                // Main symbol - accessible to parent
+    └─ ButtonStyle.swift               // Support - NOT accessible to parent
+```
+
+✅ Allowed: `EditorView.swift` references `ButtonView`
+❌ Forbidden: `EditorView.swift` references `ButtonStyle`
+
+##### Horizontal Access (Sibling ↔ Sibling)
+
+Sibling folders (folders with the same parent) can **only access each other's main symbols**. They cannot access support symbols.
+
+**Why:** Sibling components are independent and should only interact through public interfaces.
+
+**Example:**
+```
+UI/
+├─ EditorView/
+│   ├─ EditorView.swift                // Main symbol
+│   └─ EditorToolbar.swift             // Support symbol
+└─ SettingsView/
+    ├─ SettingsView.swift              // Can reference EditorView
+    └─ SettingsPanel.swift             // Cannot reference EditorToolbar
+```
+
+✅ Allowed: `SettingsView.swift` references `EditorView`
+❌ Forbidden: `SettingsView.swift` references `EditorToolbar`
+
+#### Complete Example with Access Annotations
+
+```
+EditorView/                            // Folderprivate folder (Level 1)
+├─ EditorView.swift
+│  └─ struct EditorView                // Main symbol - accessible everywhere
+├─ EditorToolbar.swift
+│  └─ struct EditorToolbar             // Support - accessible only within EditorView/ and descendants
+├─ EditorUtilities.swift
+│  └─ struct EditorHelper              // Support - accessible only within EditorView/ and descendants
+└─ ButtonView/                         // Nested folderprivate folder (Level 2)
+   ├─ ButtonView.swift
+   │  └─ struct ButtonView             // Main symbol - accessible to EditorView/ and elsewhere
+   └─ ButtonStyle.swift
+      └─ struct ButtonStyle            // Support - accessible only within ButtonView/
+```
+
+**Access Examples:**
+
+| Source File | Target Symbol | Allowed? | Reason |
+|---|---|---|---|
+| `EditorView.swift` | `ButtonView` | ✅ Yes | Parent accessing child's main symbol |
+| `EditorView.swift` | `ButtonStyle` | ❌ No | Parent cannot access child's support symbols |
+| `ButtonView.swift` | `EditorView` | ✅ Yes | Child accessing parent's main symbol |
+| `ButtonView.swift` | `EditorToolbar` | ✅ Yes | Child has full access to ancestor symbols |
+| `ButtonStyle.swift` | `EditorHelper` | ✅ Yes | Descendant has full access to ancestor symbols |
+| `SettingsView.swift` | `EditorView` | ✅ Yes | Unrelated folder accessing main symbol |
+| `SettingsView.swift` | `EditorToolbar` | ❌ No | Unrelated folder cannot access support symbols |
+
+#### The `/* folderprivate */` Annotation
+
+**Purpose:**
+- Documents which symbol is the public interface for the folder
+- Helps static analysis tools identify the access pattern
+- Makes developer intent explicit
+
+**Placement:**
+```swift
+/* folderprivate */
+struct EditorView: View {
+	// Implementation
+}
+```
+
+Place the annotation directly before the main symbol declaration, in the same position where access control keywords like `public`, `internal`, or `private` would appear.
+
+**Not Required for Enforcement:**
+The annotation is documentation, not enforcement. A folder following the naming pattern is treated as folderprivate regardless of whether the annotation is present. However, adding it is strongly recommended as a best practice.
+
+#### Validation Checklist
+
+To verify a folder correctly implements the folderprivate pattern:
+
+- [ ] Folder name matches a file name (without `.swift`) in that folder
+- [ ] That file contains an `internal` symbol matching the folder name
+- [ ] The main symbol has the `/* folderprivate */` annotation (recommended)
+- [ ] Support symbols are NOT referenced from sibling folders
+- [ ] Support symbols are NOT referenced from parent folders
+- [ ] The main symbol IS referenced from outside (otherwise it's unused code)
+- [ ] Child folders CAN successfully access ancestor symbols
+
+#### Common Violations and Fixes
+
+**Violation 1: Support Symbol Leaked to Sibling**
+
+❌ **Problem:**
+```
+SettingsView/SettingsHelper.swift (support symbol)
+  is referenced from:
+    EditorView/EditorView.swift (sibling folder)
+```
+
+✅ **Fix:** Either:
+1. Move `SettingsHelper` to a shared utilities folder
+2. Refactor `EditorView` to not depend on `SettingsHelper`
+3. Expose needed functionality through `SettingsView` main symbol
+
+---
+
+**Violation 2: Parent Accessing Child's Support Symbol**
+
+❌ **Problem:**
+```swift
+// In EditorView/EditorView.swift (parent)
+let style = ButtonStyle.default  // Accessing child's support symbol
+```
+
+✅ **Fix:** Make `ButtonView` expose the needed functionality:
+```swift
+// In ButtonView/ButtonView.swift
+/* folderprivate */
+struct ButtonView: View {
+	static let defaultStyle = ButtonStyle.default  // Exposed through main symbol
+}
+
+// In EditorView/EditorView.swift
+let style = ButtonView.defaultStyle  // Accessing through main symbol
+```
+
+---
+
+**Violation 3: Child Cannot Access Ancestor Symbol**
+
+❌ **Problem:**
+```swift
+// In ButtonView/ButtonStyle.swift
+let toolbar = EditorToolbar()  // Compiler error: cannot find EditorToolbar
+```
+
+✅ **Fix:** Verify:
+1. The ancestor folder contains the symbol with `internal` access
+2. The folder hierarchy is correct (ButtonView is actually a descendant of EditorView)
+3. No typos in symbol name or import issues
 
 ### 3. Ambiguous Folders 📁
 
