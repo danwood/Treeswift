@@ -92,9 +92,9 @@ struct ScanResultHelper {
 				suffix = " has a superfluous periphery ignore command"
 			case let .redundantInternalAccessibility(_, suggestedAccessibility):
 				let accessibilityText = suggestedAccessibility?.rawValue ?? "private/fileprivate"
-				suffix = " not used outside of file; can be \(accessibilityText))"
+				suffix = " not used outside of file; can be \(accessibilityText)"
 			case .redundantFilePrivateAccessibility:
-				suffix = " not used outside of scope; can be private)"
+				suffix = " not used outside of scope; can be private"
 			case .redundantAccessibility:
 				let accessLevel = declaration.accessibility.value.rawValue
 				suffix = " has redundant \(accessLevel) accessibility"
