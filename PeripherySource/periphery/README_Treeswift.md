@@ -4,18 +4,17 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 ## Base Version
 
-- **Upstream**: https://github.com/danwood/periphery (branch: redundant-nested)
+- **Upstream**: https://github.com/danwood/periphery (branch: combine-master-redundant-nested-1062)
 - **Base commit**: 8ebf4a42 (includes post-3.4.0 + additional fixes)
 - **Previous upstream**: https://github.com/peripheryapp/periphery (commit 5a4ac8b)
 - **Current modifications**: 17 files changed, 488 insertions, 25 deletions
-- **Migration**: Switched from peripheryapp/periphery to danwood/periphery redundant-nested branch
+- **Migration**: Switched from peripheryapp/periphery to danwood/periphery combine-master-redundant-nested-1062 branch
 
-**What's in the redundant-nested branch:**
+**What's in the combine-master-redundant-nested-1062 branch:**
 - All changes from upstream periphery post-3.4.0
-- #Preview macro unused code detection (unless --retain-swift-ui-previews)
-- Redundant nested access detection
-- Redundant internal/fileprivate accessibility markers
-- Accessibility warning fixes and CI improvements
+- Redundant internal/fileprivate accessibility markers (master branch)
+- Redundant nested access detection (redundant-nested branch)
+- Fix to issue 1062 (fix-1062 branch)
 
 ## Modification Categories
 
@@ -297,22 +296,22 @@ The `PeripherySource/periphery` directory is managed as a **git subtree** tracki
 git remote add periphery-upstream https://github.com/peripheryapp/periphery.git  # Original upstream
 git remote add danwood-fork https://github.com/danwood/periphery                 # Current source
 
-# Current baseline: 8ebf4a42 from danwood/periphery redundant-nested branch
+# Current baseline: 8ebf4a42 from danwood/periphery combine-master-redundant-nested-1062 branch
 ```
 
-**To update to the latest redundant-nested branch:**
+**To update to the latest combine-master-redundant-nested-1062 branch:**
 
 ```bash
-# Pull the latest redundant-nested branch from danwood fork
-git fetch danwood-fork redundant-nested
-git subtree pull --prefix=PeripherySource/periphery danwood-fork redundant-nested --squash
+# Pull the latest combine-master-redundant-nested-1062 branch from danwood fork
+git fetch danwood-fork combine-master-redundant-nested-1062
+git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
 
 # After the merge, verify local modifications are still present
 # Resolve any conflicts, prioritizing Treeswift modifications
 
 # Stage changes
 git add PeripherySource/periphery/
-git commit -m "Update subtree to latest danwood/periphery redundant-nested"
+git commit -m "Update subtree to latest danwood/periphery combine-master-redundant-nested-1062"
 ```
 
 **To switch back to upstream peripheryapp/periphery:**
@@ -427,19 +426,19 @@ When updating to a newer Periphery version:
 ## Viewing Current Modifications
 
 To see all Treeswift modifications to Periphery (excluding upstream changes):
-redundant-nested
+combine-master-redundant-nested-1062
 ```bash
 # View all local modifications against danwood fork baseline
-git diff danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/
+git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
 
 # Generate patch file
-git diff danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/ > current_modifications.patch
+git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/ > current_modifications.patch
 
 # View statistics
-git diff --stat danwood-fork/redundant-nested HEAD -- PeripherySource/periphery/
+git diff --stat danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
 ```
 
-**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery redundant-nested branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
+**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery combine-master-redundant-nested-1062 branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
 
 ## References
 
