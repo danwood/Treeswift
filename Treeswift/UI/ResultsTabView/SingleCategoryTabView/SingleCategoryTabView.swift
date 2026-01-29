@@ -141,13 +141,13 @@ struct SingleCategoryTabView: View {
 		}
 
 		// Apply filtering logic for Tree tab when "Show Only Views" is enabled
-		return sectionNode.children.compactMap { filterNodeForViews($0) }
+		return sectionNode.children.flatMap { filterNodeForViews($0) }
 	}
 
 	/**
 	 Filters nodes to show only Views when "Show Only Views" toggle is enabled
 	 */
-	private func filterNodeForViews(_ node: CategoriesNode) -> CategoriesNode? {
+	private func filterNodeForViews(_ node: CategoriesNode) -> [CategoriesNode] {
 		switch node {
 		case var .section(section):
 			if section.id == .hierarchy {
@@ -156,9 +156,9 @@ struct SingleCategoryTabView: View {
 					flattenViewChildren(child, into: &flattenedChildren)
 				}
 				section.children = flattenedChildren
-				return .section(section)
+				return [.section(section)]
 			}
-			return node
+			return [node]
 
 		case let .declaration(decl):
 			if decl.isView {
@@ -168,9 +168,13 @@ struct SingleCategoryTabView: View {
 					flattenViewChildren(child, into: &flattenedChildren)
 				}
 				mutableDecl.children = flattenedChildren
-				return .declaration(mutableDecl)
+				return [.declaration(mutableDecl)]
 			} else {
-				return nil
+				var promoted: [CategoriesNode] = []
+				for child in decl.children {
+					flattenViewChildren(child, into: &promoted)
+				}
+				return promoted
 			}
 
 		case var .syntheticRoot(root):
@@ -179,7 +183,7 @@ struct SingleCategoryTabView: View {
 				flattenViewChildren(child, into: &flattenedChildren)
 			}
 			root.children = flattenedChildren
-			return .syntheticRoot(root)
+			return [.syntheticRoot(root)]
 		}
 	}
 
