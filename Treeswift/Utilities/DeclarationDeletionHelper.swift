@@ -29,8 +29,23 @@ struct DeclarationDeletionHelper {
 		guard let caseKeywordRange = trimmed.range(of: "case ") else { return nil }
 		let afterCase = String(trimmed[caseKeywordRange.upperBound...])
 
+		// Find where the case list ends (look for closing brace, comment, or end of line)
+		// This handles patterns like "case foo, bar }" or "case foo, bar // comment"
+		var caseListEnd = afterCase.endIndex
+		var afterCaseList = ""
+
+		if let braceIndex = afterCase.firstIndex(of: "}") {
+			caseListEnd = braceIndex
+			afterCaseList = String(afterCase[braceIndex...])
+		} else if let commentIndex = afterCase.range(of: "//")?.lowerBound {
+			caseListEnd = commentIndex
+			afterCaseList = String(afterCase[commentIndex...])
+		}
+
+		let caseListString = String(afterCase[..<caseListEnd]).trimmingCharacters(in: .whitespaces)
+
 		// Split by comma to get individual cases
-		var cases = afterCase.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+		var cases = caseListString.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
 
 		// Find and remove the matching case
 		// The case name might have associated values or raw values, so we check if it starts with the case name
@@ -58,9 +73,10 @@ struct DeclarationDeletionHelper {
 		let beforeCase = String(trimmed[..<caseKeywordRange.lowerBound])
 		let newCaseList = cases.joined(separator: ", ")
 
-		// Preserve original indentation
+		// Preserve original indentation and include any trailing content (like closing brace)
 		let leadingWhitespace = String(line.prefix(while: { $0.isWhitespace }))
-		let newLine = leadingWhitespace + beforeCase + "case " + newCaseList
+		let newLine = leadingWhitespace + beforeCase + "case " + newCaseList +
+			(afterCaseList.isEmpty ? "" : " \(afterCaseList)")
 
 		// Update the line in the array
 		var modifiedLines = lines
@@ -161,6 +177,11 @@ struct DeclarationDeletionHelper {
 				break
 			}
 
+			// Stop at preprocessor directives (#if, #endif, #else, etc.)
+			if line.hasPrefix("#") {
+				break
+			}
+
 			// Stop if we hit another declaration
 			if isDeclarationLine(line) {
 				break
@@ -224,7 +245,6 @@ struct DeclarationDeletionHelper {
 		// Then look backwards for documentation comments
 		// Doc comments directly above declarations (no blank lines) are removed
 		// Section markers (MARK, TODO, FIXME) are preserved
-		var foundBlankLine = false
 		var lastCommentLine: Int?
 		var inBlockComment = false // Track if we're in a /* ... */ block
 
@@ -240,9 +260,13 @@ struct DeclarationDeletionHelper {
 					// Found blank line after seeing comments - stop here
 					break
 				}
-				foundBlankLine = true
 				checkLine -= 1
 				continue
+			}
+
+			// Stop at preprocessor directives (#if, #endif, #else, etc.)
+			if line.hasPrefix("#") {
+				break
 			}
 
 			// Stop if we hit another declaration
@@ -268,7 +292,6 @@ struct DeclarationDeletionHelper {
 				startLine = checkLine
 				lastCommentLine = checkLine
 				checkLine -= 1
-				foundBlankLine = false
 
 				// Track block comment state
 				if line.hasPrefix("/**"), !line.contains("*/") {
@@ -283,7 +306,6 @@ struct DeclarationDeletionHelper {
 				startLine = checkLine
 				lastCommentLine = checkLine
 				checkLine -= 1
-				foundBlankLine = false
 
 			} else if isBlockCommentStart {
 				// Found start of block comment (scanning backward, so this is the opening of the comment)
@@ -291,14 +313,12 @@ struct DeclarationDeletionHelper {
 				lastCommentLine = checkLine
 				inBlockComment = false
 				checkLine -= 1
-				foundBlankLine = false
 
 			} else if isRegularComment {
 				// Regular comments only included if directly adjacent (will break on blank line above)
 				startLine = checkLine
 				lastCommentLine = checkLine
 				checkLine -= 1
-				foundBlankLine = false
 
 			} else {
 				// Not a comment and not blank - stop here
@@ -357,6 +377,11 @@ struct DeclarationDeletionHelper {
 
 			// Stop at blank lines
 			if line.isEmpty {
+				break
+			}
+
+			// Stop at preprocessor directives (#if, #endif, #else, etc.)
+			if line.hasPrefix("#") {
 				break
 			}
 

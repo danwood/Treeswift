@@ -256,7 +256,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainObjcAccessible = try container.decode(Bool.self, forKey: .retainObjcAccessible)
 		retainObjcAnnotated = try container.decode(Bool.self, forKey: .retainObjcAnnotated)
 		retainUnusedProtocolFuncParams = try container.decode(Bool.self, forKey: .retainUnusedProtocolFuncParams)
-		retainSwiftUIPreviews = try container.decode(Bool.self, forKey: .retainSwiftUIPreviews)
+		retainSwiftUIPreviews = true // FIXME: try container.decode(Bool.self, forKey: .retainSwiftUIPreviews)
 		retainCodableProperties = try container.decode(Bool.self, forKey: .retainCodableProperties)
 		retainEncodableProperties = try container.decode(Bool.self, forKey: .retainEncodableProperties)
 		externalEncodableProtocols = try container.decode([String].self, forKey: .externalEncodableProtocols)
@@ -283,7 +283,8 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 			project: "/Users/dwood/code/SWIFTUI/liveshowhub/liveshowhub.xcodeproj",
 			schemes: ["liveshowhub"],
 			excludeTests: true,
-			buildArguments: ["-config", "Debug", "-destination", "platform=macOS,arch=arm64"]
+			buildArguments: ["-config", "Debug", "-destination", "platform=macOS,arch=arm64"],
+			retainSwiftUIPreviews: true // FIXME: Temporarily until fixed in periphery
 		)
 	}
 }

@@ -438,7 +438,7 @@ struct CodeModificationHelper {
 		var finalStartLine = startLine
 		var finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
 			lines: lines,
-			declarationLine: startLine,
+			declarationLine: targetLocation.line,
 			declarationEndLine: endLine
 		)
 
@@ -1014,7 +1014,7 @@ struct CodeModificationHelper {
 				var finalStartLine = startLine
 				var finalEndLine = DeclarationDeletionHelper.findDeletionEndLine(
 					lines: lines,
-					declarationLine: startLine,
+					declarationLine: location.line,
 					declarationEndLine: endLine
 				)
 
