@@ -350,7 +350,7 @@ struct DeclarationDeletionHelper {
 		guard declarationLine > 1 else { return declarationLine }
 
 		var startLine = declarationLine
-		var checkLine = declarationLine - 1
+		let checkLine = declarationLine - 1
 
 		// If no attributes, return declaration line (insert right before it)
 		guard !attributes.isEmpty else {

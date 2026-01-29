@@ -47,7 +47,7 @@ extension FileNode {
 		sourceGraph: SourceGraph?
 	) -> Result<RemovalResult, Error> {
 		// Read original file contents
-		guard let originalContents = try? String(contentsOfFile: path, encoding: .utf8) else {
+		guard (try? String(contentsOfFile: path, encoding: .utf8)) != nil else {
 			return .failure(NSError(
 				domain: "FileNode",
 				code: 1,
@@ -133,7 +133,7 @@ extension FileNode {
 
 		// Add non-deletable count to the result
 		switch result {
-		case var .success(removalResult):
+		case let .success(removalResult):
 			// Update deletion stats to include non-deletable count
 			var updatedStats = removalResult.deletionStats
 			updatedStats = DeletionStats(
