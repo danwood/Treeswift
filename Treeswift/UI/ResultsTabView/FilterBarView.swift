@@ -96,7 +96,7 @@ private struct TypeFilterItem: Identifiable {
 			disableWhenTopLevel: false
 		),
 		TypeFilterItem(
-			id: "imoport",
+			id: "import",
 			swiftType: .import,
 			label: "Import",
 			binding: \.showImport,
@@ -146,6 +146,7 @@ struct FilterBarView: View {
 		filterState.showAssignOnly = value
 		filterState.showRedundantProtocol = value
 		filterState.showRedundantAccessControl = value
+		filterState.showSuperfluousIgnoreCommand = value
 	}
 
 	private func setAllTypeFilters(to value: Bool) {

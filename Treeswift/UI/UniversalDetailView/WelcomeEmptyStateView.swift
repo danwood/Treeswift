@@ -27,7 +27,7 @@ struct WelcomeEmptyStateView: View {
 
 				BulletPoint(text: "Select or create a configuration in the sidebar")
 				BulletPoint(text: "Configure your project path and schemes")
-				BulletPoint(text: "Click 'Run Scan' to analyze your code")
+				BulletPoint(text: "Click 'Build & Scan' to analyze your code")
 				BulletPoint(text: "Explore results in the Periphery, Categories, etc. tabs")
 			}
 		}
