@@ -234,7 +234,7 @@ struct FilterBarView: View {
 						onOptionClick: setAllWarningFilters
 					) {
 						HStack(spacing: 4) {
-							Text("Superflous Ignore")
+							Text("Superfluous Ignore")
 							Text(
 								"(\(annotationCounts[FilterState.WarningType.superfluousIgnoreCommand] ?? 0))"
 							)

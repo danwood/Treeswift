@@ -161,6 +161,9 @@ final class FilterState {
 		if defaults.object(forKey: "filterState.showRedundantAccessControl") != nil {
 			showRedundantAccessControl = defaults.bool(forKey: "filterState.showRedundantAccessControl")
 		}
+		if defaults.object(forKey: "filterState.showSuperfluousIgnoreCommand") != nil {
+			showSuperfluousIgnoreCommand = defaults.bool(forKey: "filterState.showSuperfluousIgnoreCommand")
+		}
 		if defaults.object(forKey: "filterState.showClass") != nil {
 			showClass = defaults.bool(forKey: "filterState.showClass")
 		}
