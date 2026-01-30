@@ -1230,6 +1230,11 @@ private struct TreeNodeView: View {
 						openFolderInFinder(path: folder.path)
 					}
 
+					let fileURL = URL(fileURLWithPath: folder.path)
+					Button("Reveal in Finder") {
+						NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+					}
+
 					Divider()
 
 					Button(PeripheryTreeView.removeAllUnusedCodeLabel) {

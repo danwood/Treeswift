@@ -305,6 +305,15 @@ struct DeclarationRowView: View {
 				}
 				.keyboardShortcut("c", modifiers: .command)
 
+				if let relativePath = declaration.locationInfo.relativePath,
+				   let projectRoot = projectRootPath {
+					let fullPath = (projectRoot as NSString).appendingPathComponent(relativePath)
+					let fileURL = URL(fileURLWithPath: fullPath)
+					Button("Reveal in Finder") {
+						NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+					}
+				}
+
 				Divider()
 
 				OrganizeViewIntoFolderAction(
