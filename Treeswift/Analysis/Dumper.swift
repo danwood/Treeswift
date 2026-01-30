@@ -998,7 +998,11 @@ final class Dumper: Sendable {
 				isView: conformsToView(type),
 				isSameFileAsChildren: nil,
 				displayName: name,
-				conformances: "",
+				containerPath: relativePath(
+					type.location.file.path.removingLastComponent().string,
+					to: projectRootPath
+				),
+				conformances: nil,
 				relationship: nil,
 				locationInfo: locationInfo,
 				referencerInfo: referencerNames.isEmpty ? nil : referencerNames,
@@ -1065,15 +1069,11 @@ final class Dumper: Sendable {
 		}
 
 		let name = customDisplayName ?? (declaration.name ?? "")
-		var conforms: String = Array(Set(declaration.immediateInheritedTypeReferences.compactMap(\.name))).sorted()
+		let conforms: String = Array(Set(declaration.immediateInheritedTypeReferences.compactMap(\.name))).sorted()
 			.joined(separator: ", ")
 
 		let typeIcon = getTypeIcon(for: declaration)
 		let folderIndicator: TreeIcon? = isViewInOwnFolder(declaration) ? .systemImage("folder") : nil
-
-		if conformsToView(declaration) {
-			conforms = ""
-		}
 
 		let relationshipType: RelationshipType? = if conformsToView(declaration) && relationToParent == .subview ||
 			relationToParent?.rawValue == nil {
@@ -1154,7 +1154,11 @@ final class Dumper: Sendable {
 			isView: conformsToView(declaration),
 			isSameFileAsChildren: childrenSameAsParent,
 			displayName: name,
-			conformances: conforms.isEmpty ? "" : ": \(conforms)",
+			containerPath: relativePath(
+				declaration.location.file.path.removingLastComponent().string,
+				to: projectRootPath
+			),
+			conformances: !conforms.isEmpty ? conforms : nil,
 			relationship: relationshipType,
 			locationInfo: locationInfo,
 			referencerInfo: nil,
@@ -1183,7 +1187,7 @@ final class Dumper: Sendable {
 		childrenLineCount: Int,
 		projectRootPath: String?
 	) -> LocationInfo {
-		let lineSpan = (declaration.location.endLine ?? 0) - declaration.location.line
+		// let lineSpan = (declaration.location.endLine ?? 0) - declaration.location.line
 		let fileName = declaration.location.file.path.lastComponent?.description
 		let line = declaration.location.line
 		let endLine = declaration.location.endLine
@@ -1197,37 +1201,39 @@ final class Dumper: Sendable {
 		}
 
 		/* Priority 1: Size warnings in same file (most actionable) */
-		if relationToParent != nil, relationToParent != .embed,
-		   declaration.location.file == parentSourceFile {
-			if lineSpan + childrenLineCount >= 200 {
-				return LocationInfo(
-					type: .tooBigForSameFile,
-					icon: .emoji("🆘"),
-					fileName: fileName,
-					relativePath: relativePath,
-					line: line,
-					endLine: endLine,
-					warningText: "\(lineSpan) lines + \(childrenLineCount) children's lines"
-				)
-			} else if lineSpan > 200 {
-				return LocationInfo(
-					type: .tooBigForSameFile,
-					icon: .emoji("🆘"),
-					fileName: fileName,
-					relativePath: relativePath,
-					line: line,
-					endLine: endLine,
-					warningText: "\(lineSpan) lines"
-				)
-			}
-		}
+		/*
+		 if relationToParent != nil, relationToParent != .embed,
+		    declaration.location.file == parentSourceFile {
+		 	if lineSpan + childrenLineCount >= 200 {
+		 		return LocationInfo(
+		 			type: .tooBigForSameFile,
+		 			icon: .emoji("🆘"),
+		 			fileName: fileName,
+		 			relativePath: relativePath,
+		 			line: line,
+		 			endLine: endLine,
+		 			warningText: "\(lineSpan) lines + \(childrenLineCount) children's lines"
+		 		)
+		 	} else if lineSpan > 200 {
+		 		return LocationInfo(
+		 			type: .tooBigForSameFile,
+		 			icon: .emoji("🆘"),
+		 			fileName: fileName,
+		 			relativePath: relativePath,
+		 			line: line,
+		 			endLine: endLine,
+		 			warningText: "\(lineSpan) lines"
+		 		)
+		 	}
+		 }
+		  */
 
 		/* Priority 2: Swift language nesting */
 		if declaration.parent != nil {
 			return LocationInfo(
 				type: .swiftNested,
 				icon: .emoji("📎"),
-				fileName: nil,
+				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
@@ -1240,8 +1246,8 @@ final class Dumper: Sendable {
 		   declaration.location.file == parentSourceFile {
 			return LocationInfo(
 				type: .sameFile,
-				icon: .emoji("🔼"),
-				fileName: nil,
+				icon: .emoji("↖️"),
+				fileName: fileName,
 				relativePath: relativePath,
 				line: line,
 				endLine: endLine,
@@ -1250,50 +1256,61 @@ final class Dumper: Sendable {
 		}
 
 		/* Priority 4+: Separate file logic */
-		let inSameFile: Bool = declaration.name == declaration.location.file.path.lastComponent
-			.map { ($0.description as NSString).deletingPathExtension }
+		/* Maybe try this later...
+		 let inSameFile: Bool = declaration.name == declaration.location.file.path.lastComponent
+		 	.map { ($0.description as NSString).deletingPathExtension }
 
-		if lineSpan > 100, inSameFile {
-			return LocationInfo(
-				type: .separateFileGood,
-				icon: nil,
-				fileName: fileName,
-				relativePath: relativePath,
-				line: line,
-				endLine: endLine,
-				warningText: nil
-			)
-		} else if children(of: declaration).count >= 1, inSameFile {
-			return LocationInfo(
-				type: .separateFileGood,
-				icon: nil,
-				fileName: fileName,
-				relativePath: relativePath,
-				line: line,
-				endLine: endLine,
-				warningText: nil
-			)
-		} else if inSameFile {
-			return LocationInfo(
-				type: .separateFileTooSmall,
-				icon: .emoji("😒"),
-				fileName: fileName,
-				relativePath: relativePath,
-				line: line,
-				endLine: endLine,
-				warningText: "too small for separate file"
-			)
-		} else {
-			return LocationInfo(
-				type: .separateFileNameMismatch,
-				icon: .systemImage("notequal", Color.red),
-				fileName: fileName,
-				relativePath: relativePath,
-				line: line,
-				endLine: endLine,
-				warningText: nil
-			)
-		}
+		 if lineSpan > 100, inSameFile {
+		 	return LocationInfo(
+		 		type: .separateFileGood,
+		 		icon: nil,
+		 		fileName: fileName,
+		 		relativePath: relativePath,
+		 		line: line,
+		 		endLine: endLine,
+		 		warningText: nil
+		 	)
+		 } else if children(of: declaration).count >= 1, inSameFile {
+		 	return LocationInfo(
+		 		type: .separateFileGood,
+		 		icon: nil,
+		 		fileName: fileName,
+		 		relativePath: relativePath,
+		 		line: line,
+		 		endLine: endLine,
+		 		warningText: nil
+		 	)
+		 } else if inSameFile {
+		 	return LocationInfo(
+		 		type: .separateFileTooSmall,
+		 		icon: .emoji("😒"),
+		 		fileName: fileName,
+		 		relativePath: relativePath,
+		 		line: line,
+		 		endLine: endLine,
+		 		warningText: "too small for separate file"
+		 	)
+		 } else {
+		 	return LocationInfo(
+		 		type: .separateFileNameMismatch,
+		 		icon: .systemImage("notequal", Color.red),
+		 		fileName: fileName,
+		 		relativePath: relativePath,
+		 		line: line,
+		 		endLine: endLine,
+		 		warningText: nil
+		 	)
+		 }
+		  */
+		return LocationInfo(
+			type: .separateFileGood,
+			icon: nil,
+			fileName: fileName,
+			relativePath: relativePath,
+			line: line,
+			endLine: endLine,
+			warningText: nil
+		)
 	}
 
 	private nonisolated func children(of declaration: Declaration) -> [Declaration] {

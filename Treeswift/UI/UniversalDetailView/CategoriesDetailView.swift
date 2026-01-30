@@ -69,11 +69,11 @@ struct CategoriesDetailView: View {
 			}
 
 			// Conformances
-			if !declaration.conformances.isEmpty {
+			if let conformances = declaration.conformances {
 				VStack(alignment: .leading, spacing: 4) {
 					Text("Conformances")
 						.font(.headline)
-					Text(declaration.conformances)
+					Text(conformances)
 						.font(.body)
 						.foregroundStyle(.secondary)
 						.textSelection(.enabled)
@@ -131,11 +131,11 @@ struct CategoriesDetailView: View {
 						.foregroundStyle(.secondary)
 				}
 
-				if let warningText = declaration.locationInfo.warningText {
-					Text(warningText)
-						.font(.caption)
-						.foregroundStyle(.orange)
-				}
+				// if let warningText = declaration.locationInfo.warningText {
+				// 	Text(warningText)
+				// 		.font(.caption)
+				// 		.foregroundStyle(.orange)
+				// }
 			}
 
 			// Referencers

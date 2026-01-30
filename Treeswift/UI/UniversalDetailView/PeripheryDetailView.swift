@@ -41,7 +41,7 @@ struct PeripheryDetailView: View {
 				.fontWeight(.semibold)
 
 			HStack(spacing: 6) {
-				Text(relativePath(folder.path, relativeTo: projectRoot))
+				Text(relativePath(folder.path, to: projectRoot))
 					.font(.caption)
 					.foregroundStyle(.secondary)
 					.textSelection(.enabled)
@@ -83,7 +83,7 @@ struct PeripheryDetailView: View {
 				.textSelection(.enabled)
 
 			HStack(spacing: 6) {
-				Text(relativePath(file.path, relativeTo: projectRoot))
+				Text(relativePath(file.path, to: projectRoot))
 					.font(.caption)
 					.foregroundStyle(.secondary)
 					.textSelection(.enabled)

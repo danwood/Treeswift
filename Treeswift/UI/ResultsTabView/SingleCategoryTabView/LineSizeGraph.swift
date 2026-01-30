@@ -43,6 +43,7 @@ struct LineSizeGraph: View {
 				}
 			}
 		}
+		.frame(height: 10)
 	}
 }
 

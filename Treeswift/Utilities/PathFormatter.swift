@@ -12,7 +12,7 @@ import Foundation
 ///   - fullPath: The absolute file path to format
 ///   - projectRootPath: The project root directory (containing folder of the project file)
 /// - Returns: Path relative to project root, or tilde-abbreviated path if not within project
-func relativePath(_ fullPath: String, relativeTo projectRootPath: String?) -> String {
+nonisolated func relativePath(_ fullPath: String, to projectRootPath: String?) -> String {
 	if let projectRoot = projectRootPath, fullPath.hasPrefix(projectRoot) {
 		var relative = String(fullPath.dropFirst(projectRoot.count))
 		// Remove leading slash if present

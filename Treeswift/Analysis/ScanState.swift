@@ -248,6 +248,7 @@ final class ScanState {
 				}
 				backgroundTasks.removeAll()
 
+				print("\(error)")
 				errorMessage = error.localizedDescription
 				isScanning = false
 				scanTask = nil

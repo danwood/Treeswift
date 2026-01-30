@@ -37,6 +37,11 @@ struct ResultsTabView: View {
 
 	@Binding var filterState: FilterState
 	@AppStorage("showOnlyViews") private var showOnlyViews: Bool = false
+	@AppStorage("showFileInfo") private var showFileInfo: Bool = false
+	@AppStorage("showCodeSize") private var showCodeSize: Bool = false
+	@AppStorage("showPath") private var showPath: Bool = false
+	@AppStorage("showFileName") private var showFileName: Bool = false
+	@AppStorage("showConformance") private var showConformance: Bool = false
 	@AppStorage("selectedResultsTab") private var selectedTab: ResultsTab = .periphery
 	@Binding var peripheryTabSelectedID: String?
 	@Binding var filesTabSelectedID: String?
@@ -89,6 +94,11 @@ struct ResultsTabView: View {
 					SingleCategoryTabView(
 						section: treeSection,
 						showOnlyViews: $showOnlyViews,
+						showFileName: $showFileName,
+						showFileInfo: $showFileInfo,
+						showCodeSize: $showCodeSize,
+						showPath: $showPath,
+						showConformance: $showConformance,
 						selectedID: $treeTabSelectedID,
 						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
 						showToggle: true
@@ -111,9 +121,14 @@ struct ResultsTabView: View {
 					SingleCategoryTabView(
 						section: viewExtensionsSection,
 						showOnlyViews: $showOnlyViews,
+						showFileName: $showFileName,
+						showFileInfo: $showFileInfo,
+						showCodeSize: $showCodeSize,
+						showPath: $showPath,
+						showConformance: $showConformance,
 						selectedID: $viewExtensionsTabSelectedID,
 						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-						showToggle: false
+						showToggle: true
 					)
 					.padding()
 				}
@@ -133,9 +148,14 @@ struct ResultsTabView: View {
 					SingleCategoryTabView(
 						section: sharedSection,
 						showOnlyViews: $showOnlyViews,
+						showFileName: $showFileName,
+						showFileInfo: $showFileInfo,
+						showCodeSize: $showCodeSize,
+						showPath: $showPath,
+						showConformance: $showConformance,
 						selectedID: $sharedTabSelectedID,
 						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-						showToggle: false
+						showToggle: true
 					)
 					.padding()
 				}

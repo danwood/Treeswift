@@ -57,8 +57,8 @@ enum TreeCopyFormatter {
 			var text = ""
 			// text += decl.typeIcon + " "
 			text += decl.displayName
-			if !decl.conformances.isEmpty {
-				text += decl.conformances
+			if let conformances = decl.conformances {
+				text += ": \(conformances)"
 			}
 			// if let relationship = decl.relationship {
 			//	text += " {\(relationship)}"

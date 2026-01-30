@@ -40,3 +40,5 @@ extension EnvironmentValues {
 		set { self[TreeLayoutSettingsKey.self] = newValue }
 	}
 }
+
+// FIXME: use modern syntax

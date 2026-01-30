@@ -113,7 +113,8 @@ struct DeclarationNode: Identifiable, Hashable, Sendable {
 	let isView: Bool
 	let isSameFileAsChildren: Bool? // TODO: make non-optional?
 	let displayName: String
-	let conformances: String
+	let containerPath: String
+	let conformances: String?
 	let relationship: RelationshipType?
 	let locationInfo: LocationInfo
 	let referencerInfo: [String]?
@@ -188,9 +189,10 @@ struct LocationInfo: Hashable, Sendable {
 			parts.append("\(fileName)")
 		}
 
-		if let warningText {
-			parts.append(warningText)
-		}
+		// MAYBE SHOW WARNING LATER?
+		// if let warningText {
+		// 	parts.append(warningText)
+		// }
 
 		return parts.joined(separator: " ")
 	}

@@ -8,6 +8,7 @@
 import Foundation
 import SourceGraph
 
+// FIXME: Make these extension of Declaration
 enum DeclarationIconHelper {
 	nonisolated static func typeIcon(for declaration: Declaration) -> TreeIcon {
 		if isMainApp(declaration) {

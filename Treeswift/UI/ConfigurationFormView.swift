@@ -172,7 +172,9 @@ struct ConfigurationFormView: View {
 
 	private var buildArgumentsBinding: Binding<String> {
 		Binding(
-			get: { configuration.buildArguments.joined(separator: " ") },
+			get: {
+				configuration.buildArguments.joined(separator: " ")
+			},
 			set: { newValue in
 				configuration.buildArguments = newValue
 					.split(separator: " ")

@@ -154,6 +154,11 @@ struct DeclarationRowView: View {
 	@Binding var selectedID: String?
 	var indentLevel: Int
 	var projectRootPath: String?
+	@Environment(\.showCodeSize) private var showCodeSize
+	@Environment(\.showFileInfo) private var showFileInfo
+	@Environment(\.showFileName) private var showFileName
+	@Environment(\.showConformance) private var showConformance
+	@Environment(\.showPath) private var showPath
 
 	/**
 	 Checks if the filename matches the symbol name
@@ -179,8 +184,7 @@ struct DeclarationRowView: View {
 	}
 
 	var body: some View {
-		let matchesFileName = fileNameMatchesSymbol
-		let locationText = matchesFileName ? locationInfoWithoutFileName : declaration.locationInfo.displayText
+		let cachedFileNameMatchesSymbol = fileNameMatchesSymbol
 
 		return VStack(alignment: .leading, spacing: 0) {
 			DisclosureGroup(
@@ -197,7 +201,7 @@ struct DeclarationRowView: View {
 					.id(child.id)
 				}
 			} label: {
-				HStack(alignment: .top, spacing: 0) {
+				HStack(alignment: .firstTextBaseline, spacing: 4) {
 					ChevronOrPlaceholder(
 						hasChildren: !declaration.children.isEmpty,
 						expandedIDs: $expandedIDs,
@@ -205,44 +209,63 @@ struct DeclarationRowView: View {
 						toggleWithDescendants: { toggleWithDescendants(for: .declaration(declaration)) }
 					)
 
-					HStack(alignment: .top, spacing: 4) {
-						HStack(spacing: 2) {
-							if let folderIndicator = declaration.folderIndicator {
-								folderIndicator.view(size: 14)
-							}
-							declaration.typeIcon.view(size: 14)
-							if matchesFileName {
-								Text(declaration.displayName)
-									.font(.body)
-									+ Text(".swift")
-									.font(.system(.body, design: .monospaced))
-									.foregroundStyle(.secondary)
-									+ Text(declaration.conformances)
-									.font(.body)
-
-							} else {
-								Text("\(declaration.displayName)\(declaration.conformances)")
-									.font(.body)
-							}
-							if declaration.isSameFileAsChildren == true {
-								TreeIcon.systemImage("document.fill", Color.purple).view(size: 16)
-							}
-						}
-
-						if let icon = declaration.locationInfo.icon {
-							icon.view(size: 14)
-						}
-
-						// if let relationship = declaration.relationship, relationship != RelationshipType.constructs {
-						// 	Text("{\(relationship.rawValue)}")
-						// 		.font(.system(.body, design: .monospaced))
-						// 		.foregroundStyle(.secondary)
-						// }
-
-						Text(locationText)
+					if let folderIndicator = declaration.folderIndicator {
+						folderIndicator.view(size: 14)
+					}
+					declaration.typeIcon.view(size: 14)
+					if showFileName, cachedFileNameMatchesSymbol {
+						Text(declaration.displayName)
+							.font(.body)
+							+ Text(".swift")
 							.font(.system(.body, design: .monospaced))
 							.foregroundStyle(.secondary)
+
+					} else {
+						Text(declaration.displayName)
+					}
+
+					if showConformance, let conformances = declaration.conformances {
+						Text(": \(conformances)")
+					}
+
+					// not quite what I want, leave out for now
+					// if showFileInfo {
+					// 	if declaration.isSameFileAsChildren == true {
+					// 		TreeIcon.systemImage("document.fill", Color.purple).view(size: 14)
+					// 	}
+					// }
+
+					// if let relationship = declaration.relationship, relationship != RelationshipType.constructs {
+					// 	Text("{\(relationship.rawValue)}")
+					// 		.font(.system(.body, design: .monospaced))
+					// 		.foregroundStyle(.secondary)
+					// }
+
+					if showFileName,
+					   !cachedFileNameMatchesSymbol, !declaration.locationInfo.displayText.isEmpty,
+					   !(declaration.locationInfo.type == .swiftNested || declaration.locationInfo.type == .sameFile) {
+						Text(declaration.locationInfo.displayText)
+							.font(.system(.body, design: .monospaced))
+							.foregroundStyle(.secondary)
+							.foregroundStyle(.purple)
+					}
+					if showFileInfo {
+						if let icon = declaration.locationInfo.icon {
+							icon.view(size: 14)
+								.help(declaration.locationInfo.fileName ?? "")
+						}
+					}
+
+					if showPath {
 						Spacer()
+						Text(declaration.containerPath)
+							.font(.caption2)
+					}
+
+					if showCodeSize {
+						if !showPath {
+							Spacer() // Only spacer if we didn't already use it for path
+						}
 
 						LineSizeGraph(
 							line: declaration.locationInfo.line,

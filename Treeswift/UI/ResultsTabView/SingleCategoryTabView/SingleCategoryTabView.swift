@@ -8,7 +8,6 @@
 //  This view generates benign AttributeGraph cycle warnings during initial render when
 //  multiple instances (7 category tabs) update simultaneously. The warnings appear after
 //  scan completion when results are first displayed. Root causes:
-//  - Multiple instances share the @AppStorage("showOnlyViews") binding via parent view
 //  - FocusClaimingView (NSViewRepresentable) updates trigger cascading view updates
 //  - SwiftUI's dependency tracker conservatively flags this as a potential cycle
 //  These warnings don't cause functional issues, performance problems, or UI glitches.
@@ -17,9 +16,23 @@
 
 import SwiftUI
 
+extension EnvironmentValues {
+	@Entry var showOnlyViews: Bool = false
+	@Entry var showFileName: Bool = false
+	@Entry var showFileInfo: Bool = false
+	@Entry var showCodeSize: Bool = false
+	@Entry var showConformance: Bool = false
+	@Entry var showPath: Bool = false
+}
+
 struct SingleCategoryTabView: View {
 	let section: CategoriesNode?
 	@Binding var showOnlyViews: Bool
+	@Binding var showFileName: Bool
+	@Binding var showFileInfo: Bool
+	@Binding var showCodeSize: Bool
+	@Binding var showPath: Bool
+	@Binding var showConformance: Bool
 	@State private var expandedIDs: Set<String> = []
 	@Binding var selectedID: String?
 	@State private var hasAppearedOnce: Bool = false
@@ -54,18 +67,16 @@ struct SingleCategoryTabView: View {
 	}
 
 	var body: some View {
-		// Pre-evaluate computed properties once to minimize AttributeGraph dependency cycles
-		let children = filteredChildren
-		let visible = visibleItems
-		let copyText = copyableText
+		Group {
+			// Pre-evaluate computed properties once to minimize AttributeGraph dependency cycles
+			let children = filteredChildren
+			let visible = visibleItems
+			let copyText = copyableText
 
-		if section == nil {
-			return AnyView(
+			if section == nil {
 				ProgressView("Loading…")
 					.padding()
-			)
-		} else if let sectionNode {
-			return AnyView(
+			} else if let sectionNode {
 				VStack(alignment: .leading, spacing: 12) {
 					// Section title at top (not in disclosure group)
 					Text(sectionNode.title)
@@ -76,19 +87,58 @@ struct SingleCategoryTabView: View {
 
 					// Show toggle for tree tab only
 					if showToggle {
-						Toggle("Show only Views", isOn: Binding(
-							get: { showOnlyViews },
-							set: { newValue in
-								withAnimation(.easeInOut(duration: 0.3)) {
-									showOnlyViews = newValue
-								}
-							}
-						))
-						.toggleStyle(.switch)
-						.controlSize(.small)
-						.padding(.horizontal)
-					}
+						VStack {
+							HStack(spacing: 16) {
+								Toggle("Views Only", isOn: Binding(
+									get: { showOnlyViews },
+									set: { newValue in
+										withAnimation(.easeInOut(duration: 0.3)) {
+											showOnlyViews = newValue
+										}
+									}
+								))
 
+								Toggle("File Name", isOn: $showFileName)
+								Toggle("File Info", isOn: $showFileInfo)
+								Toggle("Conformance", isOn: $showConformance)
+								Toggle("Path", isOn: $showPath)
+								Toggle("Code Size", isOn: $showCodeSize)
+							}
+							.toggleStyle(.switch)
+							.controlSize(.small)
+
+							DisclosureGroup("Legend") {
+								HStack(alignment: .top, spacing: 20) {
+									VStack(alignment: .leading, spacing: 4) {
+										Text("🔷   Main App entry point (@main)")
+										Text("🖼️   SwiftUI View")
+										Text("🟤   AppKit class (inherits from NS* type)")
+										Text("🟦   Struct")
+										Text("🔵   Class")
+										Text("🚦   Enum")
+										Text("📜   Protocol")
+										Text("⚡️   Function")
+										Text("🫥   Property or Variable")
+										Text("🏷️   Type alias")
+										Text("🔮   Macro")
+										Text("⚖️   Precedence group")
+										Text("🧩   Extension")
+										Text("⬜️   Other declaration type")
+										Text("⚠️   No symbols found")
+									}
+									VStack(alignment: .leading, spacing: 4) {
+										Text("📎   Embedded in parent type")
+										Text("↖️   In same file as parent type")
+									}
+								}
+
+								.padding()
+								.background(.foreground.opacity(0.05))
+								.border(Color.secondary, width: 0.5)
+							}
+							.padding(.horizontal, 20)
+						}
+					}
 					// Display children
 					LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
 						ForEach(children, id: \.id) { child in
@@ -127,10 +177,17 @@ struct SingleCategoryTabView: View {
 						}
 					}
 				}
-			)
-		} else {
-			return AnyView(EmptyView())
+
+			} else {
+				EmptyView()
+			}
 		}
+		.environment(\.showCodeSize, showCodeSize)
+		.environment(\.showPath, showPath)
+		.environment(\.showFileInfo, showFileInfo)
+		.environment(\.showOnlyViews, showOnlyViews)
+		.environment(\.showFileName, showFileName)
+		.environment(\.showConformance, showConformance)
 	}
 
 	private var filteredChildren: [CategoriesNode] {
@@ -140,12 +197,12 @@ struct SingleCategoryTabView: View {
 			return sectionNode.children
 		}
 
-		// Apply filtering logic for Tree tab when "Show Only Views" is enabled
+		// Apply filtering logic for Tree tab when "Views Only" is enabled
 		return sectionNode.children.flatMap { filterNodeForViews($0) }
 	}
 
 	/**
-	 Filters nodes to show only Views when "Show Only Views" toggle is enabled
+	 Filters nodes to show only Views when "Views Only" toggle is enabled
 	 */
 	private func filterNodeForViews(_ node: CategoriesNode) -> [CategoriesNode] {
 		switch node {

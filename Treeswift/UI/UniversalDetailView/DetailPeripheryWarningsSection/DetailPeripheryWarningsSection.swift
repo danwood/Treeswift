@@ -905,6 +905,8 @@ private struct PeripheryWarningRow: View {
 					if case .redundantProtocol = scanResult.annotation { return true }
 					return false
 				}()
+
+				// FIXME: Use ChevronExpansionButton
 				// Disclosure button for full source preview (only if multi-line and not completed)
 				if !completedActions.contains(warningID),
 				   scanResult.annotation == .unused || isRedundantProtocol, hasFullRange,
