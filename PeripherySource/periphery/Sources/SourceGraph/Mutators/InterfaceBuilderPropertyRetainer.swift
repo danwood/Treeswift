@@ -101,7 +101,7 @@ final class InterfaceBuilderPropertyRetainer {
     /// - `func myMethod(for value: Any)` → `myMethodFor:` (preposition labels are just capitalized)
     /// - `func myMethod(_:secondParam:)` → `myMethod:secondParam:`
     /// - `func myMethod(firstParam:secondParam:)` → `myMethodWithFirstParam:secondParam:`
-    static func swiftNameToSelector(_ swiftName: String) -> String {
+    static private func swiftNameToSelector(_ swiftName: String) -> String {
         guard let parenStart = swiftName.firstIndex(of: "("),
               let parenEnd = swiftName.lastIndex(of: ")")
         else {
