@@ -172,16 +172,6 @@ struct DeclarationRowView: View {
 	/**
 	 Returns location info display text without the filename and icon portions
 	 */
-	private var locationInfoWithoutFileName: String {
-		var parts: [String] = []
-
-		// Add warning text if present
-		if let warningText = declaration.locationInfo.warningText {
-			parts.append(warningText)
-		}
-
-		return parts.joined(separator: " ")
-	}
 
 	var body: some View {
 		let cachedFileNameMatchesSymbol = fileNameMatchesSymbol

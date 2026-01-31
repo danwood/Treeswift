@@ -1312,10 +1312,6 @@ final class Dumper: Sendable {
 			warningText: nil
 		)
 	}
-
-	private nonisolated func children(of declaration: Declaration) -> [Declaration] {
-		Array(declaration.declarations)
-	}
 }
 
 private extension Declaration {
