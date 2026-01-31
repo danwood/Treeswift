@@ -129,6 +129,7 @@ struct SingleCategoryTabView: View {
 									VStack(alignment: .leading, spacing: 4) {
 										Text("📎   Embedded in parent type")
 										Text("↖️   In same file as parent type")
+										Text("\(Image(systemName: "folder"))   Folderprivate folder")
 									}
 								}
 
