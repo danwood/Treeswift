@@ -568,7 +568,7 @@ private struct PeripheryWarningRow: View {
 		switch scanResult.annotation {
 		case .redundantPublicAccessibility:
 			fix = .removePublic
-		case let .redundantInternalAccessibility(_, suggestedAccessibility):
+		case let .redundantInternalAccessibility(suggestedAccessibility):
 			// Trust Periphery metadata to determine which keyword to insert
 			if let suggested = suggestedAccessibility {
 				switch suggested {
@@ -719,7 +719,7 @@ private struct PeripheryWarningRow: View {
 		let label = switch scanResult.annotation {
 		case .unused: "Delete declaration"
 		case .redundantPublicAccessibility: "Remove public keyword"
-		case let .redundantInternalAccessibility(_, suggestedAccessibility):
+		case let .redundantInternalAccessibility(suggestedAccessibility):
 			"Make \(suggestedAccessibility?.rawValue, default: "fileprivate/private")"
 		case .redundantFilePrivateAccessibility: "Make private"
 		case .redundantAccessibility: "Remove accessibility modifier"
@@ -776,7 +776,7 @@ private struct PeripheryWarningRow: View {
 				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
 			} else if case .redundantPublicAccessibility = scanResult.annotation {
 				"Remove public keyword"
-			} else if case let .redundantInternalAccessibility(_, suggestedAccessibility) = scanResult.annotation {
+			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
 				"Replace access with \(suggestedAccessibility, default: "fileprivate/private")"
 			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
 				"Replace access with private"

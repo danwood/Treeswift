@@ -90,7 +90,7 @@ struct ScanResultHelper {
 				suffix = " is declared public, but not used outside of this module"
 			case .superfluousIgnoreCommand:
 				suffix = " has a superfluous periphery ignore command"
-			case let .redundantInternalAccessibility(_, suggestedAccessibility):
+			case let .redundantInternalAccessibility(suggestedAccessibility):
 				let accessibilityText = suggestedAccessibility?.rawValue ?? "private/fileprivate"
 				suffix = " not used outside of file; can be \(accessibilityText)"
 			case .redundantFilePrivateAccessibility:

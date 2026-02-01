@@ -897,7 +897,7 @@ struct CodeModificationHelper {
 				lines[lineIndex] = removeAccessKeyword("public", from: lines[lineIndex])
 				removedWarningIDs.append(warningID)
 
-			} else if case let .redundantInternalAccessibility(_, suggestedAccessibility) = scanResult.annotation {
+			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
 				// Internal is the default, so keyword may or may not be present
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }

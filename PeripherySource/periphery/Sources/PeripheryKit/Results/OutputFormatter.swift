@@ -81,7 +81,7 @@ extension OutputFormatter {
                 // Check if there's a setter-specific modifier like "private(set)"
                 let setterModifier = result.declaration.modifiers.first { $0.contains("(set)") } ?? "internal"
                 description += "Redundant \(setterModifier) accessibility for \(kindDisplayName) '\(name)' (not used outside of file; can be \(accessibilityText))"
-            case let .redundantFilePrivateAccessibility(_, containingTypeName):
+            case let .redundantFilePrivateAccessibility(containingTypeName):
                 let context = containingTypeName.map { "only used within \($0)" } ?? "not used outside of file"
                 // Check if there's a setter-specific modifier like "private(set)"
                 let setterModifier = result.declaration.modifiers.first { $0.contains("(set)") } ?? "fileprivate"
