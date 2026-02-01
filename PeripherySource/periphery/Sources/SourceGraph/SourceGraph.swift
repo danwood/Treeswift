@@ -90,23 +90,12 @@ public final class SourceGraph {
         _ = redundantPublicAccessibility.removeValue(forKey: declaration)
     }
 
-    func markRedundantInternalAccessibility(_ declaration: Declaration, file: SourceFile, suggestedAccessibility: Accessibility?) {
-        if let existing = redundantInternalAccessibility[declaration] {
-            var files = existing.files
-            files.insert(file)
-            redundantInternalAccessibility[declaration] = (files: files, suggestedAccessibility: existing.suggestedAccessibility)
-        } else {
-            redundantInternalAccessibility[declaration] = (files: [file], suggestedAccessibility: suggestedAccessibility)
-        }
+    func markRedundantInternalAccessibility(_ declaration: Declaration, suggestedAccessibility: Accessibility?) {
+        redundantInternalAccessibility[declaration] = suggestedAccessibility
     }
 
-    func markRedundantFilePrivateAccessibility(_ declaration: Declaration, file: SourceFile, containingTypeName: String?) {
-        if var existing = redundantFilePrivateAccessibility[declaration] {
-            existing.files.insert(file)
-            redundantFilePrivateAccessibility[declaration] = existing
-        } else {
-            redundantFilePrivateAccessibility[declaration] = (files: [file], containingTypeName: containingTypeName)
-        }
+    func markRedundantFilePrivateAccessibility(_ declaration: Declaration, containingTypeName: String?) {
+        redundantFilePrivateAccessibility[declaration] = containingTypeName
     }
 
     func markRedundantAccessibility(_ declaration: Declaration, file: SourceFile) {
