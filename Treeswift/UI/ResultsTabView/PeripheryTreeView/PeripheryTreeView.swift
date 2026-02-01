@@ -314,13 +314,20 @@ struct PeripheryTreeView: View {
 				capturedPath: capturedPath,
 				capturedFileID: capturedFileID,
 				wasSelected: wasSelected,
-				emptyFolderIDs: capturedEmptyFolders
+				emptyFolderIDs: capturedEmptyFolders,
+				hiddenFileIDs: $hiddenFileIDs,
+				removingFileIDs: $removingFileIDs,
+				selectedID: $selectedID,
+				undoManager: undoManager
 			)
 		}
 	}
 
 	/**
 	 Registers undo/redo for the ignore all warnings action.
+
+	 Captures Binding values instead of relying on implicit self capture,
+	 since self is a struct and would be captured by value (becoming stale).
 	 */
 	private func registerUndoRedo(
 		capturedOriginal: String,
@@ -328,11 +335,13 @@ struct PeripheryTreeView: View {
 		capturedPath: String,
 		capturedFileID: String,
 		wasSelected: Bool,
-		emptyFolderIDs: [String]
+		emptyFolderIDs: [String],
+		hiddenFileIDs: Binding<Set<String>>,
+		removingFileIDs: Binding<Set<String>>,
+		selectedID: Binding<String?>,
+		undoManager: UndoManager?
 	) {
-		// Register undo/redo using nested closure pattern
 		func performUndo() {
-			// Restore original file contents
 			do {
 				try capturedOriginal.write(toFile: capturedPath, atomically: true, encoding: .utf8)
 			} catch {
@@ -340,26 +349,20 @@ struct PeripheryTreeView: View {
 				return
 			}
 
-			// Invalidate cache
 			SourceFileReader.invalidateCache(for: capturedPath)
 
-			// Wrap @State mutations in MainActor
 			Task { @MainActor in
-				// Clear any animation state
-				removingFileIDs.remove(capturedFileID)
+				removingFileIDs.wrappedValue.remove(capturedFileID)
 
-				// Remove file and folders from hidden set
-				hiddenFileIDs.remove(capturedFileID)
+				hiddenFileIDs.wrappedValue.remove(capturedFileID)
 				for folderID in emptyFolderIDs {
-					hiddenFileIDs.remove(folderID)
+					hiddenFileIDs.wrappedValue.remove(folderID)
 				}
 
-				// Restore selection if it was selected
 				if wasSelected {
-					selectedID = capturedFileID
+					selectedID.wrappedValue = capturedFileID
 				}
 
-				// Register redo AFTER state mutations complete
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performRedo()
 				}
@@ -367,7 +370,6 @@ struct PeripheryTreeView: View {
 		}
 
 		func performRedo() {
-			// Write modified contents
 			do {
 				try capturedModified.write(toFile: capturedPath, atomically: true, encoding: .utf8)
 			} catch {
@@ -375,33 +377,26 @@ struct PeripheryTreeView: View {
 				return
 			}
 
-			// Invalidate cache
 			SourceFileReader.invalidateCache(for: capturedPath)
 
-			// Wrap @State mutations in MainActor
 			Task { @MainActor in
-				// Skip animation on redo - instant hide
-				removingFileIDs.remove(capturedFileID)
+				removingFileIDs.wrappedValue.remove(capturedFileID)
 
-				// Re-hide file and folders
-				hiddenFileIDs.insert(capturedFileID)
+				hiddenFileIDs.wrappedValue.insert(capturedFileID)
 				for folderID in emptyFolderIDs {
-					hiddenFileIDs.insert(folderID)
+					hiddenFileIDs.wrappedValue.insert(folderID)
 				}
 
-				// Clear selection if it was selected
 				if wasSelected {
-					selectedID = nil
+					selectedID.wrappedValue = nil
 				}
 
-				// Register undo AFTER state mutations complete
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performUndo()
 				}
 			}
 		}
 
-		// Register initial undo
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
@@ -617,7 +612,10 @@ struct PeripheryTreeView: View {
 				modifiedContents: removalResult.modifiedContents,
 				removedWarningIDs: removalResult.removedWarningIDs,
 				fileWasDeleted: fileWasDeleted,
-				fileID: file.id
+				fileID: file.id,
+				hiddenFileIDs: $hiddenFileIDs,
+				hiddenWarningIDs: $hiddenWarningIDs,
+				undoManager: undoManager
 			)
 
 			// Post notifications for each removed warning
@@ -644,6 +642,9 @@ struct PeripheryTreeView: View {
 
 	/**
 	 Registers undo/redo for the remove all unused code action.
+
+	 Captures Binding values instead of relying on implicit self capture,
+	 since self is a struct and would be captured by value (becoming stale).
 	 */
 	private func registerRemoveAllUndo(
 		filePath: String,
@@ -651,25 +652,24 @@ struct PeripheryTreeView: View {
 		modifiedContents: String,
 		removedWarningIDs: [String],
 		fileWasDeleted: Bool,
-		fileID: String
+		fileID: String,
+		hiddenFileIDs: Binding<Set<String>>,
+		hiddenWarningIDs: Binding<Set<String>>,
+		undoManager: UndoManager?
 	) {
-		// Define undo action
 		@MainActor
 		func performUndo() {
-			// Restore file (works for both deleted and modified files)
 			_ = FileDeletionHandler.restoreFile(filePath: filePath, contents: originalContents)
 
-			// If file was deleted, unhide it from tree
 			if fileWasDeleted {
-				hiddenFileIDs.remove(fileID)
+				hiddenFileIDs.wrappedValue.remove(fileID)
 			}
 
 			SourceFileReader.invalidateCache(for: filePath)
 
 			Task { @MainActor in
-				// Restore all warnings
 				for warningID in removedWarningIDs {
-					hiddenWarningIDs.remove(warningID)
+					hiddenWarningIDs.wrappedValue.remove(warningID)
 
 					NotificationCenter.default.post(
 						name: Notification.Name("PeripheryWarningRestored"),
@@ -677,7 +677,6 @@ struct PeripheryTreeView: View {
 					)
 				}
 
-				// Register redo
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performRedo()
 				}
@@ -685,15 +684,12 @@ struct PeripheryTreeView: View {
 			}
 		}
 
-		// Define redo action
 		@MainActor
 		func performRedo() {
-			// If file was deleted originally, delete it again
 			if fileWasDeleted {
 				_ = FileDeletionHandler.moveToTrash(filePath: filePath)
-				hiddenFileIDs.insert(fileID)
+				hiddenFileIDs.wrappedValue.insert(fileID)
 			} else {
-				// Otherwise just write modified contents
 				do {
 					try modifiedContents.write(toFile: filePath, atomically: true, encoding: .utf8)
 				} catch {
@@ -705,9 +701,8 @@ struct PeripheryTreeView: View {
 			SourceFileReader.invalidateCache(for: filePath)
 
 			Task { @MainActor in
-				// Hide all warnings again
 				for warningID in removedWarningIDs {
-					hiddenWarningIDs.insert(warningID)
+					hiddenWarningIDs.wrappedValue.insert(warningID)
 
 					NotificationCenter.default.post(
 						name: Notification.Name("PeripheryWarningCompleted"),
@@ -715,7 +710,6 @@ struct PeripheryTreeView: View {
 					)
 				}
 
-				// Register undo
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performUndo()
 				}
@@ -723,7 +717,6 @@ struct PeripheryTreeView: View {
 			}
 		}
 
-		// Register initial undo
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
@@ -771,17 +764,25 @@ struct PeripheryTreeView: View {
 			}
 
 			// Register undo/redo
-			registerIgnoreAllInFolderUndo(fileModifications: fileModifications)
+			registerIgnoreAllInFolderUndo(
+				fileModifications: fileModifications,
+				hiddenFileIDs: $hiddenFileIDs,
+				undoManager: undoManager
+			)
 		}
 	}
 
 	/**
 	 Registers undo/redo for ignoring all warnings in a folder.
+
+	 Captures Binding values instead of relying on implicit self capture,
+	 since self is a struct and would be captured by value (becoming stale).
 	 */
 	private func registerIgnoreAllInFolderUndo(
-		fileModifications: [(path: String, original: String, modified: String, fileID: String)]
+		fileModifications: [(path: String, original: String, modified: String, fileID: String)],
+		hiddenFileIDs: Binding<Set<String>>,
+		undoManager: UndoManager?
 	) {
-		// Define undo action
 		@MainActor
 		func performUndo() {
 			for modification in fileModifications {
@@ -795,7 +796,7 @@ struct PeripheryTreeView: View {
 				SourceFileReader.invalidateCache(for: modification.path)
 
 				Task { @MainActor in
-					hiddenFileIDs.remove(modification.fileID)
+					hiddenFileIDs.wrappedValue.remove(modification.fileID)
 				}
 			}
 
@@ -805,7 +806,6 @@ struct PeripheryTreeView: View {
 			undoManager?.setActionName("Ignore All Warnings")
 		}
 
-		// Define redo action
 		@MainActor
 		func performRedo() {
 			for modification in fileModifications {
@@ -819,7 +819,7 @@ struct PeripheryTreeView: View {
 				SourceFileReader.invalidateCache(for: modification.path)
 
 				Task { @MainActor in
-					hiddenFileIDs.insert(modification.fileID)
+					hiddenFileIDs.wrappedValue.insert(modification.fileID)
 				}
 			}
 
@@ -829,7 +829,6 @@ struct PeripheryTreeView: View {
 			undoManager?.setActionName("Ignore All Warnings")
 		}
 
-		// Register initial undo
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
@@ -959,7 +958,12 @@ struct PeripheryTreeView: View {
 
 			// Register undo/redo
 			if !fileModifications.isEmpty {
-				registerRemoveAllInFolderUndo(fileModifications: fileModifications)
+				registerRemoveAllInFolderUndo(
+					fileModifications: fileModifications,
+					hiddenFileIDs: $hiddenFileIDs,
+					hiddenWarningIDs: $hiddenWarningIDs,
+					undoManager: undoManager
+				)
 			}
 
 			// Show deletion summary if any files were processed
@@ -977,6 +981,9 @@ struct PeripheryTreeView: View {
 
 	/**
 	 Registers undo/redo for removing all unused code in a folder.
+
+	 Captures Binding values instead of relying on implicit self capture,
+	 since self is a struct and would be captured by value (becoming stale).
 	 */
 	private func registerRemoveAllInFolderUndo(
 		fileModifications: [(
@@ -986,26 +993,25 @@ struct PeripheryTreeView: View {
 			warningIDs: [String],
 			wasDeleted: Bool,
 			fileID: String
-		)]
+		)],
+		hiddenFileIDs: Binding<Set<String>>,
+		hiddenWarningIDs: Binding<Set<String>>,
+		undoManager: UndoManager?
 	) {
-		// Define undo action
 		@MainActor
 		func performUndo() {
 			for modification in fileModifications {
-				// Restore file (works for both deleted and modified files)
 				_ = FileDeletionHandler.restoreFile(filePath: modification.path, contents: modification.original)
 
-				// If file was deleted, unhide it from tree
 				if modification.wasDeleted {
-					hiddenFileIDs.remove(modification.fileID)
+					hiddenFileIDs.wrappedValue.remove(modification.fileID)
 				}
 
 				SourceFileReader.invalidateCache(for: modification.path)
 
 				Task { @MainActor in
-					// Restore all warnings
 					for warningID in modification.warningIDs {
-						hiddenWarningIDs.remove(warningID)
+						hiddenWarningIDs.wrappedValue.remove(warningID)
 
 						NotificationCenter.default.post(
 							name: Notification.Name("PeripheryWarningRestored"),
@@ -1021,16 +1027,13 @@ struct PeripheryTreeView: View {
 			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 		}
 
-		// Define redo action
 		@MainActor
 		func performRedo() {
 			for modification in fileModifications {
-				// If file was deleted originally, delete it again
 				if modification.wasDeleted {
 					_ = FileDeletionHandler.moveToTrash(filePath: modification.path)
-					hiddenFileIDs.insert(modification.fileID)
+					hiddenFileIDs.wrappedValue.insert(modification.fileID)
 				} else {
-					// Otherwise just write modified contents
 					do {
 						try modification.modified.write(toFile: modification.path, atomically: true, encoding: .utf8)
 					} catch {
@@ -1042,9 +1045,8 @@ struct PeripheryTreeView: View {
 				SourceFileReader.invalidateCache(for: modification.path)
 
 				Task { @MainActor in
-					// Hide all warnings again
 					for warningID in modification.warningIDs {
-						hiddenWarningIDs.insert(warningID)
+						hiddenWarningIDs.wrappedValue.insert(warningID)
 
 						NotificationCenter.default.post(
 							name: Notification.Name("PeripheryWarningCompleted"),
@@ -1060,7 +1062,6 @@ struct PeripheryTreeView: View {
 			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
 		}
 
-		// Register initial undo
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}

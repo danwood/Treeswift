@@ -73,7 +73,7 @@ struct ScanResultHelper {
 			result.append(prefix)
 
 			// Symbol name in quotes - make it bold
-			var boldName = AttributedString("'\(name)'")
+			var boldName = AttributedString("'\(name.truncated(to: 40))'")
 			boldName.font = .body.bold()
 			result.append(boldName)
 
