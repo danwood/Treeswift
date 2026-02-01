@@ -33,7 +33,7 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 		}
 	}
 
-	// Collects all descendant IDs recursively
+	/// Collects all descendant IDs recursively
 	func collectDescendantIDs() -> Set<String> {
 		var result = Set<String>()
 		collectDescendantIDs(into: &result)
@@ -145,7 +145,9 @@ struct SyntheticRootNode: Identifiable, Hashable, Sendable {
 }
 
 extension CategoriesNode: NavigableTreeNode {
-	var navigationID: String { id }
+	var navigationID: String {
+		id
+	}
 
 	var isExpandable: Bool {
 		switch self {
@@ -169,8 +171,11 @@ struct LocationInfo: Hashable, Sendable {
 		case swiftNested
 		case sameFile
 		case separateFileGood
+		// periphery:ignore
 		case separateFileTooSmall
+		// periphery:ignore
 		case separateFileNameMismatch
+		// periphery:ignore
 		case tooBigForSameFile
 	}
 
