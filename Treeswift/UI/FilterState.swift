@@ -10,8 +10,10 @@ import PeripheryKit
 import SourceGraph
 
 @Observable
+@MainActor
 final class FilterState {
 	private static let defaults = UserDefaults.standard
+	private var isLoadingFromDefaults = false
 
 	// Change counter - increments whenever any filter changes
 	var filterChangeCounter: Int = 0
@@ -19,6 +21,7 @@ final class FilterState {
 	// Top-level filter
 	var topLevelOnly: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(topLevelOnly, forKey: "filterState.topLevelOnly")
 			filterChangeCounter += 1
 		}
@@ -27,6 +30,7 @@ final class FilterState {
 	// Annotation category filters
 	var showUnused: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showUnused, forKey: "filterState.showUnused")
 			filterChangeCounter += 1
 		}
@@ -34,6 +38,7 @@ final class FilterState {
 
 	var showAssignOnly: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showAssignOnly, forKey: "filterState.showAssignOnly")
 			filterChangeCounter += 1
 		}
@@ -41,6 +46,7 @@ final class FilterState {
 
 	var showRedundantProtocol: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showRedundantProtocol, forKey: "filterState.showRedundantProtocol")
 			filterChangeCounter += 1
 		}
@@ -48,6 +54,7 @@ final class FilterState {
 
 	var showRedundantAccessControl: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showRedundantAccessControl, forKey: "filterState.showRedundantAccessControl")
 			filterChangeCounter += 1
 		}
@@ -55,6 +62,7 @@ final class FilterState {
 
 	var showSuperfluousIgnoreCommand: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showSuperfluousIgnoreCommand, forKey: "filterState.showSuperfluousIgnoreCommand")
 			filterChangeCounter += 1
 		}
@@ -63,6 +71,7 @@ final class FilterState {
 	// Swift type filters
 	var showClass: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showClass, forKey: "filterState.showClass")
 			filterChangeCounter += 1
 		}
@@ -70,6 +79,7 @@ final class FilterState {
 
 	var showEnum: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showEnum, forKey: "filterState.showEnum")
 			filterChangeCounter += 1
 		}
@@ -77,6 +87,7 @@ final class FilterState {
 
 	var showExtension: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showExtension, forKey: "filterState.showExtension")
 			filterChangeCounter += 1
 		}
@@ -84,6 +95,7 @@ final class FilterState {
 
 	var showFunction: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showFunction, forKey: "filterState.showFunction")
 			filterChangeCounter += 1
 		}
@@ -91,6 +103,7 @@ final class FilterState {
 
 	var showImport: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showImport, forKey: "filterState.showImport")
 			filterChangeCounter += 1
 		}
@@ -98,6 +111,7 @@ final class FilterState {
 
 	var showInitializer: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showInitializer, forKey: "filterState.showInitializer")
 			filterChangeCounter += 1
 		}
@@ -105,6 +119,7 @@ final class FilterState {
 
 	var showParameter: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showParameter, forKey: "filterState.showParameter")
 			filterChangeCounter += 1
 		}
@@ -112,6 +127,7 @@ final class FilterState {
 
 	var showProperty: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showProperty, forKey: "filterState.showProperty")
 			filterChangeCounter += 1
 		}
@@ -119,6 +135,7 @@ final class FilterState {
 
 	var showProtocol: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showProtocol, forKey: "filterState.showProtocol")
 			filterChangeCounter += 1
 		}
@@ -126,6 +143,7 @@ final class FilterState {
 
 	var showStruct: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showStruct, forKey: "filterState.showStruct")
 			filterChangeCounter += 1
 		}
@@ -133,6 +151,7 @@ final class FilterState {
 
 	var showTypealias: Bool = true {
 		didSet {
+			guard !isLoadingFromDefaults else { return }
 			Self.defaults.set(showTypealias, forKey: "filterState.showTypealias")
 			filterChangeCounter += 1
 		}
@@ -143,6 +162,9 @@ final class FilterState {
 	}
 
 	private func loadFromDefaults() {
+		isLoadingFromDefaults = true
+		defer { isLoadingFromDefaults = false }
+
 		let defaults = Self.defaults
 
 		// Only load if key exists (preserves default true values on first launch)
@@ -196,7 +218,7 @@ final class FilterState {
 		}
 	}
 
-	private let annotationFilterMap: [WarningType: WritableKeyPath<FilterState, Bool>] = [
+	private static let annotationFilterMap: [WarningType: WritableKeyPath<FilterState, Bool>] = [
 		WarningType.unused: \.showUnused,
 		WarningType.assignOnly: \.showAssignOnly,
 		WarningType.redundantProtocol: \.showRedundantProtocol,
@@ -204,7 +226,7 @@ final class FilterState {
 		WarningType.superfluousIgnoreCommand: \.showSuperfluousIgnoreCommand
 	]
 
-	private let typeFilterMap: [SwiftType: WritableKeyPath<FilterState, Bool>] = [
+	private static let typeFilterMap: [SwiftType: WritableKeyPath<FilterState, Bool>] = [
 		.class: \.showClass,
 		.enum: \.showEnum,
 		.extension: \.showExtension,
@@ -256,7 +278,7 @@ final class FilterState {
 
 		// Check annotation filter
 		let annotationString = scanResult.annotation.warningType
-		if let keyPath = annotationFilterMap[annotationString] {
+		if let keyPath = Self.annotationFilterMap[annotationString] {
 			if !self[keyPath: keyPath] {
 				return false
 			}
@@ -264,7 +286,7 @@ final class FilterState {
 
 		// Check SwiftType filter
 		let swiftType = SwiftType.from(declarationKind: declaration.kind)
-		if let keyPath = typeFilterMap[swiftType] {
+		if let keyPath = Self.typeFilterMap[swiftType] {
 			return self[keyPath: keyPath]
 		}
 

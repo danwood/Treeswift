@@ -49,7 +49,7 @@ struct SourceFileReader {
 		let lines = content.components(separatedBy: .newlines)
 
 		if cache.count >= maxCacheSize {
-			cache.removeValue(forKey: cache.keys.first!)
+			cache.removeAll()
 		}
 		cache[path] = lines
 

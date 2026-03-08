@@ -26,6 +26,10 @@ struct LineSizeGraph: View {
 		let foreground: Color = isOverflow ? .red : .accentColor
 		let background = Color.gray.opacity(0.2)
 
+		// GeometryReader is used here intentionally: the bar must fill available width
+		// and multiply it by a fraction (cappedFraction). No modern alternative
+		// (containerRelativeFrame, visualEffect, etc.) cleanly supports this fractional
+		// width calculation without GeometryReader.
 		GeometryReader { proxy in
 			ZStack(alignment: .trailing) {
 				ZStack(alignment: .leading) {
@@ -34,7 +38,7 @@ struct LineSizeGraph: View {
 						.frame(width: proxy.size.width * cappedFraction)
 				}
 				.frame(height: 6.0)
-				.clipShape(RoundedRectangle(cornerRadius: 3.0))
+				.clipShape(.rect(cornerRadius: 3.0))
 
 				if isOverflow {
 					Circle()

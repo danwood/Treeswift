@@ -20,9 +20,16 @@ struct SidebarView: View {
 			List(selection: $selectedConfigID) {
 				ForEach(configManager.configurations) { config in
 					NavigationLink(value: config.id) {
+						let missing = isProjectMissing(config)
 						HStack(spacing: 8) {
-							iconForConfig(config)
+							ConfigurationIconView(config: config)
 							Text(projectNameForConfig(config))
+								.foregroundStyle(missing ? .secondary : .primary)
+							Spacer()
+							if missing {
+								Image(systemName: "exclamationmark.triangle")
+									.foregroundStyle(.secondary)
+							}
 						}
 						.help(tooltipForConfig(config) ?? "")
 					}
@@ -32,11 +39,11 @@ struct SidebarView: View {
 			.background(
 				isSidebarDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear
 			)
-			.overlay(
+			.overlay {
 				Rectangle()
 					.stroke(isSidebarDropTargeted ? Color.accentColor : Color.clear, lineWidth: 2)
 					.padding(2)
-			)
+			}
 			.onDrop(of: [.fileURL], isTargeted: $isSidebarDropTargeted) { providers in
 				handleSidebarDrop(providers: providers)
 			}
@@ -46,6 +53,7 @@ struct SidebarView: View {
 				Button(action: addConfiguration) {
 					Image(systemName: "plus")
 						.frame(width: 20, height: 20)
+						.contentShape(.rect)
 				}
 				.buttonStyle(.borderless)
 				.padding(.leading, 8)
@@ -53,6 +61,7 @@ struct SidebarView: View {
 				Button(action: deleteSelectedConfiguration) {
 					Image(systemName: "minus")
 						.frame(width: 20, height: 20)
+						.contentShape(.rect)
 				}
 				.buttonStyle(.borderless)
 				.disabled(selectedConfigID == nil)
@@ -60,7 +69,7 @@ struct SidebarView: View {
 				Spacer()
 			}
 			.frame(height: 22)
-			.background(Color(nsColor: .controlBackgroundColor))
+			.background(.background)
 		}
 	}
 
@@ -103,6 +112,13 @@ struct SidebarView: View {
 	private func handleSidebarDrop(providers: [NSItemProvider]) -> Bool {
 		guard let provider = providers.first else { return false }
 
+		// NOTE: NSItemProvider.loadItem(forTypeIdentifier:) is the legacy callback API.
+		// The modern replacement would be NSItemProvider.loadTransferable(type:) or
+		// loadObject(ofClass:). However, neither cleanly handles the file URL → URL
+		// conversion with proper sandbox security-scoped bookmark support on macOS.
+		// The Task { @MainActor in } wrapping correctly bridges back to the main actor.
+		// This is a known antipattern (Task created from non-@MainActor context) but
+		// is safe here because we only mutate @MainActor state inside the Task block.
 		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
 			guard let data = item as? Data,
 			      let url = URL(dataRepresentation: data, relativeTo: nil) else {
@@ -110,52 +126,16 @@ struct SidebarView: View {
 			}
 
 			Task { @MainActor in
-				let projectURL: URL?
-				let projectType: ProjectType?
+				guard let resolved = ProjectURLResolver.resolve(from: url) else { return }
 
-				if url.isValidProjectFile {
-					// It's a project/workspace bundle or Package.swift - use directly
-					projectURL = url
-					projectType = url.detectedProjectType
-				} else if url.hasDirectoryPath {
-					// It's a folder - search for project files inside
-					let fm = FileManager.default
-
-					// Check for .xcodeproj or .xcworkspace first (priority)
-					if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
-					   let xcodeproj = contents.first(where: {
-					   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
-					   }) {
-						projectURL = xcodeproj
-						projectType = .xcode
-					}
-					// Check for Package.swift
-					else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
-						projectURL = url.appendingPathComponent("Package.swift")
-						projectType = .swiftPackage
-					} else {
-						// No valid project found
-						projectURL = nil
-						projectType = nil
-					}
-				} else {
-					// Not a valid project
-					projectURL = nil
-					projectType = nil
-				}
-
-				guard let projectURL, let projectType else {
-					return
-				}
-
-				let projectName = projectType == .xcode
-					? projectURL.deletingPathExtension().lastPathComponent
-					: projectURL.deletingLastPathComponent().lastPathComponent
+				let projectName = resolved.projectType == .xcode
+					? resolved.url.deletingPathExtension().lastPathComponent
+					: resolved.url.deletingLastPathComponent().lastPathComponent
 
 				let newConfig = PeripheryConfiguration(
 					name: projectName,
-					projectType: projectType,
-					project: projectURL.path,
+					projectType: resolved.projectType,
+					project: resolved.url.path,
 					schemes: []
 				)
 				configManager.addConfiguration(newConfig)
@@ -167,6 +147,11 @@ struct SidebarView: View {
 	}
 
 	// MARK: - Helpers
+
+	private func isProjectMissing(_ config: PeripheryConfiguration) -> Bool {
+		guard let projectPath = config.project else { return false }
+		return !FileManager.default.fileExists(atPath: projectPath)
+	}
 
 	private func projectNameForConfig(_ config: PeripheryConfiguration) -> String {
 		guard let projectPath = config.project else {
@@ -192,28 +177,6 @@ struct SidebarView: View {
 
 		// Use NSString method to abbreviate home directory with ~
 		return (projectPath as NSString).abbreviatingWithTildeInPath
-	}
-
-	@ViewBuilder
-	private func iconForConfig(_ config: PeripheryConfiguration) -> some View {
-		if let projectPath = config.project {
-			switch config.projectType {
-			case .xcode:
-				// Use NSWorkspace to get file icon for .xcodeproj
-				let image = NSWorkspace.shared.icon(forFile: projectPath)
-				Image(nsImage: image)
-					.resizable()
-					.frame(width: 16, height: 16)
-			case .swiftPackage:
-				// Use package emoji for SPM
-				Text("📦")
-					.font(.subheadline)
-			}
-		} else {
-			// No project set - show generic icon
-			Image(systemName: "folder")
-				.foregroundStyle(.secondary)
-		}
 	}
 }
 

@@ -16,12 +16,7 @@ struct SchemePopoverButton: View {
 	@State private var frozenButtonText: String = ""
 
 	var body: some View {
-		Button(action: {
-			if !isPopoverPresented {
-				frozenButtonText = buttonText
-			}
-			isPopoverPresented.toggle()
-		}) {
+		Button(action: togglePopover) {
 			HStack(spacing: 4) {
 				Text(displayedText)
 					.foregroundStyle(textColor)
@@ -33,10 +28,10 @@ struct SchemePopoverButton: View {
 			.padding(.vertical, 4)
 			.background(Color(nsColor: .controlBackgroundColor))
 			.clipShape(.rect(cornerRadius: 4))
-			.overlay(
+			.overlay {
 				RoundedRectangle(cornerRadius: 4)
 					.stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-			)
+			}
 		}
 		.buttonStyle(.plain)
 		.disabled(isLoading || availableSchemes.isEmpty)
@@ -46,6 +41,13 @@ struct SchemePopoverButton: View {
 				selectedSchemes: $selectedSchemes
 			)
 		}
+	}
+
+	private func togglePopover() {
+		if !isPopoverPresented {
+			frozenButtonText = buttonText
+		}
+		isPopoverPresented.toggle()
 	}
 
 	private var displayedText: String {
@@ -86,31 +88,35 @@ private struct SchemeSelectionPopover: View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: 6) {
 				ForEach(availableSchemes, id: \.self) { scheme in
-					Toggle(scheme, isOn: Binding(
-						get: { selectedSchemes.contains(scheme) },
-						set: { isSelected in
-							if isSelected {
-								if !selectedSchemes.contains(scheme) {
-									selectedSchemes.append(scheme)
+					Toggle(scheme, isOn: schemeBinding(for: scheme))
+						.simultaneousGesture(
+							TapGesture(count: 1)
+								.modifiers(.option)
+								.onEnded {
+									applyToAll(scheme: scheme)
 								}
-							} else {
-								selectedSchemes.removeAll { $0 == scheme }
-							}
-						}
-					))
-					.simultaneousGesture(
-						TapGesture(count: 1)
-							.modifiers(.option)
-							.onEnded {
-								applyToAll(scheme: scheme)
-							}
-					)
+						)
 				}
 			}
 		}
 		.frame(maxHeight: 300)
 		.padding(12)
 		.frame(minWidth: 250, maxWidth: 400)
+	}
+
+	func schemeBinding(for scheme: String) -> Binding<Bool> {
+		Binding(
+			get: { selectedSchemes.contains(scheme) },
+			set: { isSelected in
+				if isSelected {
+					if !selectedSchemes.contains(scheme) {
+						selectedSchemes.append(scheme)
+					}
+				} else {
+					selectedSchemes.removeAll { $0 == scheme }
+				}
+			}
+		)
 	}
 
 	func applyToAll(scheme: String) {

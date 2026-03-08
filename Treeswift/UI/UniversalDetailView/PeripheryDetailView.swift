@@ -17,7 +17,6 @@ struct PeripheryDetailView: View {
 	let sourceGraph: SourceGraph?
 	let projectPath: String?
 	@Binding var filterState: FilterState
-	@Environment(FileInspectorState.self) private var inspectorState
 
 	private var projectRoot: String? {
 		projectRootPath(from: projectPath)
@@ -27,18 +26,29 @@ struct PeripheryDetailView: View {
 		VStack(alignment: .leading, spacing: 16) {
 			switch node {
 			case let .folder(folder):
-				folderDetailView(folder)
+				FolderDetailView(folder: folder, projectRoot: projectRoot)
 			case let .file(file):
-				fileDetailView(file)
+				FileDetailView(
+					file: file,
+					scanResults: scanResults,
+					sourceGraph: sourceGraph,
+					projectRoot: projectRoot,
+					filterState: $filterState
+				)
 			}
 		}
 	}
+}
 
-	private func folderDetailView(_ folder: FolderNode) -> some View {
+private struct FolderDetailView: View {
+	let folder: FolderNode
+	let projectRoot: String?
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			Text(folder.name)
 				.font(.title2)
-				.fontWeight(.semibold)
+				.bold()
 
 			HStack(spacing: 6) {
 				Text(relativePath(folder.path, to: projectRoot))
@@ -46,14 +56,11 @@ struct PeripheryDetailView: View {
 					.foregroundStyle(.secondary)
 					.textSelection(.enabled)
 
-				Button(action: {
-					openFolderInFinder(path: folder.path)
-				}) {
-					Image(systemName: "arrow.right.circle.fill")
-						.foregroundStyle(.secondary)
-				}
-				.buttonStyle(.plain)
-				.help("Reveal in Finder")
+				Button("Reveal in Finder", systemImage: "arrow.right.circle.fill", action: revealInFinder)
+					.labelStyle(.iconOnly)
+					.foregroundStyle(.secondary)
+					.buttonStyle(.plain)
+					.help("Reveal in Finder")
 			}
 
 			Text("\(folder.children.count) items")
@@ -62,7 +69,27 @@ struct PeripheryDetailView: View {
 		}
 	}
 
-	private func fileDetailView(_ file: FileNode) -> some View {
+	func revealInFinder() {
+		openFolderInFinder(path: folder.path)
+	}
+}
+
+private struct FileDetailView: View {
+	let file: FileNode
+	let scanResults: [ScanResult]
+	let sourceGraph: SourceGraph?
+	let projectRoot: String?
+	@Binding var filterState: FilterState
+	@Environment(FileInspectorState.self) var inspectorState
+
+	var fileWarnings: [ScanResult] {
+		scanResults.filter { result in
+			let location = ScanResultHelper.location(from: result.declaration)
+			return location.file.path.string == file.path
+		}
+	}
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			// File change warning banner
 			if inspectorState.fileWasDeleted {
@@ -79,7 +106,7 @@ struct PeripheryDetailView: View {
 
 			Text(file.name)
 				.font(.title2)
-				.fontWeight(.semibold)
+				.bold()
 				.textSelection(.enabled)
 
 			HStack(spacing: 6) {
@@ -88,24 +115,13 @@ struct PeripheryDetailView: View {
 					.foregroundStyle(.secondary)
 					.textSelection(.enabled)
 
-				Button(action: {
-					openFileInEditor(path: file.path)
-				}) {
-					Image(systemName: "arrow.right.circle.fill")
-						.foregroundStyle(.secondary)
-				}
-				.buttonStyle(.plain)
-				.help("Open in Xcode")
+				Button("Open in Xcode", systemImage: "arrow.right.circle.fill", action: openInXcode)
+					.labelStyle(.iconOnly)
+					.foregroundStyle(.secondary)
+					.buttonStyle(.plain)
+					.help("Open in Xcode")
 			}
 
-			// Fetch warnings from scanResults array instead of node children
-			let fileWarnings = scanResults.filter { result in
-				let declaration = result.declaration
-				let location = ScanResultHelper.location(from: declaration)
-				return location.file.path.string == file.path
-			}
-
-			// Show filtered periphery warnings section
 			if !fileWarnings.isEmpty {
 				Divider()
 				DetailPeripheryWarningsSection(
@@ -117,5 +133,9 @@ struct PeripheryDetailView: View {
 				.padding(.vertical, 4)
 			}
 		}
+	}
+
+	func openInXcode() {
+		openFileInEditor(path: file.path)
 	}
 }

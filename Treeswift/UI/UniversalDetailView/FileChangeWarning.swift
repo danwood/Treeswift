@@ -32,10 +32,10 @@ struct FileChangeWarning: View {
 		.padding(12)
 		.frame(maxWidth: .infinity, alignment: .leading)
 		.background(Color.orange.opacity(0.1))
-		.clipShape(RoundedRectangle(cornerRadius: 8))
-		.overlay(
+		.clipShape(.rect(cornerRadius: 8))
+		.overlay {
 			RoundedRectangle(cornerRadius: 8)
 				.stroke(Color.orange.opacity(0.3), lineWidth: 1)
-		)
+		}
 	}
 }

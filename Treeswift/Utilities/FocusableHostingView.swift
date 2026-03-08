@@ -11,12 +11,23 @@ import SwiftUI
 /// Invisible NSView that can become first responder and handle keyboard events
 class FocusableNSView: NSView {
 	fileprivate var onArrowKey: ((KeyboardKey) -> Void)?
+	fileprivate var isInLayout = false
 
 	fileprivate enum KeyboardKey {
 		case up, down
 	}
 
 	override var acceptsFirstResponder: Bool { true }
+
+	override func layout() {
+		if isInLayout {
+			print("[FocusableNSView] ⚠️ REENTRANT layout detected")
+			Thread.callStackSymbols.prefix(15).forEach { print("  \($0)") }
+		}
+		isInLayout = true
+		super.layout()
+		isInLayout = false
+	}
 
 	override func mouseDown(with event: NSEvent) {
 		super.mouseDown(with: event)
@@ -59,14 +70,27 @@ struct FocusClaimingView: NSViewRepresentable {
 			claimFocusTrigger: claimFocusTrigger
 		)
 
-		// Existing: claim on selection change
-		if previousSelection != selectedID {
-			nsView.window?.makeFirstResponder(nsView)
+		let shouldClaimForSelection = previousSelection != selectedID
+		let shouldClaimForTrigger: Bool = if let trigger = claimFocusTrigger?.wrappedValue {
+			trigger != previousTrigger && trigger
+		} else {
+			false
 		}
 
-		// New: claim on trigger change to true
-		if let trigger = claimFocusTrigger?.wrappedValue, trigger != previousTrigger, trigger {
-			nsView.window?.makeFirstResponder(nsView)
+		// Log whether updateNSView is being called during a layout pass
+		if nsView.isInLayout {
+			print("[FocusClaimingView] ⚠️ updateNSView called during layout pass")
+			Thread.callStackSymbols.prefix(15).forEach { print("  \($0)") }
+		}
+
+		if shouldClaimForSelection || shouldClaimForTrigger {
+			let reason = shouldClaimForSelection ? "selection changed" : "trigger fired"
+			print("[FocusClaimingView] Scheduling makeFirstResponder (reason: \(reason))")
+			context.coordinator.perform(
+				#selector(Coordinator.claimFirstResponder(_:)),
+				with: nsView,
+				afterDelay: 0
+			)
 		}
 	}
 
@@ -74,7 +98,7 @@ struct FocusClaimingView: NSViewRepresentable {
 		Coordinator(selectedID: $selectedID, visibleItems: visibleItems, claimFocusTrigger: claimFocusTrigger)
 	}
 
-	class Coordinator {
+	class Coordinator: NSObject {
 		fileprivate var selectedID: Binding<String?>
 		private var visibleItems: [String]
 		fileprivate var claimFocusTrigger: Binding<Bool>?
@@ -93,6 +117,11 @@ struct FocusClaimingView: NSViewRepresentable {
 			self.selectedID = selectedID
 			self.visibleItems = visibleItems
 			self.claimFocusTrigger = claimFocusTrigger
+		}
+
+		@objc fileprivate func claimFirstResponder(_ nsView: FocusableNSView) {
+			print("[FocusClaimingView] Executing makeFirstResponder (isInLayout: \(nsView.isInLayout))")
+			nsView.window?.makeFirstResponder(nsView)
 		}
 
 		fileprivate func handleArrowKey(_ key: FocusableNSView.KeyboardKey) {

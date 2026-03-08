@@ -11,6 +11,11 @@ import SourceGraph
 import SwiftUI
 import SystemPackage
 
+private struct OperationError: Identifiable {
+	let id = UUID()
+	let message: String
+}
+
 struct PeripheryTreeView: View {
 	let rootNodes: [TreeNode]
 	let scanResults: [ScanResult]
@@ -29,6 +34,7 @@ struct PeripheryTreeView: View {
 	@State private var resultIndex = ScanResultIndex()
 	@State private var cachedVisibleItems: [String] = []
 	@State private var removalSummary: RemovalSummary?
+	@State private var operationError: OperationError?
 	@Environment(\.undoManager) private var undoManager
 
 	/**
@@ -48,7 +54,7 @@ struct PeripheryTreeView: View {
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
 
-		VStack(alignment: .leading, spacing: 0) {
+		LazyVStack(alignment: .leading, spacing: 0) {
 			ForEach(filteredNodesCache, id: \.id) { node in
 				TreeNodeView(
 					node: node,
@@ -89,14 +95,12 @@ struct PeripheryTreeView: View {
 			if expandedIDs.isEmpty {
 				expandToFileLevel(using: rootNodes)
 			}
-
-			if !hasAppearedOnce {
-				hasAppearedOnce = true
-				Task { @MainActor in
-					try? await Task.sleep(for: .milliseconds(50))
-					claimFocusTrigger.toggle()
-				}
-			}
+		}
+		.task {
+			guard !hasAppearedOnce else { return }
+			hasAppearedOnce = true
+			try? await Task.sleep(for: .milliseconds(50))
+			claimFocusTrigger.toggle()
 		}
 		.onChange(of: rootNodes) {
 			recomputeFilteredNodes()
@@ -121,17 +125,26 @@ struct PeripheryTreeView: View {
 		.onChange(of: expandedIDs) {
 			rebuildVisibleItemsCache()
 		}
-		.onReceive(NotificationCenter.default
-			.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
+		.task {
+			// NotificationCenter.notifications(named:) returns an AsyncSequence that is
+			// automatically cancelled when the task is cancelled (view disappears),
+			// making this superior to onReceive for structured concurrency participation.
+			for await notification in NotificationCenter.default.notifications(
+				named: Notification.Name("PeripheryWarningCompleted")
+			) {
 				if let warningID = notification.object as? String {
 					hiddenWarningIDs.insert(warningID)
 				}
+			}
 		}
-		.onReceive(NotificationCenter.default
-			.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
+		.task {
+			for await notification in NotificationCenter.default.notifications(
+				named: Notification.Name("PeripheryWarningRestored")
+			) {
 				if let warningID = notification.object as? String {
 					hiddenWarningIDs.remove(warningID)
 				}
+			}
 		}
 		.sheet(isPresented: $showProgressSheet) {
 			FileOperationProgressSheet(
@@ -148,6 +161,15 @@ struct PeripheryTreeView: View {
 				message: Text(buildSummaryMessage(summary)),
 				dismissButton: .default(Text("OK"))
 			)
+		}
+		// Binding(get:set:) is intentional — macOS SwiftUI does not expose the
+		// .alert(item:) overload that iOS has, so isPresented with a manual binding
+		// is the only way to drive an alert from an optional model value on macOS.
+		.alert(
+			"Operation Failed",
+			isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
+		) {
+			Text(operationError?.message ?? "")
 		}
 	}
 
@@ -171,8 +193,9 @@ struct PeripheryTreeView: View {
 	private func expandToFileLevel(using nodes: [TreeNode]) {
 		var idsToExpand = Set<String>()
 		collectFolderIDs(from: nodes, into: &idsToExpand)
-		// Defer state update to next run loop to avoid reentrant layout
-		Task { @MainActor in
+		var transaction = Transaction()
+		transaction.disablesAnimations = true
+		withTransaction(transaction) {
 			expandedIDs = idsToExpand
 		}
 	}
@@ -264,7 +287,7 @@ struct PeripheryTreeView: View {
 		do {
 			result = try PeripheryIgnoreCommentInserter.insertIgnoreAllComment(at: file.path)
 		} catch {
-			print("Failed to insert ignore comment: \(error)")
+			operationError = OperationError(message: "Failed to insert ignore comment: \(error.localizedDescription)")
 			return
 		}
 
@@ -279,7 +302,7 @@ struct PeripheryTreeView: View {
 		SourceFileReader.invalidateCache(for: file.path)
 
 		// Start removal animation
-		_ = withAnimation(.easeInOut(duration: 0.3)) {
+		withAnimation(.easeInOut(duration: 0.3)) {
 			removingFileIDs.insert(file.id)
 		}
 
@@ -588,7 +611,7 @@ struct PeripheryTreeView: View {
 
 			// Hide all removed warnings with animation
 			for warningID in removalResult.removedWarningIDs {
-				_ = withAnimation(.easeInOut(duration: 0.3)) {
+				withAnimation(.easeInOut(duration: 0.3)) {
 					hiddenWarningIDs.insert(warningID)
 				}
 			}
@@ -636,7 +659,7 @@ struct PeripheryTreeView: View {
 			)
 
 		case let .failure(error):
-			print("Failed to remove unused code: \(error.localizedDescription)")
+			operationError = OperationError(message: "Failed to remove unused code: \(error.localizedDescription)")
 		}
 	}
 
@@ -1188,22 +1211,25 @@ private struct TreeNodeView: View {
 					)
 				}
 			} label: {
-				HStack(spacing: 0) {
-					ChevronOrPlaceholder(
-						hasChildren: !folder.children.isEmpty,
-						expandedIDs: $expandedIDs,
-						id: folder.id,
-						toggleWithDescendants: { toggleWithDescendants(for: .folder(folder)) }
-					)
+				Button {
+					selectedID = folder.id
+				} label: {
+					HStack(spacing: 0) {
+						ChevronOrPlaceholder(
+							hasChildren: !folder.children.isEmpty,
+							expandedIDs: $expandedIDs,
+							id: folder.id,
+							toggleWithDescendants: { toggleWithDescendants(for: .folder(folder)) }
+						)
 
-					FolderRowView(folder: folder)
+						FolderRowView(folder: folder)
+					}
 				}
+				.buttonStyle(.plain)
 				.treeLabelPadding(indentLevel: indentLevel)
 				.frame(maxWidth: .infinity, alignment: .leading)
+				.contentShape(.rect)
 				.background(selectedID == folder.id ? Color.accentColor.opacity(0.2) : Color.clear)
-				.onTapGesture {
-					selectedID = folder.id
-				}
 				.simultaneousGesture(
 					TapGesture(count: 2)
 						.onEnded {
@@ -1250,30 +1276,32 @@ private struct TreeNodeView: View {
 			.disclosureGroupStyle(TreeDisclosureStyle())
 
 		case let .file(file):
-			HStack(spacing: 0) {
-				ChevronOrPlaceholder(
-					hasChildren: false,
-					expandedIDs: $expandedIDs,
-					id: file.id,
-					toggleWithDescendants: {}
-				)
+			Button {
+				selectedID = file.id
+			} label: {
+				HStack(spacing: 0) {
+					ChevronOrPlaceholder(
+						hasChildren: false,
+						expandedIDs: $expandedIDs,
+						id: file.id,
+						toggleWithDescendants: {}
+					)
 
-				FileRowView(
-					file: file,
-					filterState: filterState,
-					scanResults: scanResults,
-					removingFileIDs: removingFileIDs,
-					hiddenWarningIDs: hiddenWarningIDs,
-					resultIndex: resultIndex
-				)
+					FileRowView(
+						file: file,
+						filterState: filterState,
+						scanResults: scanResults,
+						removingFileIDs: removingFileIDs,
+						hiddenWarningIDs: hiddenWarningIDs,
+						resultIndex: resultIndex
+					)
+				}
 			}
+			.buttonStyle(.plain)
 			.treeLabelPadding(indentLevel: indentLevel)
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.background(selectedID == file.id ? Color.accentColor.opacity(0.2) : Color.clear)
 			.contentShape(.rect)
-			.onTapGesture {
-				selectedID = file.id
-			}
 			.simultaneousGesture(
 				TapGesture(count: 2)
 					.onEnded {
@@ -1315,12 +1343,10 @@ private struct TreeNodeView: View {
 	}
 
 	func toggleWithDescendants(for node: TreeNode) {
-		withAnimation(.easeInOut(duration: 0.2)) {
-			expandedIDs.toggleExpansion(
-				id: node.id,
-				withDescendants: true,
-				collectDescendants: { node.collectDescendantIDs() }
-			)
-		}
+		expandedIDs.toggleExpansion(
+			id: node.id,
+			withDescendants: true,
+			collectDescendants: { node.collectDescendantIDs() }
+		)
 	}
 }

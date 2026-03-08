@@ -12,7 +12,7 @@ private enum FileOperationError: LocalizedError, Sendable {
 	case sourceNotFound(String)
 	case targetAlreadyExists(String)
 	case invalidPath(String)
-	case operationFailed(String, Error)
+	case operationFailed(String, String)
 
 	var errorDescription: String? {
 		switch self {
@@ -22,8 +22,8 @@ private enum FileOperationError: LocalizedError, Sendable {
 			"Target already exists: \(path)"
 		case let .invalidPath(path):
 			"Invalid path: \(path)"
-		case let .operationFailed(operation, error):
-			"\(operation) failed: \(error.localizedDescription)"
+		case let .operationFailed(operation, errorDescription):
+			"\(operation) failed: \(errorDescription)"
 		}
 	}
 }
@@ -140,7 +140,7 @@ func organizeViewIntoFolder(
 				try? fileManager.removeItem(atPath: newFolderPath)
 			}
 		}
-		throw FileOperationError.operationFailed("Organize view into folder", error)
+		throw FileOperationError.operationFailed("Organize view into folder", error.localizedDescription)
 	}
 }
 

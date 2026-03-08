@@ -196,7 +196,11 @@ extension PeripheryConfiguration {
 		config.reportInclude = reportInclude
 
 		// Build Settings
-		config.buildArguments = buildArguments
+		if let destination {
+			config.buildArguments = ["-destination", destination] + buildArguments
+		} else {
+			config.buildArguments = buildArguments
+		}
 		config.xcodeListArguments = xcodeListArguments
 		config.skipBuild = skipBuild
 		config.skipSchemesValidation = skipSchemesValidation

@@ -114,6 +114,9 @@ final class ScanState {
 
 						// Log formatted periphery output to console if enabled
 						if logToConsole, !results.isEmpty {
+							// Task.detached is appropriate here: formatting output is a pure utility operation
+							// that should not inherit @MainActor isolation from the enclosing scan task.
+							// This is truly fire-and-forget — no state mutation, only console logging.
 							Task.detached(priority: .utility) {
 								do {
 									// Create logger for formatting (matches PeripheryScanRunner pattern)
@@ -134,6 +137,11 @@ final class ScanState {
 						// Build tree nodes in background for Periphery tab
 						if !results.isEmpty, let path = projectPath {
 							let projectRoot = URL(fileURLWithPath: path).deletingLastPathComponent().path
+							// Task.detached is used here (rather than Task) to avoid inheriting @MainActor
+							// isolation from the enclosing scanTask. Tree building and file system scanning
+							// are CPU-intensive operations that should run on background executor threads.
+							// All mutations to @MainActor-isolated ScanState properties are routed through
+							// `await MainActor.run { }` blocks.
 							let treeTask = Task.detached(priority: .userInitiated) {
 								let nodes = ResultsTreeBuilder.buildTree(from: results, projectRoot: projectRoot)
 								"* ✓ Periphery tree built".logToConsole()
@@ -297,6 +305,13 @@ final class ScanState {
 	func refreshFileTree() {
 		guard let path = projectPath, let graph = sourceGraph else { return }
 
+		// NOTE: This Task.detached is intentionally not tracked in backgroundTasks because
+		// refreshFileTree() is a user-initiated manual refresh, separate from the scan lifecycle.
+		// However, if the ScanState is deallocated while a refresh is running, the
+		// `await MainActor.run { self.fileTreeNodes = ... }` will still execute on a
+		// released object. This is safe in practice because ScanState instances live for
+		// the duration of the app session (held by ScanStateManager), but a future
+		// improvement would be to use a cancellable task stored as a property.
 		Task.detached(priority: .userInitiated) {
 			let scanner = FileSystemScanner()
 			let fileAnalyzer = FileTypeAnalyzer()

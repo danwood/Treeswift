@@ -8,16 +8,6 @@
 import CoreGraphics
 import SwiftUI
 
-// Uncomment this if not defined elsewhere in the code!
-// A cross-platform convenience initializer
-// #if os(iOS) || os(watchOS) || os(tvOS)
-// extension Image {
-// 	init(nsImage: UIImage) {
-// 		self.init(uiImage: nsImage)
-// 	}
-// }
-// #endif
-
 // Give NSImage a more convenient way to extract CGImage, to mirror UIImage API
 #if os(macOS)
 	extension NSImage {

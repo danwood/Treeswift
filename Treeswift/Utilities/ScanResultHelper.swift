@@ -343,9 +343,10 @@ struct ScanResultHelper {
 		return line.range(of: symbolName, range: searchRange)
 	}
 
-	/* Extract base symbol name by removing parameter signatures
-	   e.g., "matchesFilter(_:)" -> "matchesFilter"
-	         "init(from:)" -> "init"
+	/**
+	 Extract base symbol name by removing parameter signatures
+	 e.g., "matchesFilter(_:)" -> "matchesFilter"
+	       "init(from:)" -> "init"
 	 */
 	private nonisolated static func extractBaseSymbolName(from symbolName: String) -> String? {
 		// Find the first opening parenthesis which indicates parameter list

@@ -10,7 +10,8 @@ import Foundation
 import SwiftUI
 
 extension NSColor {
-	/* Creates a lighter version of the color using HSB color space.
+	/**
+	 Creates a lighter version of the color using HSB color space.
 
 	 The function reduces saturation and increases brightness to produce
 	 a more natural-looking lighter color. For already-bright colors, saturation
@@ -22,7 +23,8 @@ extension NSColor {
 	   - `0.4` (default) produces a moderate lightening
 	   - `0.6` produces a strong lightening
 	   - `1.0` produces maximum lightening (approaches white)
-	 - Returns: A new `NSColor` instance with adjusted brightness and saturation. */
+	 - Returns: A new `NSColor` instance with adjusted brightness and saturation.
+	 */
 	func lighter(by percentage: CGFloat = 0.4) -> NSColor {
 		guard let rgbColor = usingColorSpace(.deviceRGB) else { return self }
 
@@ -39,7 +41,8 @@ extension NSColor {
 		return NSColor(hue: hue, saturation: newSaturation, brightness: newBrightness, alpha: alpha)
 	}
 
-	/* Creates a darker version of the color using HSB color space.
+	/**
+	 Creates a darker version of the color using HSB color space.
 
 	 The function decreases brightness while slightly increasing saturation to maintain
 	 color richness and produce a more natural-looking darker color.
@@ -50,7 +53,8 @@ extension NSColor {
 	   - `0.4` (default) produces a moderate darkening
 	   - `0.6` produces a strong darkening
 	   - `1.0` produces maximum darkening (approaches black)
-	 - Returns: A new `NSColor` instance with adjusted brightness and saturation. */
+	 - Returns: A new `NSColor` instance with adjusted brightness and saturation.
+	 */
 	func darker(by percentage: CGFloat = 0.4) -> NSColor {
 		guard let rgbColor = usingColorSpace(.deviceRGB) else { return self }
 

@@ -8,7 +8,7 @@
 import Foundation
 
 extension FileManager {
-	/*
+	/**
 	 Checks if a file has changed since the stored metadata was captured
 
 	 - Parameters:

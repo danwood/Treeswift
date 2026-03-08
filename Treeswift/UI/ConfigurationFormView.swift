@@ -17,9 +17,12 @@ struct ConfigurationFormView: View {
 	@Binding var layoutSettings: TreeLayoutSettings
 	@State private var isFileDropTargeted = false
 	@State private var availableSchemes: [String] = []
+	@State private var availableDestinations: [BuildDestination] = []
+	@State private var isLoadingDestinations = false
 	@State private var isOptionsExpanded = false
 	@State private var isBuildArgsEnabled = false
 	@State private var isLayoutExpanded = false
+	@State private var buildArgsText: String = ""
 
 	var body: some View {
 		Form {
@@ -84,10 +87,10 @@ struct ConfigurationFormView: View {
 				RoundedRectangle(cornerRadius: 6)
 					.fill(isFileDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
 			)
-			.overlay(
+			.overlay {
 				RoundedRectangle(cornerRadius: 6)
 					.stroke(isFileDropTargeted ? Color.accentColor : Color.clear, lineWidth: 2)
-			)
+			}
 			.padding(.vertical, -4)
 			.padding(.horizontal, -8)
 			.onDrop(of: [.fileURL], isTargeted: $isFileDropTargeted) { providers in
@@ -108,21 +111,60 @@ struct ConfigurationFormView: View {
 				}
 			}
 
+			// MARK: - Destination Section
+
+			if configuration.projectType == .xcode, !availableDestinations.isEmpty || isLoadingDestinations {
+				LabeledContent {
+					if isLoadingDestinations {
+						ProgressView()
+							.controlSize(.small)
+					} else {
+						Picker("", selection: $configuration.destination) {
+							Text("Automatic").tag(nil as String?)
+							ForEach(availableDestinations) { dest in
+								Text(dest.platform).tag(dest.destinationString as String?)
+							}
+						}
+						.labelsHidden()
+					}
+				} label: {
+					Text("Destination:")
+				}
+			}
+
 			// MARK: - Build Arguments Section
 
 			LabeledContent {
-				TextField("Build arguments", text: buildArgumentsBinding)
+				TextField("Build arguments", text: $buildArgsText)
 					.textFieldStyle(.roundedBorder)
 					.labelsHidden()
 					.focused($focusedField, equals: .buildArgs)
 					.disabled(!isBuildArgsEnabled)
+					.onChange(of: buildArgsText) {
+						configuration.buildArguments = buildArgsText
+							.split(separator: " ")
+							.map { String($0) }
+							.filter { !$0.isEmpty }
+					}
+					.onAppear {
+						buildArgsText = configuration.buildArguments.joined(separator: " ")
+					}
+					.onChange(of: configuration.buildArguments) {
+						let joined = configuration.buildArguments.joined(separator: " ")
+						if joined != buildArgsText {
+							buildArgsText = joined
+						}
+					}
 			} label: {
 				Text("Build Args:")
 			}
 
 			// MARK: - Options Section
 
-			optionsDisclosureGroup
+			OptionsDisclosureGroup(
+				isExpanded: $isOptionsExpanded,
+				configuration: $configuration
+			)
 
 			// MARK: - Tree Layout Section
 
@@ -133,8 +175,16 @@ struct ConfigurationFormView: View {
 		.onChange(of: configuration.project) { _, _ in
 			loadSchemesSynchronously()
 		}
+		// NOTE: Both onAppear and task(id:) run on first appearance. The synchronous
+		// cache read in onAppear prevents the loading spinner from flashing when
+		// schemes are already cached. The task handles the async xcodebuild call.
+		// This intentional double-execution is safe: if schemes are cached,
+		// loadSchemesAsynchronously() returns immediately after the cache hit.
 		.task(id: configuration.project) {
 			await loadSchemesAsynchronously()
+		}
+		.task(id: configuration.schemes) {
+			await loadDestinations()
 		}
 		.onAppear {
 			loadSchemesSynchronously()
@@ -145,80 +195,7 @@ struct ConfigurationFormView: View {
 		}
 	}
 
-	// MARK: - Computed Properties
-
-	private var hasOptionsEnabled: Bool {
-		configuration.excludeTests ||
-			configuration.skipBuild ||
-			configuration.cleanBuild ||
-			configuration.isVerbose ||
-			configuration.shouldLogToConsole
-	}
-
-	private var optionsSummary: String {
-		var enabled: [String] = []
-		if configuration.excludeTests { enabled.append("Exclude Tests") }
-		if configuration.skipBuild { enabled.append("Skip Build") }
-		if configuration.cleanBuild { enabled.append("Clean Build") }
-		if configuration.isVerbose { enabled.append("Verbose") }
-		if configuration.shouldLogToConsole { enabled.append("Log to Console") }
-
-		if enabled.isEmpty {
-			return "None"
-		} else {
-			return enabled.joined(separator: ", ")
-		}
-	}
-
-	private var buildArgumentsBinding: Binding<String> {
-		Binding(
-			get: {
-				configuration.buildArguments.joined(separator: " ")
-			},
-			set: { newValue in
-				configuration.buildArguments = newValue
-					.split(separator: " ")
-					.map { String($0) }
-					.filter { !$0.isEmpty }
-			}
-		)
-	}
-
 	// MARK: - View Components
-
-	/**
-	 Disclosure group for periphery scan options.
-	 Displays a collapsible section with toggles for exclude tests, skip build, clean build,
-	 verbose mode, and console logging. Shows a summary of enabled options when collapsed.
-	 */
-	private var optionsDisclosureGroup: some View {
-		DisclosureGroup(
-			isExpanded: $isOptionsExpanded,
-			content: {
-				VStack(alignment: .leading, spacing: 12) {
-					Toggle("Exclude Tests", isOn: $configuration.excludeTests)
-					Toggle("Skip Build", isOn: $configuration.skipBuild)
-					Toggle("Clean Build", isOn: $configuration.cleanBuild)
-					Toggle("Verbose", isOn: $configuration.isVerbose)
-					Toggle("Log to Console", isOn: $configuration.shouldLogToConsole)
-				}
-				.padding(.leading, 20)
-				.padding(.top, 8)
-			},
-			label: {
-				LabeledContent {
-					if !isOptionsExpanded {
-						Text(optionsSummary)
-							.foregroundStyle(hasOptionsEnabled ? .primary : .secondary)
-							.multilineTextAlignment(.trailing)
-							.frame(maxWidth: .infinity, alignment: .trailing)
-					}
-				} label: {
-					Text("Options:")
-				}
-			}
-		)
-	}
 
 	/**
 	 Disclosure group for tree layout settings.
@@ -323,6 +300,25 @@ struct ConfigurationFormView: View {
 		}
 	}
 
+	private func loadDestinations() async {
+		guard configuration.projectType == .xcode,
+		      let projectPath = configuration.project,
+		      let scheme = configuration.schemes.first else {
+			availableDestinations = []
+			return
+		}
+
+		isLoadingDestinations = true
+		availableDestinations = await XcodeDestinationReader.destinations(forProjectAt: projectPath, scheme: scheme)
+		isLoadingDestinations = false
+
+		// Clear saved destination if it's no longer available
+		if let current = configuration.destination,
+		   !availableDestinations.contains(where: { $0.destinationString == current }) {
+			configuration.destination = nil
+		}
+	}
+
 	private func displayNameForPath(_ path: String) -> String {
 		if configuration.projectType == .swiftPackage {
 			// For SPM projects, show "FolderName/Package.swift"
@@ -343,6 +339,13 @@ struct ConfigurationFormView: View {
 	private func handleDrop(providers: [NSItemProvider]) -> Bool {
 		guard let provider = providers.first else { return false }
 
+		// NOTE: NSItemProvider.loadItem(forTypeIdentifier:) is the legacy callback API.
+		// The modern replacement would be NSItemProvider.loadTransferable(type:) or
+		// loadObject(ofClass:). However, neither cleanly handles the file URL → URL
+		// conversion with proper sandbox security-scoped bookmark support on macOS.
+		// The Task { @MainActor in } wrapping correctly bridges back to the main actor.
+		// This is a known antipattern (Task created from non-@MainActor context) but
+		// is safe here because we only mutate @MainActor state inside the Task block.
 		provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
 			guard let data = item as? Data,
 			      let url = URL(dataRepresentation: data, relativeTo: nil) else {
@@ -350,48 +353,16 @@ struct ConfigurationFormView: View {
 			}
 
 			Task { @MainActor in
-				let projectURL: URL?
-				let projectType: ProjectType?
-
-				if url.isValidProjectFile {
-					// It's a project/workspace bundle or Package.swift - use directly
-					projectURL = url
-					projectType = url.detectedProjectType
-				} else if url.hasDirectoryPath {
-					// It's a folder - search for project files inside
-					let fm = FileManager.default
-
-					// Check for .xcodeproj or .xcworkspace first (priority)
-					if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
-					   let xcodeproj = contents.first(where: {
-					   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
-					   }) {
-						projectURL = xcodeproj
-						projectType = .xcode
-					}
-					// Check for Package.swift
-					else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
-						projectURL = url.appendingPathComponent("Package.swift")
-						projectType = .swiftPackage
-					} else {
-						// No valid project found
-						projectURL = nil
-						projectType = nil
-					}
-				} else {
-					// Not a valid project
-					projectURL = nil
-					projectType = nil
-				}
-
-				guard let projectURL, let projectType else {
-					return
-				}
-
-				// Invalidate cache for old project if it exists
+				guard let resolved = ProjectURLResolver.resolve(from: url) else { return }
 				SchemeCache.shared.invalidateIfNeeded(path: configuration.project)
-				configuration.projectType = projectType
-				configuration.project = projectURL.path
+				configuration.schemes = []
+				configuration.destination = nil
+				availableSchemes = []
+				availableDestinations = []
+				configuration.projectType = resolved.projectType
+				configuration.project = resolved.url.path
+				loadSchemesSynchronously()
+				await loadSchemesAsynchronously()
 			}
 		}
 
@@ -400,53 +371,25 @@ struct ConfigurationFormView: View {
 
 	private func handleFileSelection(_ result: Result<[URL], Error>) {
 		guard case let .success(urls) = result,
-		      let url = urls.first else {
+		      let url = urls.first,
+		      let resolved = ProjectURLResolver.resolve(from: url) else {
 			return
 		}
 
-		let projectURL: URL?
-		let projectType: ProjectType?
-
-		if url.hasDirectoryPath {
-			// It's a folder - search for project files
-			let fm = FileManager.default
-
-			// Check for .xcodeproj first (priority)
-			if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
-			   let xcodeproj = contents.first(where: {
-			   	$0.pathExtension == "xcodeproj" || $0.pathExtension == "xcworkspace"
-			   }) {
-				projectURL = xcodeproj
-				projectType = .xcode
-			}
-			// Check for Package.swift
-			else if fm.fileExists(atPath: url.appendingPathComponent("Package.swift").path) {
-				projectURL = url.appendingPathComponent("Package.swift")
-				projectType = .swiftPackage
-			} else {
-				// No valid project found
-				projectURL = nil
-				projectType = nil
-			}
-		} else {
-			// It's a file - validate and detect type
-			if url.isValidProjectFile {
-				projectURL = url
-				projectType = url.detectedProjectType
-			} else {
-				projectURL = nil
-				projectType = nil
-			}
-		}
-
-		guard let projectURL, let projectType else {
-			return
-		}
-
-		// Invalidate cache for old project if it exists
 		SchemeCache.shared.invalidateIfNeeded(path: configuration.project)
-		configuration.projectType = projectType
-		configuration.project = projectURL.path
+		configuration.schemes = []
+		configuration.destination = nil
+		availableSchemes = []
+		availableDestinations = []
+		configuration.projectType = resolved.projectType
+		configuration.project = resolved.url.path
+
+		// Explicitly trigger scheme loading since NSOpenPanel.runModal() can
+		// prevent SwiftUI's .task(id:) from detecting the project change
+		loadSchemesSynchronously()
+		Task {
+			await loadSchemesAsynchronously()
+		}
 	}
 
 	private func showNSOpenPanel() {

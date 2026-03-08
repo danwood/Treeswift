@@ -18,25 +18,28 @@ struct ChevronExpansionButton: View {
 	}
 
 	var body: some View {
-		Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-			.font(.caption2)
-			.foregroundStyle(.secondary)
-			.frame(width: layoutSettings.chevronWidth)
-			.padding(4)
-			.contentShape(.rect)
-			.simultaneousGesture(
-				TapGesture(count: 1)
-					.modifiers(.option)
-					.onEnded {
-						toggleWithDescendants()
-					}
-			)
-			.onTapGesture {
-				if expandedIDs.contains(id) {
-					expandedIDs.remove(id)
-				} else {
-					expandedIDs.insert(id)
-				}
+		Button {
+			if expandedIDs.contains(id) {
+				expandedIDs.remove(id)
+			} else {
+				expandedIDs.insert(id)
 			}
+		} label: {
+			Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+				.font(.caption2)
+				.foregroundStyle(.secondary)
+				.frame(width: layoutSettings.chevronWidth)
+				.padding(4)
+				.contentShape(.rect)
+		}
+		.buttonStyle(.plain)
+		.simultaneousGesture(
+			TapGesture(count: 1)
+				.modifiers(.option)
+				.onEnded {
+					toggleWithDescendants()
+				}
+		)
+		.accessibilityLabel(isExpanded ? "Collapse" : "Expand")
 	}
 }

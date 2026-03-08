@@ -69,8 +69,8 @@ final class FileSystemScanner: Sendable {
 
 		if pattern.contains("*") {
 			let regexPattern = pattern
-				.replacingOccurrences(of: ".", with: "\\.")
-				.replacingOccurrences(of: "*", with: ".*")
+				.replacing(".", with: "\\.")
+				.replacing("*", with: ".*")
 
 			if let regex = try? NSRegularExpression(pattern: "^\(regexPattern)$") {
 				let range = NSRange(path.startIndex ..< path.endIndex, in: path)
@@ -87,7 +87,7 @@ final class FileSystemScanner: Sendable {
 		gitignorePatterns: [String]
 	) throws -> FileBrowserNode {
 		let fileManager = FileManager.default
-		let relativePath = url.path.replacingOccurrences(of: rootURL.path + "/", with: "")
+		let relativePath = url.path.replacing(rootURL.path + "/", with: "")
 
 		if shouldIgnore(path: url.path, relativePath: relativePath, gitignorePatterns: gitignorePatterns) {
 			return .directory(FileBrowserDirectory(
@@ -113,7 +113,7 @@ final class FileSystemScanner: Sendable {
 			])
 			let isDirectory = resourceValues.isDirectory ?? false
 
-			let itemRelativePath = itemURL.path.replacingOccurrences(of: rootURL.path + "/", with: "")
+			let itemRelativePath = itemURL.path.replacing(rootURL.path + "/", with: "")
 
 			if shouldIgnore(path: itemURL.path, relativePath: itemRelativePath, gitignorePatterns: gitignorePatterns) {
 				continue

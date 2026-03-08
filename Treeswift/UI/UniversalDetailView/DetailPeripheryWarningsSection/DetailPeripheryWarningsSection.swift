@@ -10,6 +10,11 @@ import SourceGraph
 import SwiftUI
 import SystemPackage
 
+private struct OperationError: Identifiable {
+	let id = UUID()
+	let message: String
+}
+
 struct DetailPeripheryWarningsSection: View {
 	private let filePath: String
 	private let scanResults: [ScanResult]
@@ -22,6 +27,7 @@ struct DetailPeripheryWarningsSection: View {
 	@State private var refreshTrigger: Int = 0
 	@State private var removingWarnings: Set<String> = []
 	@State private var ignoringWarnings: Set<String> = []
+	@State private var operationError: OperationError?
 
 	// Initialize with optional filter state
 	init(
@@ -67,58 +73,68 @@ struct DetailPeripheryWarningsSection: View {
 	}
 
 	var body: some View {
-		if !fileWarnings.isEmpty {
-			VStack(alignment: .leading, spacing: 12) {
-				DynamicStack(spacing: 8) {
-					Text("Periphery Warnings")
-						.font(.headline)
-					Spacer()
-					Toggle("Show Details", isOn: Binding(
-						get: { showDetails },
-						set: { newValue in
-							withAnimation(.easeInOut(duration: 0.2)) {
-								showDetails = newValue
-							}
-						}
-					))
-					.toggleStyle(.switch)
-					.controlSize(.small)
-				}
+		Group {
+			if !fileWarnings.isEmpty {
+				VStack(alignment: .leading, spacing: 12) {
+					DynamicStack(spacing: 8) {
+						Text("Periphery Warnings")
+							.font(.headline)
+						Spacer()
+						Toggle("Show Details", isOn: $showDetails)
+							.toggleStyle(.switch)
+							.controlSize(.small)
+					}
 
-				Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 4) {
-					ForEach(Array(fileWarnings.enumerated()), id: \.offset) { _, tuple in
-						PeripheryWarningRow(
-							scanResult: tuple.result,
-							declaration: tuple.declaration,
-							showDetails: showDetails,
-							sourceGraph: sourceGraph,
-							expandedWarnings: $expandedWarnings,
-							completedActions: $completedActions,
-							refreshTrigger: $refreshTrigger,
-							removingWarnings: $removingWarnings,
-							ignoringWarnings: $ignoringWarnings
-						)
+					Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 4) {
+						ForEach(fileWarnings, id: \.declaration.usrs.first) { tuple in
+							PeripheryWarningRow(
+								scanResult: tuple.result,
+								declaration: tuple.declaration,
+								showDetails: showDetails,
+								sourceGraph: sourceGraph,
+								expandedWarnings: $expandedWarnings,
+								completedActions: $completedActions,
+								refreshTrigger: $refreshTrigger,
+								removingWarnings: $removingWarnings,
+								ignoringWarnings: $ignoringWarnings,
+								operationError: $operationError
+							)
+						}
+					}
+					.id(refreshTrigger)
+					.animation(.easeInOut(duration: 0.2), value: showDetails)
+				}
+				.padding(.vertical, 4)
+				.task {
+					for await notification in NotificationCenter.default.notifications(
+						named: Notification.Name("PeripheryWarningRestored")
+					) {
+						if let warningID = notification.object as? String {
+							completedActions.remove(warningID)
+							refreshTrigger += 1
+						}
 					}
 				}
-				.id(refreshTrigger)
-			}
-			.padding(.vertical, 4)
-			.onReceive(NotificationCenter.default
-				.publisher(for: Notification.Name("PeripheryWarningRestored"))) { notification in
-					// Remove specific warning from completed actions
-					if let warningID = notification.object as? String {
-						completedActions.remove(warningID)
-						refreshTrigger += 1
+				.task {
+					for await notification in NotificationCenter.default.notifications(
+						named: Notification.Name("PeripheryWarningCompleted")
+					) {
+						if let warningID = notification.object as? String {
+							completedActions.insert(warningID)
+							refreshTrigger += 1
+						}
 					}
+				}
 			}
-			.onReceive(NotificationCenter.default
-				.publisher(for: Notification.Name("PeripheryWarningCompleted"))) { notification in
-					// Add specific warning to completed actions
-					if let warningID = notification.object as? String {
-						completedActions.insert(warningID)
-						refreshTrigger += 1
-					}
-			}
+		}
+		// Binding(get:set:) is intentional — macOS SwiftUI does not expose the
+		// .alert(item:) overload that iOS has, so isPresented with a manual binding
+		// is the only way to drive an alert from an optional model value on macOS.
+		.alert(
+			"Operation Failed",
+			isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
+		) {
+			Text(operationError?.message ?? "")
 		}
 	}
 }
@@ -134,7 +150,12 @@ private struct PeripheryWarningRow: View {
 	@Binding var refreshTrigger: Int
 	@Binding var removingWarnings: Set<String>
 	@Binding var ignoringWarnings: Set<String>
+	@Binding var operationError: OperationError?
 	@Environment(\.undoManager) var undoManager
+
+	@State var cachedSourceLine: AttributedString?
+	@State var cachedHasMultiLineSource: Bool = false
+	@State var cachedCanFindSuperfluousIgnore: Bool = false
 
 	// Read location from declaration so it updates when declaration.location changes
 	var location: Location {
@@ -143,7 +164,6 @@ private struct PeripheryWarningRow: View {
 
 	var badge: Badge {
 		let swiftType = SwiftType.from(declarationKind: declaration.kind)
-
 		return Badge(
 			letter: swiftType.rawValue,
 			count: 1,
@@ -159,7 +179,28 @@ private struct PeripheryWarningRow: View {
 		)
 	}
 
-	var sourceLine: AttributedString? {
+	// Generate unique ID for this warning using stable USR
+	var warningID: String {
+		let usr = declaration.usrs.first ?? ""
+		return "\(location.file.path.string):\(usr)"
+	}
+
+	// Check if location has full range info for deletion
+	var hasFullRange: Bool {
+		location.endLine != nil && location.endColumn != nil
+	}
+
+	// Check if this is an import declaration
+	var isImport: Bool {
+		declaration.kind == .module
+	}
+
+	// Check if declaration can be deleted (has full range or is import)
+	var canDelete: Bool {
+		hasFullRange || isImport
+	}
+
+	func computeSourceLine() -> AttributedString? {
 		guard showDetails else { return nil }
 
 		guard let lineText = SourceFileReader.readLine(
@@ -304,30 +345,7 @@ private struct PeripheryWarningRow: View {
 		)
 	}
 
-	// Generate unique ID for this warning using stable USR
-	var warningID: String {
-		let usr = declaration.usrs.first ?? ""
-		return "\(location.file.path.string):\(usr)"
-	}
-
-	// Check if location has full range info for deletion
-	var hasFullRange: Bool {
-		location.endLine != nil && location.endColumn != nil
-	}
-
-	// Check if this is an import declaration
-	var isImport: Bool {
-		declaration.kind == .module
-	}
-
-	// Check if declaration can be deleted (has full range or is import)
-	var canDelete: Bool {
-		hasFullRange || isImport
-	}
-
-	// Check if an action is available for this warning type
-	// Check if source preview has multiple lines (including attributes)
-	var hasMultiLineSource: Bool {
+	func computeHasMultiLineSource() -> Bool {
 		guard let endLine = location.endLine else { return false }
 
 		// Multi-line if the declaration itself spans multiple lines
@@ -348,9 +366,7 @@ private struct PeripheryWarningRow: View {
 			attributes: declaration.attributes
 		)
 
-		// Multi-line if attributes start before the declaration line
-		let result = startLine < location.line
-		return result
+		return startLine < location.line
 	}
 
 	// Load source code preview for a declaration
@@ -381,7 +397,7 @@ private struct PeripheryWarningRow: View {
 	// Delete declaration from source file
 	func deleteDeclaration() {
 		// Start fade-out animation
-		_ = withAnimation(.easeInOut(duration: 0.3)) {
+		withAnimation(.easeInOut(duration: 0.3)) {
 			removingWarnings.insert(warningID)
 		}
 
@@ -464,7 +480,7 @@ private struct PeripheryWarningRow: View {
 
 			// Handle errors
 			if case let .failure(error) = result {
-				print("Deletion failed: \(error.localizedDescription)")
+				operationError = OperationError(message: "Failed to delete declaration: \(error.localizedDescription)")
 				removingWarnings.remove(warningID)
 			}
 		}
@@ -515,7 +531,8 @@ private struct PeripheryWarningRow: View {
 
 			// Handle errors
 			if case let .failure(error) = result {
-				print("Insert ignore directive failed: \(error.localizedDescription)")
+				operationError =
+					OperationError(message: "Failed to insert ignore directive: \(error.localizedDescription)")
 				removingWarnings.remove(warningID)
 				ignoringWarnings.remove(warningID)
 			}
@@ -557,7 +574,7 @@ private struct PeripheryWarningRow: View {
 			completeWarning()
 
 		case let .failure(error):
-			print("Failed to remove ignore command: \(error.localizedDescription)")
+			operationError = OperationError(message: "Failed to remove ignore command: \(error.localizedDescription)")
 		}
 	}
 
@@ -606,7 +623,7 @@ private struct PeripheryWarningRow: View {
 			completeWarning()
 
 		case let .failure(error):
-			print("Failed to fix access control: \(error.localizedDescription)")
+			operationError = OperationError(message: "Failed to fix access control: \(error.localizedDescription)")
 		}
 	}
 
@@ -692,16 +709,10 @@ private struct PeripheryWarningRow: View {
 		if scanResult.annotation != .superfluousIgnoreCommand {
 			return true
 		}
-		return canFindSuperfluousIgnoreComment()
+		return cachedCanFindSuperfluousIgnore
 	}
 
-	/**
-	 Checks if the periphery:ignore comment can be found for this declaration.
-
-	 Searches backward from the declaration line using the same logic as
-	 CodeModificationHelper.removeSuperfluousIgnoreComment().
-	 */
-	func canFindSuperfluousIgnoreComment() -> Bool {
+	func computeCanFindSuperfluousIgnoreComment() -> Bool {
 		let filePath = location.file.path.string
 		guard let fileContents = try? String(contentsOfFile: filePath, encoding: .utf8) else {
 			return false
@@ -715,8 +726,187 @@ private struct PeripheryWarningRow: View {
 		) != nil
 	}
 
-	func DeleteButton() -> some View {
-		let label = switch scanResult.annotation {
+	var body: some View {
+		// Cache warningID to avoid multiple accesses to declaration properties
+		let warningID = warningID
+		let isExpanded = expandedWarnings.contains(warningID)
+		let isRemoving = removingWarnings.contains(warningID)
+		let isIgnoring = ignoringWarnings.contains(warningID)
+		let isCompleted = completedActions.contains(warningID)
+		let sourceLine = cachedSourceLine
+		let hasMultiLineSource = cachedHasMultiLineSource
+
+		// Hide completely if action completed and not removing
+		Group {
+			if !isCompleted || isRemoving {
+				GridRow {
+					// Column 1: Line number + badge - opens in Xcode
+					Button {
+						openFileInEditor(
+							path: location.file.path.string,
+							line: location.line
+						)
+					} label: {
+						HStack(spacing: 4) {
+							if !isCompleted {
+								Text("\(location.line)")
+									.font(.body)
+									.foregroundStyle(.secondary)
+									.monospacedDigit()
+							}
+							BadgeView(badge: badge)
+						}
+					}
+					.buttonStyle(.plain)
+					.accessibilityLabel("Open in Xcode at line \(location.line)")
+					.strikethrough(isIgnoring)
+					.opacity(isRemoving ? 0.5 : 1.0)
+					.help("Open in Xcode at line \(location.line)")
+					.gridColumnAlignment(.trailing)
+
+					// Column 2: Warning text and source line
+					VStack(alignment: .leading, spacing: 0) {
+						HStack {
+							Text(warningText)
+								.font(.body)
+								.textSelection(.enabled)
+								.frame(maxWidth: .infinity, alignment: .leading)
+								.strikethrough(isIgnoring)
+							WarningActionButtons(
+								annotation: scanResult.annotation,
+								hasFullRange: hasFullRange,
+								isImport: isImport,
+								warningID: warningID,
+								canDelete: canDelete,
+								canDeleteSuperfluousIgnore: canDeleteSuperfluousIgnore,
+								completedActions: completedActions,
+								removingWarnings: removingWarnings,
+								onDelete: deleteDeclaration,
+								onFixAccessControl: fixAccessControl,
+								onFixSuperfluousIgnore: fixSuperfluousIgnoreCommand,
+								onIgnore: insertIgnoreDirective
+							)
+						}
+					}
+					.opacity(isRemoving ? 0.5 : 1.0)
+				}
+				GridRow {
+					let isRedundantProtocol = if case .redundantProtocol = scanResult.annotation { true } else { false }
+
+					// FIXME: Use ChevronExpansionButton
+					// Disclosure button for full source preview (only if multi-line and not completed)
+					if !completedActions.contains(warningID),
+					   scanResult.annotation == .unused || isRedundantProtocol, hasFullRange,
+					   hasMultiLineSource {
+						Button(
+							isExpanded ? "Hide full source" : "Show full source",
+							systemImage: isExpanded ? "chevron.down" : "chevron.right"
+						) {
+							if isExpanded {
+								expandedWarnings.remove(warningID)
+							} else {
+								expandedWarnings.insert(warningID)
+							}
+						}
+						.labelStyle(.iconOnly)
+						.imageScale(.small)
+						.foregroundStyle(.secondary)
+						.padding(4)
+						.contentShape(Rectangle())
+						.frame(width: 20, height: 20) // fixed square for the button label area
+						.contentShape(Rectangle()) // consistent hit target
+						.buttonStyle(.plain)
+						.help(isExpanded ? "Hide full source" : "Show full source")
+						.gridColumnAlignment(.trailing)
+					} else {
+						Text("") // Placeholder for grid
+					}
+					VStack(alignment: .leading, spacing: 0) {
+						if !completedActions.contains(warningID), let sourceLine {
+							WarningSourceView(
+								sourceLine: sourceLine,
+								isExpanded: expandedWarnings.contains(warningID),
+								fullSource: loadSourcePreview()
+							)
+						}
+						// Show assignment locations for assignOnlyProperty warnings
+						if case ScanResult.Annotation.assignOnlyProperty = scanResult.annotation, let sourceGraph {
+							VStack(alignment: .leading, spacing: 0) {
+								// Get the setter accessor to find assignment references
+								if let setter = declaration.declarations
+									.first(where: { $0.kind == .functionAccessorSetter }) {
+									let assignments = sourceGraph.references(to: setter).sorted()
+									ForEach(assignments.enumerated(), id: \.offset) { _, assignment in
+										AssignmentLocationRow(assignment: assignment)
+									}
+								}
+							}
+						}
+
+						// Show usage information for redundant protocol warnings
+						if case let ScanResult.Annotation.redundantProtocol(references, inherited) = scanResult
+							.annotation {
+							VStack(alignment: .leading, spacing: 0) {
+								// Show inherited protocols if any
+								if !inherited.isEmpty {
+									VStack(alignment: .leading, spacing: 4) {
+										Text("Inherits from:")
+											.font(.caption)
+											.foregroundStyle(.secondary)
+										ForEach(Array(inherited.sorted()), id: \.self) { protocolName in
+											Text("• \(protocolName)")
+												.font(.caption)
+												.foregroundStyle(.secondary)
+												.padding(.leading, 8)
+										}
+									}
+								}
+
+								// Show protocol usage locations
+								if !references.isEmpty {
+									VStack(alignment: .leading, spacing: 4) {
+										Text(
+											"Used as constraint in \(references.count) \(references.count == 1 ? "location" : "locations"):"
+										)
+										.font(.caption)
+										.foregroundStyle(.secondary)
+
+										let sortedReferences = references.sorted()
+										ForEach(sortedReferences.enumerated(), id: \.offset) { _, reference in
+											ProtocolReferenceRow(reference: reference)
+										}
+									}
+								}
+							}
+							.padding(.top, 4)
+						}
+					}
+				}
+			}
+		}
+		.task(id: showDetails) {
+			cachedSourceLine = computeSourceLine()
+		}
+		.task {
+			cachedHasMultiLineSource = computeHasMultiLineSource()
+			cachedCanFindSuperfluousIgnore = computeCanFindSuperfluousIgnoreComment()
+		}
+	}
+}
+
+private struct WarningDeleteButton: View {
+	let annotation: ScanResult.Annotation
+	let warningID: String
+	let canDelete: Bool
+	let canDeleteSuperfluousIgnore: Bool
+	let completedActions: Set<String>
+	let removingWarnings: Set<String>
+	let onDelete: () -> Void
+	let onFixAccessControl: () -> Void
+	let onFixSuperfluousIgnore: () -> Void
+
+	var label: String {
+		switch annotation {
 		case .unused: "Delete declaration"
 		case .redundantPublicAccessibility: "Remove public keyword"
 		case let .redundantInternalAccessibility(suggestedAccessibility):
@@ -726,112 +916,160 @@ private struct PeripheryWarningRow: View {
 		case .superfluousIgnoreCommand: "Delete Periphery Ignore command"
 		default: ""
 		}
+	}
 
-		let icon = switch scanResult.annotation {
+	var icon: String {
+		switch annotation {
 		case .unused: "trash"
 		case .redundantPublicAccessibility: "eye.slash"
 		case .redundantInternalAccessibility: "eye.slash"
 		case .redundantFilePrivateAccessibility: "eye.slash"
-		case .redundantAccessibility: "trash" // Deleting the redundant code
-		case .superfluousIgnoreCommand: "trash" // Deleting the extra periphery:ignore comment
-		default: "trash" // shouldn't happen
+		case .redundantAccessibility: "trash"
+		case .superfluousIgnoreCommand: "trash"
+		default: "trash"
 		}
+	}
 
-		let color = switch scanResult.annotation {
-		case .unused: Color.red
-		case .redundantPublicAccessibility: Color.blue
-		case .redundantInternalAccessibility: Color.blue
-		case .redundantFilePrivateAccessibility: Color.blue
-		case .redundantAccessibility: Color.red // Deleting the redundant code
-		case .superfluousIgnoreCommand: Color.red // Deleting the extra periphery:ignore comment
-		default: Color.red // shouldn't happen
+	var color: Color {
+		switch annotation {
+		case .unused: .red
+		case .redundantPublicAccessibility: .blue
+		case .redundantInternalAccessibility: .blue
+		case .redundantFilePrivateAccessibility: .blue
+		case .redundantAccessibility: .red
+		case .superfluousIgnoreCommand: .red
+		default: .red
 		}
+	}
 
-		return Button(
-			label,
-			systemImage: icon,
-			action: {
-				if scanResult.annotation == .unused {
-					deleteDeclaration()
-				} else if case .redundantPublicAccessibility = scanResult.annotation {
-					fixAccessControl()
-				} else if case .redundantInternalAccessibility = scanResult.annotation {
-					fixAccessControl()
-				} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
-					fixAccessControl()
-				} else if case .redundantAccessibility = scanResult.annotation {
-					fixAccessControl()
-				} else if scanResult.annotation == .superfluousIgnoreCommand {
-					fixSuperfluousIgnoreCommand()
-				}
+	var helpText: String {
+		if annotation == .unused {
+			canDelete ? "Delete this declaration" : "Can't delete - don't have range"
+		} else if case .redundantPublicAccessibility = annotation {
+			"Remove public keyword"
+		} else if case let .redundantInternalAccessibility(suggestedAccessibility) = annotation {
+			"Replace access with \(suggestedAccessibility, default: "fileprivate/private")"
+		} else if case .redundantFilePrivateAccessibility = annotation {
+			"Replace access with private"
+		} else if case .redundantAccessibility = annotation {
+			"Remove access keyword"
+		} else if annotation == .superfluousIgnoreCommand {
+			canDeleteSuperfluousIgnore
+				? "Remove Superfluous ignore command"
+				: "Can't find comment - must be deleted manually"
+		} else {
+			""
+		}
+	}
+
+	var isDisabled: Bool {
+		(annotation == .unused && !canDelete) ||
+			(annotation == .superfluousIgnoreCommand && !canDeleteSuperfluousIgnore)
+	}
+
+	var body: some View {
+		Button(label, systemImage: icon) {
+			if annotation == .unused {
+				onDelete()
+			} else if case .redundantPublicAccessibility = annotation {
+				onFixAccessControl()
+			} else if case .redundantInternalAccessibility = annotation {
+				onFixAccessControl()
+			} else if case .redundantFilePrivateAccessibility = annotation {
+				onFixAccessControl()
+			} else if case .redundantAccessibility = annotation {
+				onFixAccessControl()
+			} else if annotation == .superfluousIgnoreCommand {
+				onFixSuperfluousIgnore()
 			}
-		)
+		}
 		// Visually hide the text but keep accessibility label
 		.labelStyle(.iconOnly)
 		.foregroundStyle(color)
 		.frame(width: 16, height: 16)
 		.buttonStyle(.plain)
-		.help({
-			if scanResult.annotation == .unused {
-				canDelete ? "Delete this declaration" : "Can't delete - don't have range"
-			} else if case .redundantPublicAccessibility = scanResult.annotation {
-				"Remove public keyword"
-			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
-				"Replace access with \(suggestedAccessibility, default: "fileprivate/private")"
-			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
-				"Replace access with private"
-			} else if case .redundantAccessibility = scanResult.annotation {
-				"Remove access keyword"
-			} else if scanResult.annotation == .superfluousIgnoreCommand {
-				canDeleteSuperfluousIgnore
-					? "Remove Superfluous ignore command"
-					: "Can't find comment - must be deleted manually"
-			} else {
-				""
-			}
-		}())
-		.disabled((scanResult.annotation == .unused && !canDelete) ||
-			(scanResult.annotation == .superfluousIgnoreCommand && !canDeleteSuperfluousIgnore))
+		.help(helpText)
+		.disabled(isDisabled)
 		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
+}
 
-	func IgnoreButton() -> some View {
-		Button("Ignore warning", systemImage: "bell.slash") {
-			insertIgnoreDirective()
-		}
-		.labelStyle(.iconOnly)
-		.foregroundStyle(.orange)
-		.frame(width: 16, height: 16)
-		.buttonStyle(.plain)
-		.help("Insert ignore directive")
-		.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
+private struct WarningIgnoreButton: View {
+	let warningID: String
+	let completedActions: Set<String>
+	let removingWarnings: Set<String>
+	let onIgnore: () -> Void
+
+	var body: some View {
+		Button("Ignore warning", systemImage: "bell.slash", action: onIgnore)
+			.labelStyle(.iconOnly)
+			.foregroundStyle(.orange)
+			.frame(width: 16, height: 16)
+			.buttonStyle(.plain)
+			.help("Insert ignore directive")
+			.opacity(completedActions.contains(warningID) || removingWarnings.contains(warningID) ? 0 : 1)
 	}
+}
 
-	func ActionButtons() -> some View {
+private struct WarningActionButtons: View {
+	let annotation: ScanResult.Annotation
+	let hasFullRange: Bool
+	let isImport: Bool
+	let warningID: String
+	let canDelete: Bool
+	let canDeleteSuperfluousIgnore: Bool
+	let completedActions: Set<String>
+	let removingWarnings: Set<String>
+	let onDelete: () -> Void
+	let onFixAccessControl: () -> Void
+	let onFixSuperfluousIgnore: () -> Void
+	let onIgnore: () -> Void
+
+	var body: some View {
 		HStack(spacing: 4) {
-			if scanResult.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
-				DeleteButton()
+			if annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
+				WarningDeleteButton(
+					annotation: annotation,
+					warningID: warningID,
+					canDelete: canDelete,
+					canDeleteSuperfluousIgnore: canDeleteSuperfluousIgnore,
+					completedActions: completedActions,
+					removingWarnings: removingWarnings,
+					onDelete: onDelete,
+					onFixAccessControl: onFixAccessControl,
+					onFixSuperfluousIgnore: onFixSuperfluousIgnore
+				)
 			}
 			// Can't ignore a superfluous ignore!
-			if scanResult.annotation != .superfluousIgnoreCommand {
-				IgnoreButton()
+			if annotation != .superfluousIgnoreCommand {
+				WarningIgnoreButton(
+					warningID: warningID,
+					completedActions: completedActions,
+					removingWarnings: removingWarnings,
+					onIgnore: onIgnore
+				)
 			}
 		}
 	}
+}
 
-	func source(_ sourceLine: AttributedString) -> some View {
-		let isExpanded = expandedWarnings.contains(warningID)
-		return HStack(alignment: .top, spacing: 0) {
-			// Source line or full preview
-			if isExpanded, let fullSource = loadSourcePreview() {
+private struct WarningSourceView: View {
+	let sourceLine: AttributedString
+	let isExpanded: Bool
+	let fullSource: String?
+
+	var body: some View {
+		HStack(alignment: .top, spacing: 0) {
+			if isExpanded, let fullSource {
 				// Full multi-line source preview
-				ScrollView(.horizontal, showsIndicators: true) {
+				ScrollView(.horizontal) {
 					Text(fullSource)
 						.font(.system(.caption, design: .monospaced))
 						.textSelection(.enabled)
 						.fixedSize(horizontal: true, vertical: false)
 						.padding(2)
 				}
+				.scrollIndicators(.visible)
 				.frame(maxWidth: .infinity, alignment: .leading)
 				.background(Color.secondary.opacity(0.1))
 				.clipShape(.rect(cornerRadius: 4))
@@ -853,145 +1091,6 @@ private struct PeripheryWarningRow: View {
 			}
 		}
 	}
-
-	var body: some View {
-		// Cache warningID to avoid multiple accesses to declaration properties
-		let warningID = warningID
-		let isExpanded = expandedWarnings.contains(warningID)
-		let isRemoving = removingWarnings.contains(warningID)
-		let isIgnoring = ignoringWarnings.contains(warningID)
-		let isCompleted = completedActions.contains(warningID)
-
-		// Hide completely if action completed and not removing
-		if !isCompleted || isRemoving {
-			GridRow {
-				// Column 1: Line number + badge - opens in Xcode
-				HStack(spacing: 4) {
-					if !isCompleted {
-						Text("\(location.line)")
-							.font(.body)
-							.foregroundStyle(.secondary)
-							.monospacedDigit()
-					}
-					BadgeView(badge: badge)
-				}
-				.strikethrough(isIgnoring)
-				.opacity(isRemoving ? 0.5 : 1.0)
-				.onTapGesture {
-					openFileInEditor(
-						path: location.file.path.string,
-						line: location.line
-					)
-				}
-				.help("Open in Xcode at line \(location.line)")
-				.gridColumnAlignment(.trailing)
-
-				// Column 2: Warning text and source line
-				VStack(alignment: .leading, spacing: 0) {
-					HStack {
-						Text(warningText)
-							.font(.body)
-							.textSelection(.enabled)
-							.frame(maxWidth: .infinity, alignment: .leading)
-							.strikethrough(isIgnoring)
-						ActionButtons()
-					}
-				}
-				.opacity(isRemoving ? 0.5 : 1.0)
-			}
-			GridRow {
-				// Ridiculous way to pattern match the case
-				let isRedundantProtocol: Bool = {
-					if case .redundantProtocol = scanResult.annotation { return true }
-					return false
-				}()
-
-				// FIXME: Use ChevronExpansionButton
-				// Disclosure button for full source preview (only if multi-line and not completed)
-				if !completedActions.contains(warningID),
-				   scanResult.annotation == .unused || isRedundantProtocol, hasFullRange,
-				   hasMultiLineSource {
-					Button(
-						isExpanded ? "Hide full source" : "Show full source",
-						systemImage: isExpanded ? "chevron.down" : "chevron.right"
-					) {
-						if isExpanded {
-							expandedWarnings.remove(warningID)
-						} else {
-							expandedWarnings.insert(warningID)
-						}
-					}
-					.labelStyle(.iconOnly)
-					.imageScale(.small)
-					.foregroundStyle(.secondary)
-					.padding(4)
-					.contentShape(Rectangle())
-					.frame(width: 20, height: 20) // fixed square for the button label area
-					.contentShape(Rectangle()) // consistent hit target
-					.buttonStyle(.plain)
-					.help(isExpanded ? "Hide full source" : "Show full source")
-					.gridColumnAlignment(.trailing)
-				} else {
-					Text("") // Placeholder for grid
-				}
-				VStack(alignment: .leading, spacing: 0) {
-					if !completedActions.contains(warningID), let sourceLine {
-						source(sourceLine)
-					}
-					// Show assignment locations for assignOnlyProperty warnings
-					if case ScanResult.Annotation.assignOnlyProperty = scanResult.annotation, let sourceGraph {
-						VStack(alignment: .leading, spacing: 0) {
-							// Get the setter accessor to find assignment references
-							if let setter = declaration.declarations
-								.first(where: { $0.kind == .functionAccessorSetter }) {
-								let assignments = sourceGraph.references(to: setter).sorted()
-								ForEach(Array(assignments.enumerated()), id: \.offset) { _, assignment in
-									AssignmentLocationRow(assignment: assignment)
-								}
-							}
-						}
-					}
-
-					// Show usage information for redundant protocol warnings
-					if case let ScanResult.Annotation.redundantProtocol(references, inherited) = scanResult.annotation {
-						VStack(alignment: .leading, spacing: 0) {
-							// Show inherited protocols if any
-							if !inherited.isEmpty {
-								VStack(alignment: .leading, spacing: 4) {
-									Text("Inherits from:")
-										.font(.caption)
-										.foregroundStyle(.secondary)
-									ForEach(Array(inherited.sorted()), id: \.self) { protocolName in
-										Text("• \(protocolName)")
-											.font(.caption)
-											.foregroundStyle(.secondary)
-											.padding(.leading, 8)
-									}
-								}
-							}
-
-							// Show protocol usage locations
-							if !references.isEmpty {
-								VStack(alignment: .leading, spacing: 4) {
-									Text(
-										"Used as constraint in \(references.count) \(references.count == 1 ? "location" : "locations"):"
-									)
-									.font(.caption)
-									.foregroundStyle(.secondary)
-
-									let sortedReferences = references.sorted()
-									ForEach(Array(sortedReferences.enumerated()), id: \.offset) { _, reference in
-										ProtocolReferenceRow(reference: reference)
-									}
-								}
-							}
-						}
-						.padding(.top, 4)
-					}
-				}
-			}
-		}
-	}
 }
 
 private struct AssignmentLocationRow: View {
@@ -1000,22 +1099,24 @@ private struct AssignmentLocationRow: View {
 	var body: some View {
 		DynamicStack(horizontalAlignment: .leading, spacing: 4) {
 			// File and line number (clickable)
-			HStack(spacing: 4) {
-				Image(systemName: "arrow.forward.circle")
-					.foregroundStyle(.secondary)
-					.font(.caption)
-				let fileName = assignment.location.file.path.lastComponent ?? "unknown"
-				let lineNumber = assignment.location.line
-				Text(verbatim: "\(fileName):\(lineNumber)")
-					.font(.caption)
-					.foregroundStyle(.blue)
-			}
-			.onTapGesture {
+			Button {
 				openFileInEditor(
 					path: assignment.location.file.path.string,
 					line: assignment.location.line
 				)
+			} label: {
+				HStack(spacing: 4) {
+					Image(systemName: "arrow.forward.circle")
+						.foregroundStyle(.secondary)
+						.font(.caption)
+					let fileName = assignment.location.file.path.lastComponent ?? "unknown"
+					let lineNumber = assignment.location.line
+					Text(verbatim: "\(fileName):\(lineNumber)")
+						.font(.caption)
+						.foregroundStyle(.blue)
+				}
 			}
+			.buttonStyle(.plain)
 			.help("Open in Xcode")
 
 			// Show containing function/method if available
@@ -1062,22 +1163,24 @@ private struct ProtocolReferenceRow: View {
 	var body: some View {
 		DynamicStack(horizontalAlignment: .leading, spacing: 4) {
 			// File and line number (clickable)
-			HStack(spacing: 4) {
-				Image(systemName: "arrow.forward.circle")
-					.foregroundStyle(.secondary)
-					.font(.caption)
-				let fileName = reference.location.file.path.lastComponent ?? "unknown"
-				let lineNumber = reference.location.line
-				Text(verbatim: "\(fileName):\(lineNumber)")
-					.font(.caption)
-					.foregroundStyle(.blue)
-			}
-			.onTapGesture {
+			Button {
 				openFileInEditor(
 					path: reference.location.file.path.string,
 					line: reference.location.line
 				)
+			} label: {
+				HStack(spacing: 4) {
+					Image(systemName: "arrow.forward.circle")
+						.foregroundStyle(.secondary)
+						.font(.caption)
+					let fileName = reference.location.file.path.lastComponent ?? "unknown"
+					let lineNumber = reference.location.line
+					Text(verbatim: "\(fileName):\(lineNumber)")
+						.font(.caption)
+						.foregroundStyle(.blue)
+				}
 			}
+			.buttonStyle(.plain)
 			.help("Open in Xcode")
 
 			// Show containing type/function if available

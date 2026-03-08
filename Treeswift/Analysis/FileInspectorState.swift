@@ -25,7 +25,7 @@ final class FileInspectorState {
 
 	init() {}
 
-	/*
+	/**
 	 Updates the currently inspected file and resets change detection
 
 	 - Parameters:
@@ -45,7 +45,7 @@ final class FileInspectorState {
 		fileWasDeleted = false
 	}
 
-	/*
+	/**
 	 Clears the currently inspected file
 	 */
 	func clearInspectedFile() {
@@ -56,7 +56,7 @@ final class FileInspectorState {
 		fileWasDeleted = false
 	}
 
-	/*
+	/**
 	 Checks if the currently inspected file has been modified externally
 
 	 Called when app returns to foreground to detect file changes

@@ -219,6 +219,18 @@ public protocol ScanProgressDelegate: AnyObject {
 
 **Changes**: Removed `import FilenameMatcher` (no longer used)
 
+#### `Sources/XcodeSupport/XcodeProject.swift` (+1 line, -1 line)
+
+**Purpose**: Gracefully handle unresolvable file element paths.
+
+**Changes**: Changed `try` to `try?` on `fullPath(sourceRoot:)` call when searching for sub-project references. Some project file elements have broken parent chains (e.g., orphaned references, package dependency artifacts) that cause `PBXProjError.invalidGroupPath` to be thrown. Using `try?` lets `compactMap` skip these unresolvable elements instead of crashing the scan.
+
+#### `Sources/XcodeSupport/XcodeTarget.swift` (+2 lines, -2 lines)
+
+**Purpose**: Gracefully handle unresolvable file element paths.
+
+**Changes**: Changed `try` to `try?` on two `fullPath(sourceRoot:)` calls — one for file system synchronized root groups and one for build phase file references. Same rationale as XcodeProject.swift above.
+
 ---
 
 ### 7. Syntax Analysis End-Position Extraction (+23 lines)

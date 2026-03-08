@@ -17,7 +17,7 @@ import SystemPackage
 import XcodeProj
 
 final class Dumper: Sendable {
-	private nonisolated(unsafe) let highLevelKinds: Set<Declaration.Kind> = [
+	private let highLevelKinds: Set<Declaration.Kind> = [
 		.class,
 		.struct,
 		.enum,
@@ -420,9 +420,8 @@ final class Dumper: Sendable {
 	/// Finds types shared by multiple referencers without a common ancestor.
 	private nonisolated func extractSharedTypesNoCommonAncestor(
 		typeToReferencers: [Declaration: [String: Relation]],
-		rootDeclaration: Declaration,
-		displayedTypes: Set<Declaration>
-	) -> [Declaration] {
+		rootDeclaration: Declaration
+	) -> Set<Declaration> {
 		func hasCommonAncestors(_ referencers: [Declaration], rootDeclaration: Declaration) -> Bool {
 			for i in 0 ..< referencers.count {
 				for j in (i + 1) ..< referencers.count {
@@ -439,14 +438,12 @@ final class Dumper: Sendable {
 			return false
 		}
 
-		return typeToReferencers.reduce(into: [Declaration]()) { acc, entry in
+		return typeToReferencers.reduce(into: Set<Declaration>()) { acc, entry in
 			let (sharedType, referencersMap) = entry
 			if referencersMap.count > 1 {
 				let referencers = referencersMap.values.map(\.declaration)
 				if !hasCommonAncestors(referencers, rootDeclaration: rootDeclaration) {
-					if !displayedTypes.contains(sharedType) {
-						acc.append(sharedType)
-					}
+					acc.insert(sharedType)
 				}
 			}
 		}
@@ -586,6 +583,12 @@ final class Dumper: Sendable {
 		var displayedTypes: Set<Declaration> = []
 		let typeToReferencers = buildTypeToReferencers(from: filteredDeclarations, sourceGraph: sourceGraph)
 
+		// Pre-compute shared types so the hierarchy tree doesn't claim them
+		let sharedTypes = extractSharedTypesNoCommonAncestor(
+			typeToReferencers: typeToReferencers,
+			rootDeclaration: rootDeclaration
+		)
+
 		var sections: [CategoriesNode] = []
 
 		// Section 1: Hierarchical Type Dependency Tree
@@ -593,6 +596,7 @@ final class Dumper: Sendable {
 			rootDeclaration: rootDeclaration,
 			typeToReferencers: typeToReferencers,
 			viewsOnly: false, // dump everything
+			sharedTypes: sharedTypes,
 			visited: &visited,
 			displayedTypes: &displayedTypes,
 			projectRootPath: projectRootPath
@@ -615,14 +619,9 @@ final class Dumper: Sendable {
 		// Remove displayed types from filteredDeclarations after Section 2
 		filteredDeclarations.removeAll { displayedTypes.contains($0) }
 
-		// Section 3: Shared Types
-		let sharedTypes = extractSharedTypesNoCommonAncestor(
-			typeToReferencers: typeToReferencers,
-			rootDeclaration: rootDeclaration,
-			displayedTypes: displayedTypes
-		)
+		// Section 3: Shared Types (pre-computed before hierarchy building)
 		let section3: SectionNode = buildSharedTypesSection(
-			sharedTypes,
+			Array(sharedTypes),
 			typeToReferencers: typeToReferencers,
 			displayedTypes: displayedTypes,
 			projectRootPath: projectRootPath
@@ -731,6 +730,7 @@ final class Dumper: Sendable {
 		relationToParent: RelationshipType?,
 		typeToReferencers: [Declaration: [String: Relation]],
 		viewsOnly: Bool,
+		sharedTypes: Set<Declaration>,
 		parentSourceFile: SourceFile?,
 		visited: inout Set<Declaration>,
 		displayedTypes: inout Set<Declaration>,
@@ -746,12 +746,14 @@ final class Dumper: Sendable {
 		// reference this rootDeclaration as their parent in the typeToReferencers map.
 		// The map structure is: [Child: [ParentName: Relation]]
 		// So we check if parentToRelation[rootDeclaration.name] exists for each child.
+		// Shared types (used by multiple unrelated parents) are excluded here;
+		// they belong in the shared types section instead.
 		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
 			Declaration,
 			Location
 		)? in
 			if let relation = parentToRelation[rootDeclaration.name ?? ""] {
-				if !displayedTypes.contains(childDeclaration) {
+				if !displayedTypes.contains(childDeclaration), !sharedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
 				}
 			}
@@ -774,6 +776,7 @@ final class Dumper: Sendable {
 				relationToParent: relationToParent,
 				typeToReferencers: typeToReferencers,
 				viewsOnly: false,
+				sharedTypes: sharedTypes,
 				parentSourceFile: parentSourceFile,
 				visited: &visited,
 				displayedTypes: &displayedTypes,
@@ -798,6 +801,7 @@ final class Dumper: Sendable {
 							relationToParent: relation.relationType,
 							typeToReferencers: typeToReferencers,
 							viewsOnly: viewsOnly,
+							sharedTypes: sharedTypes,
 							parentSourceFile: rootDeclaration.location.file,
 							visited: &visited,
 							displayedTypes: &displayedTypes,
@@ -817,6 +821,7 @@ final class Dumper: Sendable {
 		rootDeclaration: Declaration,
 		typeToReferencers: [Declaration: [String: Relation]],
 		viewsOnly: Bool,
+		sharedTypes: Set<Declaration>,
 		visited: inout Set<Declaration>,
 		displayedTypes: inout Set<Declaration>,
 		projectRootPath: String?
@@ -826,6 +831,7 @@ final class Dumper: Sendable {
 			relationToParent: nil,
 			typeToReferencers: typeToReferencers,
 			viewsOnly: viewsOnly,
+			sharedTypes: sharedTypes,
 			parentSourceFile: nil,
 			visited: &visited,
 			displayedTypes: &displayedTypes,
@@ -1057,6 +1063,7 @@ final class Dumper: Sendable {
 		relationToParent: RelationshipType?,
 		typeToReferencers: [Declaration: [String: Relation]],
 		viewsOnly: Bool,
+		sharedTypes: Set<Declaration> = [],
 		parentSourceFile: SourceFile?,
 		visited: inout Set<Declaration>,
 		displayedTypes: inout Set<Declaration>,
@@ -1085,12 +1092,13 @@ final class Dumper: Sendable {
 		// Find all children of this declaration using the same lookup pattern as buildHierarchyNodes().
 		// Look through the typeToReferencers map to find declarations that list this declaration
 		// as their parent: [Child: [ParentName: Relation]]
+		// Shared types are excluded so they appear in the shared types section instead.
 		let children: [Declaration] = typeToReferencers.compactMap { childDeclaration, parentToRelation -> (
 			Declaration,
 			Location
 		)? in
 			if let relation = parentToRelation[declaration.name ?? ""] {
-				if !displayedTypes.contains(childDeclaration) {
+				if !displayedTypes.contains(childDeclaration), !sharedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
 				}
 			}
@@ -1130,6 +1138,7 @@ final class Dumper: Sendable {
 						relationToParent: relation.relationType,
 						typeToReferencers: typeToReferencers,
 						viewsOnly: viewsOnly,
+						sharedTypes: sharedTypes,
 						parentSourceFile: declaration.location.file,
 						visited: &visited,
 						displayedTypes: &displayedTypes,
@@ -1200,35 +1209,7 @@ final class Dumper: Sendable {
 			nil
 		}
 
-		/* Priority 1: Size warnings in same file (most actionable) */
-		/*
-		 if relationToParent != nil, relationToParent != .embed,
-		    declaration.location.file == parentSourceFile {
-		 	if lineSpan + childrenLineCount >= 200 {
-		 		return LocationInfo(
-		 			type: .tooBigForSameFile,
-		 			icon: .emoji("🆘"),
-		 			fileName: fileName,
-		 			relativePath: relativePath,
-		 			line: line,
-		 			endLine: endLine,
-		 			warningText: "\(lineSpan) lines + \(childrenLineCount) children's lines"
-		 		)
-		 	} else if lineSpan > 200 {
-		 		return LocationInfo(
-		 			type: .tooBigForSameFile,
-		 			icon: .emoji("🆘"),
-		 			fileName: fileName,
-		 			relativePath: relativePath,
-		 			line: line,
-		 			endLine: endLine,
-		 			warningText: "\(lineSpan) lines"
-		 		)
-		 	}
-		 }
-		  */
-
-		/* Priority 2: Swift language nesting */
+		// Priority 2: Swift language nesting
 		if declaration.parent != nil {
 			return LocationInfo(
 				type: .swiftNested,
@@ -1241,7 +1222,7 @@ final class Dumper: Sendable {
 			)
 		}
 
-		/* Priority 3: Same-file semantic relationship */
+		// Priority 3: Same-file semantic relationship
 		if relationToParent != nil, relationToParent != .embed,
 		   declaration.location.file == parentSourceFile {
 			return LocationInfo(
@@ -1255,53 +1236,7 @@ final class Dumper: Sendable {
 			)
 		}
 
-		/* Priority 4+: Separate file logic */
-		/* Maybe try this later...
-		 let inSameFile: Bool = declaration.name == declaration.location.file.path.lastComponent
-		 	.map { ($0.description as NSString).deletingPathExtension }
-
-		 if lineSpan > 100, inSameFile {
-		 	return LocationInfo(
-		 		type: .separateFileGood,
-		 		icon: nil,
-		 		fileName: fileName,
-		 		relativePath: relativePath,
-		 		line: line,
-		 		endLine: endLine,
-		 		warningText: nil
-		 	)
-		 } else if children(of: declaration).count >= 1, inSameFile {
-		 	return LocationInfo(
-		 		type: .separateFileGood,
-		 		icon: nil,
-		 		fileName: fileName,
-		 		relativePath: relativePath,
-		 		line: line,
-		 		endLine: endLine,
-		 		warningText: nil
-		 	)
-		 } else if inSameFile {
-		 	return LocationInfo(
-		 		type: .separateFileTooSmall,
-		 		icon: .emoji("😒"),
-		 		fileName: fileName,
-		 		relativePath: relativePath,
-		 		line: line,
-		 		endLine: endLine,
-		 		warningText: "too small for separate file"
-		 	)
-		 } else {
-		 	return LocationInfo(
-		 		type: .separateFileNameMismatch,
-		 		icon: .systemImage("notequal", Color.red),
-		 		fileName: fileName,
-		 		relativePath: relativePath,
-		 		line: line,
-		 		endLine: endLine,
-		 		warningText: nil
-		 	)
-		 }
-		  */
+		// Priority 4+: Separate file logic
 		return LocationInfo(
 			type: .separateFileGood,
 			icon: nil,

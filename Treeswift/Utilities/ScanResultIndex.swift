@@ -11,6 +11,7 @@ import SystemPackage
  results for a specific file.
  */
 @Observable
+@MainActor
 final class ScanResultIndex {
 	private var filePathIndex: [String: [ScanResult]] = [:]
 	private var cachedFilteredResults: [String: [ScanResult]] = [:]

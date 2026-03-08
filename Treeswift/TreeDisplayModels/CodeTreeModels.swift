@@ -194,11 +194,6 @@ struct LocationInfo: Hashable, Sendable {
 			parts.append("\(fileName)")
 		}
 
-		// MAYBE SHOW WARNING LATER?
-		// if let warningText {
-		// 	parts.append(warningText)
-		// }
-
 		return parts.joined(separator: " ")
 	}
 }

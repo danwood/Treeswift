@@ -34,6 +34,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 
 	// MARK: - Build Settings
 
+	var destination: String?
 	var buildArguments: [String]
 	var xcodeListArguments: [String]
 	var skipBuild: Bool
@@ -88,11 +89,12 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		project: String? = nil,
 		schemes: [String] = [],
 		outputFormat: String = "xcode",
-		excludeTests: Bool = false,
+		excludeTests: Bool = true,
 		excludeTargets: [String] = [],
 		indexExclude: [String] = ["**/*?.build/**/*", "**/SourcePackages/checkouts/**"],
 		reportExclude: [String] = [],
 		reportInclude: [String] = [],
+		destination: String? = nil,
 		buildArguments: [String] = [],
 		xcodeListArguments: [String] = [],
 		skipBuild: Bool = false,
@@ -134,6 +136,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.indexExclude = indexExclude
 		self.reportExclude = reportExclude
 		self.reportInclude = reportInclude
+		self.destination = destination
 		self.buildArguments = buildArguments
 		self.xcodeListArguments = xcodeListArguments
 		self.skipBuild = skipBuild
@@ -195,6 +198,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		case indexExclude
 		case reportExclude
 		case reportInclude
+		case destination
 		case buildArguments
 		case xcodeListArguments
 		case skipBuild
@@ -243,6 +247,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		indexExclude = try container.decode([String].self, forKey: .indexExclude)
 		reportExclude = try container.decode([String].self, forKey: .reportExclude)
 		reportInclude = try container.decode([String].self, forKey: .reportInclude)
+		destination = try container.decodeIfPresent(String.self, forKey: .destination)
 		buildArguments = try container.decode([String].self, forKey: .buildArguments)
 		xcodeListArguments = try container.decode([String].self, forKey: .xcodeListArguments)
 		skipBuild = try container.decode(Bool.self, forKey: .skipBuild)

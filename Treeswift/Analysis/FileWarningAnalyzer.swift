@@ -15,7 +15,8 @@ final class FileWarningAnalyzer: Sendable {
 		let declarationsByFile: [String: [Declaration]]
 	}
 
-	/* Computes usage badge text for a file based on reference patterns.
+	/**
+	 Computes usage badge text for a file based on reference patterns.
 	 Priority order:
 	 1. "Folder-private" - has same-folder refs but no cross-folder refs (positive/green)
 	 2. "Unused file" - has symbols but no references at all (warning)
@@ -23,7 +24,8 @@ final class FileWarningAnalyzer: Sendable {
 	 4. "N files use" - symbols referenced by N files (cross-folder)
 	 5. "Single consumer" - only one file references this
 	 6. "N symbols" - default fallback
-	 Returns tuple of (badgeText, isWarning, isPositive). */
+	 Returns tuple of (badgeText, isWarning, isPositive).
+	 */
 	private nonisolated static func computeUsageBadge(
 		statistics: FileStatistics
 	) -> (text: String, isWarning: Bool, isPositive: Bool) {

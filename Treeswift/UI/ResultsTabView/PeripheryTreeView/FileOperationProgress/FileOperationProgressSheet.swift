@@ -1,6 +1,5 @@
 import SwiftUI
 
-/* folderprivate */
 struct FileOperationProgressSheet: View {
 	let progressState: FileOperationProgressState
 	let onCancel: () -> Void
@@ -17,10 +16,8 @@ struct FileOperationProgressSheet: View {
 			.progressViewStyle(.linear)
 			.frame(width: 300)
 
-			Button("Stop") {
-				onCancel()
-			}
-			.buttonStyle(.borderedProminent)
+			Button("Stop", action: onCancel)
+				.buttonStyle(.borderedProminent)
 		}
 		.padding(24)
 		.frame(minWidth: 400)

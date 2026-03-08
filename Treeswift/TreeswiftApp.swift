@@ -61,12 +61,12 @@ private struct CopyCommand: View {
 
 	var body: some View {
 		Button(copyMenuTitle ?? "Copy") {
-			/* Send native copy action to the responder chain.
-			 This works for both:
-			 - Native text selection in Text views (.textSelection(.enabled))
-			 - Custom copyableText focused values from tree rows
-			 The system will handle the copy if there's something selected,
-			 or do nothing if there isn't - no need to disable the button. */
+			// Send native copy action to the responder chain.
+			// This works for both:
+			// - Native text selection in Text views (.textSelection(.enabled))
+			// - Custom copyableText focused values from tree rows
+			// The system will handle the copy if there's something selected,
+			// or do nothing if there isn't - no need to disable the button.
 			NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
 		}
 		.keyboardShortcut("c", modifiers: .command)

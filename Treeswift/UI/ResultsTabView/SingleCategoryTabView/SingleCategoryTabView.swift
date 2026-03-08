@@ -14,6 +14,7 @@
 //  Computed properties are already pre-evaluated at body start to minimize re-evaluation.
 //
 
+import Flow
 import SwiftUI
 
 extension EnvironmentValues {
@@ -81,22 +82,15 @@ struct SingleCategoryTabView: View {
 					// Section title at top (not in disclosure group)
 					Text(sectionNode.title)
 						.font(.system(.title3, design: .default))
-						.fontWeight(.bold)
+						.bold()
 						.foregroundStyle(.primary)
 						.padding(.horizontal)
 
 					// Show toggle for tree tab only
 					if showToggle {
-						VStack {
-							HStack(spacing: 16) {
-								Toggle("Views Only", isOn: Binding(
-									get: { showOnlyViews },
-									set: { newValue in
-										withAnimation(.easeInOut(duration: 0.3)) {
-											showOnlyViews = newValue
-										}
-									}
-								))
+						VStack(alignment: .leading) {
+							HFlow(itemSpacing: 10, rowSpacing: 8) {
+								Toggle("Views Only", isOn: $showOnlyViews)
 
 								Toggle("File Name", isOn: $showFileName)
 								Toggle("File Info", isOn: $showFileInfo)
@@ -169,14 +163,12 @@ struct SingleCategoryTabView: View {
 					if expandedIDs.isEmpty {
 						expandAllNodes()
 					}
-
-					if !hasAppearedOnce {
-						hasAppearedOnce = true
-						Task { @MainActor in
-							try? await Task.sleep(for: .milliseconds(50))
-							claimFocusTrigger.toggle()
-						}
-					}
+				}
+				.task {
+					guard !hasAppearedOnce else { return }
+					hasAppearedOnce = true
+					try? await Task.sleep(for: .milliseconds(50))
+					claimFocusTrigger.toggle()
 				}
 
 			} else {
@@ -198,20 +190,24 @@ struct SingleCategoryTabView: View {
 			return sectionNode.children
 		}
 
-		// Apply filtering logic for Tree tab when "Views Only" is enabled
-		return sectionNode.children.flatMap { filterNodeForViews($0) }
+		// Single seenIDs set shared across all children to prevent duplicates
+		// when the same shared component appears under multiple parents
+		var seenIDs = Set<String>()
+		return sectionNode.children.flatMap { filterNodeForViews($0, seenIDs: &seenIDs) }
 	}
 
 	/**
-	 Filters nodes to show only Views when "Views Only" toggle is enabled
+	 Filters nodes to show only Views when "Views Only" toggle is enabled.
+	 Tracks seen IDs to avoid duplicates when the same shared component
+	 appears under multiple non-View parents that get flattened away.
 	 */
-	private func filterNodeForViews(_ node: CategoriesNode) -> [CategoriesNode] {
+	private func filterNodeForViews(_ node: CategoriesNode, seenIDs: inout Set<String>) -> [CategoriesNode] {
 		switch node {
 		case var .section(section):
 			if section.id == .hierarchy {
 				var flattenedChildren: [CategoriesNode] = []
 				for child in section.children {
-					flattenViewChildren(child, into: &flattenedChildren)
+					flattenViewChildren(child, into: &flattenedChildren, seenIDs: &seenIDs)
 				}
 				section.children = flattenedChildren
 				return [.section(section)]
@@ -223,14 +219,14 @@ struct SingleCategoryTabView: View {
 				var mutableDecl = decl
 				var flattenedChildren: [CategoriesNode] = []
 				for child in decl.children {
-					flattenViewChildren(child, into: &flattenedChildren)
+					flattenViewChildren(child, into: &flattenedChildren, seenIDs: &seenIDs)
 				}
 				mutableDecl.children = flattenedChildren
 				return [.declaration(mutableDecl)]
 			} else {
 				var promoted: [CategoriesNode] = []
 				for child in decl.children {
-					flattenViewChildren(child, into: &promoted)
+					flattenViewChildren(child, into: &promoted, seenIDs: &seenIDs)
 				}
 				return promoted
 			}
@@ -238,7 +234,7 @@ struct SingleCategoryTabView: View {
 		case var .syntheticRoot(root):
 			var flattenedChildren: [CategoriesNode] = []
 			for child in root.children {
-				flattenViewChildren(child, into: &flattenedChildren)
+				flattenViewChildren(child, into: &flattenedChildren, seenIDs: &seenIDs)
 			}
 			root.children = flattenedChildren
 			return [.syntheticRoot(root)]
@@ -246,14 +242,20 @@ struct SingleCategoryTabView: View {
 	}
 
 	/**
-	 Recursively flattens view hierarchy, keeping only View nodes
+	 Recursively flattens view hierarchy, keeping only View nodes.
+	 Skips nodes whose ID has already been seen to prevent duplicate entries
+	 when the same shared component is referenced from multiple parents.
 	 */
-	private func flattenViewChildren(_ node: CategoriesNode, into result: inout [CategoriesNode]) {
+	private func flattenViewChildren(
+		_ node: CategoriesNode,
+		into result: inout [CategoriesNode],
+		seenIDs: inout Set<String>
+	) {
 		switch node {
 		case let .section(section):
 			if section.id == .hierarchy {
 				for child in section.children {
-					flattenViewChildren(child, into: &result)
+					flattenViewChildren(child, into: &result, seenIDs: &seenIDs)
 				}
 			} else {
 				result.append(node)
@@ -261,23 +263,24 @@ struct SingleCategoryTabView: View {
 
 		case let .declaration(decl):
 			if decl.isView {
+				guard seenIDs.insert(decl.id).inserted else { return }
 				var mutableDecl = decl
 				var flattenedChildren: [CategoriesNode] = []
 				for child in decl.children {
-					flattenViewChildren(child, into: &flattenedChildren)
+					flattenViewChildren(child, into: &flattenedChildren, seenIDs: &seenIDs)
 				}
 				mutableDecl.children = flattenedChildren
 				result.append(.declaration(mutableDecl))
 			} else {
 				for child in decl.children {
-					flattenViewChildren(child, into: &result)
+					flattenViewChildren(child, into: &result, seenIDs: &seenIDs)
 				}
 			}
 
 		case var .syntheticRoot(root):
 			var flattenedChildren: [CategoriesNode] = []
 			for child in root.children {
-				flattenViewChildren(child, into: &flattenedChildren)
+				flattenViewChildren(child, into: &flattenedChildren, seenIDs: &seenIDs)
 			}
 			root.children = flattenedChildren
 			result.append(.syntheticRoot(root))

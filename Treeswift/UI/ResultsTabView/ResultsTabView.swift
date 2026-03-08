@@ -55,117 +55,120 @@ struct ResultsTabView: View {
 
 	var body: some View {
 		TabView(selection: $selectedTab) {
-			// Periphery Tab - Results Tree
-			VStack(alignment: .leading, spacing: 12) {
-				if !scanResults.isEmpty {
-					FilterBarView(filterState: filterState, scanResults: scanResults)
-						.padding(.horizontal)
-				}
+			Tab("Periphery", systemImage: "list.bullet.indent", value: ResultsTab.periphery) {
+				// Periphery Tab - Results Tree
+				VStack(alignment: .leading, spacing: 12) {
+					if !scanResults.isEmpty {
+						FilterBarView(filterState: filterState, scanResults: scanResults)
+							.padding(.horizontal)
+					}
 
-				Group {
-					if treeNodes.isEmpty, !scanResults.isEmpty {
-						ProgressView("Building tree view…")
-							.frame(maxWidth: .infinity)
+					Group {
+						if treeNodes.isEmpty, !scanResults.isEmpty {
+							ProgressView("Building tree view…")
+								.frame(maxWidth: .infinity)
+								.padding()
+						} else {
+							PeripheryTreeView(
+								rootNodes: treeNodes,
+								scanResults: scanResults,
+								sourceGraph: sourceGraph,
+								filterState: filterState,
+								selectedID: $peripheryTabSelectedID
+							)
 							.padding()
-					} else {
-						PeripheryTreeView(
-							rootNodes: treeNodes,
-							scanResults: scanResults,
-							sourceGraph: sourceGraph,
-							filterState: filterState,
-							selectedID: $peripheryTabSelectedID
-						)
-						.padding()
+						}
 					}
 				}
+				.frame(maxHeight: .infinity, alignment: .top)
 			}
-			.frame(maxHeight: .infinity, alignment: .top)
-			.tabItem {
-				Label("Periphery", systemImage: "list.bullet.indent")
-			}
-			.tag(ResultsTab.periphery)
 
-			// Tree Tab
-			Group {
-				if treeSection == nil {
-					ProgressView("Building Tree…")
-						.padding()
-				} else {
-					SingleCategoryTabView(
-						section: treeSection,
-						showOnlyViews: $showOnlyViews,
-						showFileName: $showFileName,
-						showFileInfo: $showFileInfo,
-						showCodeSize: $showCodeSize,
-						showPath: $showPath,
-						showConformance: $showConformance,
-						selectedID: $treeTabSelectedID,
-						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-						showToggle: true
-					)
-					.padding()
-				}
+			Tab("Tree", systemImage: "tree", value: ResultsTab.tree) {
+				CategoryTab(
+					section: treeSection,
+					progressLabel: "Building Tree…",
+					showOnlyViews: $showOnlyViews,
+					showFileName: $showFileName,
+					showFileInfo: $showFileInfo,
+					showCodeSize: $showCodeSize,
+					showPath: $showPath,
+					showConformance: $showConformance,
+					selectedID: $treeTabSelectedID,
+					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
+					showToggle: true
+				)
+				.frame(maxHeight: .infinity, alignment: .top)
 			}
-			.frame(maxHeight: .infinity, alignment: .top)
-			.tabItem {
-				Label("Tree", systemImage: "tree")
-			}
-			.tag(ResultsTab.tree)
 
-			// View Extensions Tab
-			Group {
-				if viewExtensionsSection == nil {
-					ProgressView("Building View Extensions…")
-						.padding()
-				} else {
-					SingleCategoryTabView(
-						section: viewExtensionsSection,
-						showOnlyViews: $showOnlyViews,
-						showFileName: $showFileName,
-						showFileInfo: $showFileInfo,
-						showCodeSize: $showCodeSize,
-						showPath: $showPath,
-						showConformance: $showConformance,
-						selectedID: $viewExtensionsTabSelectedID,
-						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-						showToggle: true
-					)
-					.padding()
-				}
+			Tab("View Extensions", systemImage: "puzzlepiece.extension", value: ResultsTab.viewExtensions) {
+				CategoryTab(
+					section: viewExtensionsSection,
+					progressLabel: "Building View Extensions…",
+					showOnlyViews: $showOnlyViews,
+					showFileName: $showFileName,
+					showFileInfo: $showFileInfo,
+					showCodeSize: $showCodeSize,
+					showPath: $showPath,
+					showConformance: $showConformance,
+					selectedID: $viewExtensionsTabSelectedID,
+					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
+					showToggle: true
+				)
+				.frame(maxHeight: .infinity, alignment: .top)
 			}
-			.frame(maxHeight: .infinity, alignment: .top)
-			.tabItem {
-				Label("View Extensions", systemImage: "puzzlepiece.extension")
-			}
-			.tag(ResultsTab.viewExtensions)
 
-			// Shared Tab
-			Group {
-				if sharedSection == nil {
-					ProgressView("Building Shared…")
-						.padding()
-				} else {
-					SingleCategoryTabView(
-						section: sharedSection,
-						showOnlyViews: $showOnlyViews,
-						showFileName: $showFileName,
-						showFileInfo: $showFileInfo,
-						showCodeSize: $showCodeSize,
-						showPath: $showPath,
-						showConformance: $showConformance,
-						selectedID: $sharedTabSelectedID,
-						projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-						showToggle: true
-					)
-					.padding()
-				}
+			Tab("Shared", systemImage: "square.stack.3d.up", value: ResultsTab.shared) {
+				CategoryTab(
+					section: sharedSection,
+					progressLabel: "Building Shared…",
+					showOnlyViews: $showOnlyViews,
+					showFileName: $showFileName,
+					showFileInfo: $showFileInfo,
+					showCodeSize: $showCodeSize,
+					showPath: $showPath,
+					showConformance: $showConformance,
+					selectedID: $sharedTabSelectedID,
+					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
+					showToggle: true
+				)
+				.frame(maxHeight: .infinity, alignment: .top)
 			}
-			.frame(maxHeight: .infinity, alignment: .top)
-			.tabItem {
-				Label("Shared", systemImage: "square.stack.3d.up")
-			}
-			.tag(ResultsTab.shared)
 		}
 		.frame(minHeight: 400)
+	}
+}
+
+private struct CategoryTab: View {
+	let section: CategoriesNode?
+	let progressLabel: String
+	@Binding var showOnlyViews: Bool
+	@Binding var showFileName: Bool
+	@Binding var showFileInfo: Bool
+	@Binding var showCodeSize: Bool
+	@Binding var showPath: Bool
+	@Binding var showConformance: Bool
+	@Binding var selectedID: String?
+	var projectRootPath: String?
+	let showToggle: Bool
+
+	var body: some View {
+		if let section {
+			SingleCategoryTabView(
+				section: section,
+				showOnlyViews: $showOnlyViews,
+				showFileName: $showFileName,
+				showFileInfo: $showFileInfo,
+				showCodeSize: $showCodeSize,
+				showPath: $showPath,
+				showConformance: $showConformance,
+				selectedID: $selectedID,
+				projectRootPath: projectRootPath,
+				showToggle: showToggle
+			)
+			.padding()
+		} else {
+			ProgressView(progressLabel)
+				.padding()
+		}
 	}
 }

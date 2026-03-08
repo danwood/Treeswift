@@ -11,7 +11,8 @@ import SwiftUI
  Observable object holding tree layout constants for real-time adjustment
  */
 @Observable
-final class TreeLayoutSettings: Sendable {
+@MainActor
+final class TreeLayoutSettings {
 	var indentPerLevel: CGFloat
 	var leafNodeOffset: CGFloat
 	var rowVerticalPadding: CGFloat
@@ -30,15 +31,6 @@ final class TreeLayoutSettings: Sendable {
 	}
 }
 
-private struct TreeLayoutSettingsKey: EnvironmentKey {
-	static let defaultValue = TreeLayoutSettings()
-}
-
 extension EnvironmentValues {
-	var treeLayoutSettings: TreeLayoutSettings {
-		get { self[TreeLayoutSettingsKey.self] }
-		set { self[TreeLayoutSettingsKey.self] = newValue }
-	}
+	@Entry var treeLayoutSettings: TreeLayoutSettings = .init()
 }
-
-// FIXME: use modern syntax

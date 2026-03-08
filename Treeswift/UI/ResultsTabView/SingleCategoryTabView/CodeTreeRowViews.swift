@@ -32,26 +32,28 @@ struct SectionRowView: View {
 					.id(child.id)
 				}
 			} label: {
-				HStack(spacing: 0) {
-					ChevronOrPlaceholder(
-						hasChildren: !section.children.isEmpty,
-						expandedIDs: $expandedIDs,
-						id: section.id.rawValue,
-						toggleWithDescendants: { toggleWithDescendants(for: .section(section)) }
-					)
-
-					Text(section.title)
-						.font(.system(.title3, design: .default))
-						.fontWeight(.bold)
-						.foregroundStyle(.primary)
-				}
-				.treeLabelPadding(indentLevel: indentLevel)
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.background(selectedID == section.id.rawValue ? Color.accentColor.opacity(0.2) : Color.clear)
-				.contentShape(.rect)
-				.onTapGesture {
+				Button {
 					selectedID = section.id.rawValue
+				} label: {
+					HStack(spacing: 0) {
+						ChevronOrPlaceholder(
+							hasChildren: !section.children.isEmpty,
+							expandedIDs: $expandedIDs,
+							id: section.id.rawValue,
+							toggleWithDescendants: { toggleWithDescendants(for: .section(section)) }
+						)
+
+						Text(section.title)
+							.font(.system(.title3, design: .default))
+							.bold()
+							.foregroundStyle(.primary)
+					}
+					.treeLabelPadding(indentLevel: indentLevel)
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.background(selectedID == section.id.rawValue ? Color.accentColor.opacity(0.2) : Color.clear)
+					.contentShape(.rect)
 				}
+				.buttonStyle(.plain)
 				.contextMenu {
 					Button("Copy") {
 						let text = TreeCopyFormatter.formatForCopy(
@@ -101,27 +103,29 @@ struct SyntheticRootRowView: View {
 				.id(child.id)
 			}
 		} label: {
-			HStack(spacing: 0) {
-				ChevronOrPlaceholder(
-					hasChildren: !root.children.isEmpty,
-					expandedIDs: $expandedIDs,
-					id: root.id,
-					toggleWithDescendants: { toggleWithDescendants(for: .syntheticRoot(root)) }
-				)
-
-				HStack(spacing: 4) {
-					root.icon.view(size: 14)
-					Text(root.title)
-						.font(.system(.body, design: .monospaced))
-				}
-			}
-			.treeLabelPadding(indentLevel: indentLevel)
-			.frame(maxWidth: .infinity, alignment: .leading)
-			.background(selectedID == root.id ? Color.accentColor.opacity(0.2) : Color.clear)
-			.contentShape(.rect)
-			.onTapGesture {
+			Button {
 				selectedID = root.id
+			} label: {
+				HStack(spacing: 0) {
+					ChevronOrPlaceholder(
+						hasChildren: !root.children.isEmpty,
+						expandedIDs: $expandedIDs,
+						id: root.id,
+						toggleWithDescendants: { toggleWithDescendants(for: .syntheticRoot(root)) }
+					)
+
+					HStack(spacing: 4) {
+						root.icon.view(size: 14)
+						Text(root.title)
+							.font(.system(.body, design: .monospaced))
+					}
+				}
+				.treeLabelPadding(indentLevel: indentLevel)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.background(selectedID == root.id ? Color.accentColor.opacity(0.2) : Color.clear)
+				.contentShape(.rect)
 			}
+			.buttonStyle(.plain)
 			.contextMenu {
 				Button("Copy") {
 					let text = TreeCopyFormatter.formatForCopy(
@@ -191,87 +195,75 @@ struct DeclarationRowView: View {
 					.id(child.id)
 				}
 			} label: {
-				HStack(alignment: .firstTextBaseline, spacing: 4) {
-					ChevronOrPlaceholder(
-						hasChildren: !declaration.children.isEmpty,
-						expandedIDs: $expandedIDs,
-						id: declaration.id,
-						toggleWithDescendants: { toggleWithDescendants(for: .declaration(declaration)) }
-					)
-
-					if let folderIndicator = declaration.folderIndicator {
-						folderIndicator.view(size: 14)
-					}
-					declaration.typeIcon.view(size: 14)
-					if showFileName, cachedFileNameMatchesSymbol {
-						Text(declaration.displayName)
-							.font(.body)
-							+ Text(".swift")
-							.font(.system(.body, design: .monospaced))
-							.foregroundStyle(.secondary)
-
-					} else {
-						Text(declaration.displayName)
-					}
-
-					if showConformance, let conformances = declaration.conformances {
-						Text(": \(conformances)")
-					}
-
-					// not quite what I want, leave out for now
-					// if showFileInfo {
-					// 	if declaration.isSameFileAsChildren == true {
-					// 		TreeIcon.systemImage("document.fill", Color.purple).view(size: 14)
-					// 	}
-					// }
-
-					// if let relationship = declaration.relationship, relationship != RelationshipType.constructs {
-					// 	Text("{\(relationship.rawValue)}")
-					// 		.font(.system(.body, design: .monospaced))
-					// 		.foregroundStyle(.secondary)
-					// }
-
-					if showFileName,
-					   !cachedFileNameMatchesSymbol, !declaration.locationInfo.displayText.isEmpty,
-					   !(declaration.locationInfo.type == .swiftNested || declaration.locationInfo.type == .sameFile) {
-						Text(declaration.locationInfo.displayText)
-							.font(.system(.body, design: .monospaced))
-							.foregroundStyle(.secondary)
-							.foregroundStyle(.purple)
-					}
-					if showFileInfo {
-						if let icon = declaration.locationInfo.icon {
-							icon.view(size: 14)
-								.help(declaration.locationInfo.fileName ?? "")
-						}
-					}
-
-					if showPath {
-						Spacer()
-						Text(declaration.containerPath)
-							.font(.caption2)
-					}
-
-					if showCodeSize {
-						if !showPath {
-							Spacer() // Only spacer if we didn't already use it for path
-						}
-
-						LineSizeGraph(
-							line: declaration.locationInfo.line,
-							endLine: declaration.locationInfo.endLine
-						)
-						.frame(width: 100)
-						.help("\((declaration.locationInfo.endLine ?? 0) - declaration.locationInfo.line) lines")
-					}
-				}
-				.treeLabelPadding(indentLevel: indentLevel)
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.background(selectedID == declaration.id ? Color.accentColor.opacity(0.2) : Color.clear)
-				.contentShape(.rect)
-				.onTapGesture {
+				Button {
 					selectedID = declaration.id
+				} label: {
+					HStack(alignment: .firstTextBaseline, spacing: 4) {
+						ChevronOrPlaceholder(
+							hasChildren: !declaration.children.isEmpty,
+							expandedIDs: $expandedIDs,
+							id: declaration.id,
+							toggleWithDescendants: { toggleWithDescendants(for: .declaration(declaration)) }
+						)
+
+						if let folderIndicator = declaration.folderIndicator {
+							folderIndicator.view(size: 14)
+						}
+						declaration.typeIcon.view(size: 14)
+						if showFileName, cachedFileNameMatchesSymbol {
+							let name = Text(declaration.displayName).font(.body)
+							let suffix = Text(".swift")
+								.font(.system(.body, design: .monospaced))
+								.foregroundStyle(.secondary)
+							Text("\(name)\(suffix)")
+						} else {
+							Text(declaration.displayName)
+						}
+
+						if showConformance, let conformances = declaration.conformances {
+							Text(": \(conformances)")
+						}
+
+						if showFileName,
+						   !cachedFileNameMatchesSymbol, !declaration.locationInfo.displayText.isEmpty,
+						   !(declaration.locationInfo.type == .swiftNested || declaration.locationInfo
+						   	.type == .sameFile) {
+							Text(declaration.locationInfo.displayText)
+								.font(.system(.body, design: .monospaced))
+								.foregroundStyle(.secondary)
+						}
+						if showFileInfo {
+							if let icon = declaration.locationInfo.icon {
+								icon.view(size: 14)
+									.help(declaration.locationInfo.fileName ?? "")
+							}
+						}
+
+						if showPath {
+							Spacer()
+							Text(declaration.containerPath)
+								.font(.caption)
+						}
+
+						if showCodeSize {
+							if !showPath {
+								Spacer() // Only spacer if we didn't already use it for path
+							}
+
+							LineSizeGraph(
+								line: declaration.locationInfo.line,
+								endLine: declaration.locationInfo.endLine
+							)
+							.frame(width: 100)
+							.help("\((declaration.locationInfo.endLine ?? 0) - declaration.locationInfo.line) lines")
+						}
+					}
+					.treeLabelPadding(indentLevel: indentLevel)
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.background(selectedID == declaration.id ? Color.accentColor.opacity(0.2) : Color.clear)
+					.contentShape(.rect)
 				}
+				.buttonStyle(.plain)
 				.simultaneousGesture(
 					TapGesture(count: 2)
 						.onEnded {
@@ -314,7 +306,7 @@ struct DeclarationRowView: View {
 
 			if let referencerInfo = declaration.referencerInfo {
 				VStack(alignment: .leading, spacing: 2) {
-					ForEach(Array(referencerInfo.enumerated()), id: \.offset) { index, info in
+					ForEach(referencerInfo.enumerated(), id: \.offset) { index, info in
 						Text(index == 0 ? "     ← \(info)" : "       \(info)")
 							.font(.system(.caption, design: .monospaced))
 							.foregroundStyle(.secondary)

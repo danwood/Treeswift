@@ -55,14 +55,10 @@ enum TreeCopyFormatter {
 
 		case let .declaration(decl):
 			var text = ""
-			// text += decl.typeIcon + " "
 			text += decl.displayName
 			if let conformances = decl.conformances {
 				text += ": \(conformances)"
 			}
-			// if let relationship = decl.relationship {
-			//	text += " {\(relationship)}"
-			// }
 			text += " " + decl.locationInfo.displayText
 			lines.append(indent + text)
 
@@ -77,7 +73,7 @@ enum TreeCopyFormatter {
 			}
 
 		case let .syntheticRoot(root):
-			lines.append(indent /* + root.icon + " "*/ + root.title)
+			lines.append(indent + root.title)
 			if includeDescendants {
 				for child in root.children {
 					lines.append(formatForCopy(

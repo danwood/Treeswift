@@ -6,15 +6,7 @@ import SourceGraph
 // Adjust the compared properties to the public API of FilterState available in this project.
 extension FilterState: Equatable {
 	public static func == (lhs: FilterState, rhs: FilterState) -> Bool {
-		// Heuristic equality: compare properties that influence filtering.
-		// If FilterState already exposes an identifier or equatable properties, compare them here.
-		// Fallback: compare by object identity to avoid false positives.
-		// Replace the following lines with concrete property comparisons if available.
-		if let l = lhs as AnyObject?, let r = rhs as AnyObject? {
-			return l === r
-		}
-		// As a last resort, treat as not equal.
-		return false
+		lhs === rhs
 	}
 }
 

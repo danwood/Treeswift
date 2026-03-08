@@ -37,14 +37,22 @@ struct UniversalDetailView: View {
 								filterState: $filterState
 							)
 						} else {
-							EmptySelectionView(message: "Select an item in the Periphery tab to view details")
+							ContentUnavailableView(
+								"No Selection",
+								systemImage: "sidebar.right",
+								description: Text("Select an item in the Periphery tab to view details")
+							)
 						}
 
 					case .tree, .viewExtensions, .shared:
 						if let node = categoriesNode {
 							CategoriesDetailView(node: node)
 						} else {
-							EmptySelectionView(message: "Select an item to view details")
+							ContentUnavailableView(
+								"No Selection",
+								systemImage: "sidebar.right",
+								description: Text("Select an item to view details")
+							)
 						}
 					}
 				}
@@ -53,24 +61,5 @@ struct UniversalDetailView: View {
 			.frame(maxWidth: .infinity, alignment: .leading)
 		}
 		.background(Color(nsColor: .controlBackgroundColor))
-	}
-}
-
-// Generic empty selection view
-private struct EmptySelectionView: View {
-	let message: String
-
-	var body: some View {
-		VStack(spacing: 12) {
-			Text("No Selection")
-				.font(.title2)
-				.foregroundStyle(.secondary)
-			Text(message)
-				.font(.body)
-				.foregroundStyle(.tertiary)
-				.multilineTextAlignment(.center)
-		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.padding(40)
 	}
 }

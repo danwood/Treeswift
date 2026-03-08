@@ -263,18 +263,6 @@ final class PeripheryScanRunner: Sendable {
 						if let data = "* ✓ Categories streaming complete\n".data(using: .utf8) {
 							try? FileHandle.standardError.write(contentsOf: data)
 						}
-
-						/* TODO: Integrate this logic here, roughly:
-
-						 if logToConsole {
-						 Task.detached(priority: .utility) {
-						 let output = PrintCapture.capture {
-						 dumper.printHighLevelTypesAndReferences(sourceGraph: sourceGraph)
-						 }
-						 "=== Categories Output ===\n\(output)".logToConsole()
-						 }
-						 }
-						 */
 					}
 
 					// Wait for both tasks to complete

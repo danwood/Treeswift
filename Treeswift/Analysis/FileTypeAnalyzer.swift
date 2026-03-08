@@ -109,8 +109,8 @@ final class FileTypeAnalyzer: Sendable {
 	) async -> [FileTypeInfo] {
 		let allDeclarations = sourceGraph.allDeclarations
 
-		/* All top-level symbol kinds we track - includes types, typealiases, free functions,
-		 global variables, operators, precedence groups, and macros. */
+		// All top-level symbol kinds we track - includes types, typealiases, free functions,
+		// global variables, operators, precedence groups, and macros.
 		let topLevelSymbolKinds: Set<Declaration.Kind> = [
 			.class,
 			.struct,
@@ -135,10 +135,10 @@ final class FileTypeAnalyzer: Sendable {
 		let targetPath = path
 		let fileDeclarations = allDeclarations.filter { $0.location.file.path.string == targetPath }
 
-		/* Filter for top-level symbols that are accessible across files.
-		 We exclude private/fileprivate (file/scope-scoped) but include everything else
-		 (internal, public, open, package). For folder organization analysis, internal and
-		 public are treated equivalently - both can be referenced across files within the module. */
+		// Filter for top-level symbols that are accessible across files.
+		// We exclude private/fileprivate (file/scope-scoped) but include everything else
+		// (internal, public, open, package). For folder organization analysis, internal and
+		// public are treated equivalently - both can be referenced across files within the module.
 		var allTopLevelSymbols: [Declaration] = []
 		for decl in fileDeclarations {
 			if topLevelSymbolKinds.contains(decl.kind),
@@ -148,8 +148,8 @@ final class FileTypeAnalyzer: Sendable {
 			}
 		}
 
-		/* Check if this is an extension-only file. Extension members (methods, properties) have
-		 a parent type that's NOT defined in the same file. */
+		// Check if this is an extension-only file. Extension members (methods, properties) have
+		// a parent type that's NOT defined in the same file.
 		var isExtensionOnlyFile = false
 		var extensionParentName: String?
 		if allTopLevelSymbols.isEmpty, !fileDeclarations.isEmpty {
@@ -172,10 +172,10 @@ final class FileTypeAnalyzer: Sendable {
 		let fileName = (path as NSString).lastPathComponent
 		let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
 
-		/* Build typeInfos from all top-level symbols.
-		 Process primary types first, then extensions, then other symbols. This ensures that
-		 if @Observable generates both a class and an extension with the same name, the class
-		 is processed first and the extension is skipped as a duplicate. */
+		// Build typeInfos from all top-level symbols.
+		// Process primary types first, then extensions, then other symbols. This ensures that
+		// if @Observable generates both a class and an extension with the same name, the class
+		// is processed first and the extension is skipped as a duplicate.
 		var processedSymbolNames = Set<String>()
 		let sortedSymbols = allTopLevelSymbols.sorted(by: { getStartLine($0) < getStartLine($1) })
 		let primaryTypes = sortedSymbols.filter { $0.kind.isTypeKind && !$0.kind.isExtensionKind }
@@ -218,8 +218,8 @@ final class FileTypeAnalyzer: Sendable {
 			processedSymbolNames.insert(symbolName)
 		}
 
-		/* If this is an extension-only file with no typeInfos yet, create a synthetic
-		 extension entry so the file shows the 🧩 icon. */
+		// If this is an extension-only file with no typeInfos yet, create a synthetic
+		// extension entry so the file shows the 🧩 icon.
 		if isExtensionOnlyFile, typeInfos.isEmpty, let parentName = extensionParentName {
 			typeInfos.append(FileTypeInfo(
 				name: parentName,
@@ -240,11 +240,13 @@ final class FileTypeAnalyzer: Sendable {
 }
 
 private extension Declaration {
-	/* Returns true if this declaration is accessible across files within the module.
+	/**
+	 Returns true if this declaration is accessible across files within the module.
 	 Excludes private and fileprivate, includes internal, public, open, and package.
 
 	 For folder organization analysis, internal and public symbols are treated
-	 equivalently - both can be referenced across files within the module. */
+	 equivalently - both can be referenced across files within the module.
+	 */
 	nonisolated var isAccessibleAcrossFiles: Bool {
 		accessibility.value != .private && accessibility.value != .fileprivate
 	}

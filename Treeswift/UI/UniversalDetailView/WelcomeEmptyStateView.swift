@@ -12,7 +12,7 @@ struct WelcomeEmptyStateView: View {
 		VStack(alignment: .leading, spacing: 16) {
 			Text("Welcome to Treeswift")
 				.font(.title)
-				.fontWeight(.semibold)
+				.bold()
 
 			Text("Configure your project settings and run a scan to begin analysis.")
 				.font(.body)

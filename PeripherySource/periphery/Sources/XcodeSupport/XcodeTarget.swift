@@ -25,7 +25,7 @@ public final class XcodeTarget {
     public func identifyFiles() throws {
         let sourceRoot = project.sourceRoot.lexicallyNormalized()
         let rootFileSystemFiles = try project.xcodeProject.pbxproj.fileSystemSynchronizedRootGroups.flatMapSet {
-            if let stringPath = try $0.fullPath(sourceRoot: sourceRoot.string) {
+            if let stringPath = try? $0.fullPath(sourceRoot: sourceRoot.string) {
                 let path = FilePath(stringPath)
                 return FilePath.glob(path.appending("**/*").string)
             }
@@ -58,7 +58,7 @@ public final class XcodeTarget {
 
         let foundFiles = try targetPhases.flatMapSet {
             try ($0.files ?? []).compactMapSet {
-                if let stringPath = try $0.file?.fullPath(sourceRoot: sourceRoot.string) {
+                if let stringPath = try? $0.file?.fullPath(sourceRoot: sourceRoot.string) {
                     let path = FilePath(stringPath)
                     if let ext = path.extension, kind.extensions.contains(ext.lowercased()) {
                         return path

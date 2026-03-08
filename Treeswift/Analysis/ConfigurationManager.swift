@@ -22,7 +22,7 @@ final class ConfigurationManager {
 		loadConfigurations()
 		// If no configurations exist, create a default demo configuration
 		if configurations.isEmpty {
-			configurations = [PeripheryConfiguration.demo()]
+			configurations = []
 			currentConfigurationIndex = 0
 			saveConfigurations()
 		}

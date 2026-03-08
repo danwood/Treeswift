@@ -15,23 +15,27 @@ struct CategoriesDetailView: View {
 		VStack(alignment: .leading, spacing: 16) {
 			switch node {
 			case let .section(section):
-				sectionDetailView(section)
+				SectionDetailContent(section: section)
 			case let .declaration(declaration):
-				declarationDetailView(declaration)
+				DeclarationDetailContent(declaration: declaration)
 			case let .syntheticRoot(root):
-				rootDetailView(root)
+				RootDetailContent(root: root)
 			}
 		}
 	}
+}
 
-	private func sectionDetailView(_ section: SectionNode) -> some View {
+private struct SectionDetailContent: View {
+	let section: SectionNode
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			HStack {
 				Image(systemName: "folder")
 					.foregroundStyle(.blue)
 				Text(section.title)
 					.font(.title2)
-					.fontWeight(.semibold)
+					.bold()
 			}
 
 			Text("\(section.children.count) items")
@@ -39,8 +43,12 @@ struct CategoriesDetailView: View {
 				.foregroundStyle(.secondary)
 		}
 	}
+}
 
-	private func declarationDetailView(_ declaration: DeclarationNode) -> some View {
+private struct DeclarationDetailContent: View {
+	let declaration: DeclarationNode
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			// Header with icon
 			HStack(spacing: 4) {
@@ -50,7 +58,7 @@ struct CategoriesDetailView: View {
 				declaration.typeIcon.view(size: 20)
 				Text(declaration.displayName)
 					.font(.system(.title2, design: .default))
-					.fontWeight(.semibold)
+					.bold()
 			}
 
 			// Icon explanation
@@ -112,12 +120,11 @@ struct CategoriesDetailView: View {
 							.font(.system(.caption, design: .monospaced))
 							.foregroundStyle(.secondary)
 
-						Button(action: {
+						Button("Open in Xcode", systemImage: "arrow.right.circle.fill") {
 							openDeclarationInEditor(declaration)
-						}) {
-							Image(systemName: "arrow.right.circle.fill")
-								.foregroundStyle(.secondary)
 						}
+						.labelStyle(.iconOnly)
+						.foregroundStyle(.secondary)
 						.buttonStyle(.plain)
 						.help("Open in Xcode")
 					}
@@ -130,12 +137,6 @@ struct CategoriesDetailView: View {
 						.font(.caption)
 						.foregroundStyle(.secondary)
 				}
-
-				// if let warningText = declaration.locationInfo.warningText {
-				// 	Text(warningText)
-				// 		.font(.caption)
-				// 		.foregroundStyle(.orange)
-				// }
 			}
 
 			// Referencers
@@ -167,7 +168,7 @@ struct CategoriesDetailView: View {
 	}
 
 	// FIXME: redundant with DetailTopLevelSymbolsSection.iconTooltip(for:…)
-	private func typeIconExplanation(_ icon: TreeIcon) -> String? {
+	func typeIconExplanation(_ icon: TreeIcon) -> String? {
 		guard case let .emoji(emoji) = icon else { return nil }
 		switch emoji {
 		case "🔷": return "Main App entry point (@main)"
@@ -184,7 +185,7 @@ struct CategoriesDetailView: View {
 		}
 	}
 
-	private func locationIconExplanation(_ icon: TreeIcon) -> String? {
+	func locationIconExplanation(_ icon: TreeIcon) -> String? {
 		guard case let .emoji(emoji) = icon else { return nil }
 		switch emoji {
 		case "🆘": return "Declaration is too large for its current file"
@@ -196,24 +197,30 @@ struct CategoriesDetailView: View {
 		}
 	}
 
-	private func extractFileName(from relativePath: String?) -> String? {
+	func extractFileName(from relativePath: String?) -> String? {
 		guard let path = relativePath else { return nil }
 		return (path as NSString).lastPathComponent
 	}
 
-	private func openDeclarationInEditor(_ declaration: DeclarationNode) {
+	func openDeclarationInEditor(_ declaration: DeclarationNode) {
 		guard declaration.locationInfo.fileName != nil else { return }
-		/* The DeclarationNode only stores the file name, not the full path.
-		 Opening by file name alone would require searching for the file.
-		 For now, just open Xcode and let the user navigate. */
-		NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Xcode.app"))
+		// The DeclarationNode only stores the file name, not the full path.
+		// Opening by file name alone would require searching for the file.
+		// For now, just open Xcode and let the user navigate.
+		if let xcodeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.dt.Xcode") {
+			NSWorkspace.shared.open(xcodeURL)
+		}
 	}
+}
 
-	private func rootDetailView(_ root: SyntheticRootNode) -> some View {
+private struct RootDetailContent: View {
+	let root: SyntheticRootNode
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: 16) {
 			Text(root.title)
 				.font(.title2)
-				.fontWeight(.semibold)
+				.bold()
 
 			Text("\(root.children.count) top-level items")
 				.font(.body)

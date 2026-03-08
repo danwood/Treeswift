@@ -25,12 +25,18 @@ struct ContentView: View {
 	@State private var unattachedTabSelectedID: String?
 	@State private var filterState = FilterState()
 	@State private var layoutSettings = TreeLayoutSettings()
+	@State private var selectedPeripheryNode: TreeNode?
+	@State private var selectedFilesNode: FileBrowserNode?
+	@State private var selectedCategoriesNode: CategoriesNode?
 	@Environment(FileInspectorState.self) private var inspectorState
 
 	init() {
 		_scanStateManager = State(initialValue: ScanStateManager())
 	}
 
+	// Binding(get:set:) is intentional here — @AppStorage cannot store UUID? natively.
+	// A retroactive RawRepresentable conformance on Optional<UUID> doesn't satisfy
+	// AppStorage's constraints on macOS. This computed Binding is the correct pattern.
 	private var selectedConfigID: Binding<UUID?> {
 		Binding(
 			get: {
@@ -47,20 +53,29 @@ struct ContentView: View {
 		return scanStateManager.getState(for: selectedID)
 	}
 
-	private var selectedPeripheryNode: TreeNode? {
+	private func recomputeSelectedPeripheryNode() {
 		guard let selectedID = peripheryTabSelectedID,
-		      let scanState = currentScanState else { return nil }
-		return findPeripheryNode(withID: selectedID, in: scanState.treeNodes)
+		      let scanState = currentScanState else {
+			selectedPeripheryNode = nil
+			return
+		}
+		selectedPeripheryNode = findPeripheryNode(withID: selectedID, in: scanState.treeNodes)
 	}
 
-	private var selectedFilesNode: FileBrowserNode? {
+	private func recomputeSelectedFilesNode() {
 		guard let selectedID = filesTabSelectedID,
-		      let scanState = currentScanState else { return nil }
-		return scanState.fileNodesLookup[selectedID]
+		      let scanState = currentScanState else {
+			selectedFilesNode = nil
+			return
+		}
+		selectedFilesNode = scanState.fileNodesLookup[selectedID]
 	}
 
-	private var selectedCategoriesNode: CategoriesNode? {
-		guard let scanState = currentScanState else { return nil }
+	private func recomputeSelectedCategoriesNode() {
+		guard let scanState = currentScanState else {
+			selectedCategoriesNode = nil
+			return
+		}
 		let selectedID: String?
 		let section: CategoriesNode?
 
@@ -75,11 +90,15 @@ struct ContentView: View {
 			selectedID = sharedTabSelectedID
 			section = scanState.sharedSection
 		default:
-			return nil
+			selectedCategoriesNode = nil
+			return
 		}
 
-		guard let id = selectedID, let sect = section else { return nil }
-		return findCategoriesNode(withID: id, in: [sect])
+		guard let id = selectedID, let sect = section else {
+			selectedCategoriesNode = nil
+			return
+		}
+		selectedCategoriesNode = findCategoriesNode(withID: id, in: [sect])
 	}
 
 	var body: some View {
@@ -123,41 +142,27 @@ struct ContentView: View {
 				)
 			}
 		} detail: {
-			if let scanState = currentScanState {
-				UniversalDetailView(
-					selectedTab: selectedTab,
-					peripheryNode: selectedPeripheryNode,
-					filesNode: selectedFilesNode,
-					categoriesNode: selectedCategoriesNode,
-					projectPath: scanState.projectPath,
-					hasResults: !scanState.scanResults.isEmpty || scanState.sourceGraph != nil,
-					scanResults: scanState.scanResults,
-					sourceGraph: scanState.sourceGraph,
-					filterState: $filterState
-				)
-				.navigationSplitViewColumnWidth(
-					min: LayoutConstants.detailColumnMinWidth,
-					ideal: LayoutConstants.detailColumnIdealWidth,
-					max: LayoutConstants.detailColumnMaxWidth
-				)
-			} else {
-				UniversalDetailView(
-					selectedTab: selectedTab,
-					peripheryNode: nil,
-					filesNode: nil,
-					categoriesNode: nil,
-					projectPath: nil,
-					hasResults: false,
-					scanResults: [],
-					sourceGraph: nil,
-					filterState: $filterState
-				)
-				.navigationSplitViewColumnWidth(
-					min: LayoutConstants.detailColumnMinWidth,
-					ideal: LayoutConstants.detailColumnIdealWidth,
-					max: LayoutConstants.detailColumnMaxWidth
-				)
-			}
+			let projectPath = currentScanState?.projectPath
+			let hasResults = currentScanState.map { !$0.scanResults.isEmpty || $0.sourceGraph != nil } ?? false
+			let scanResults = currentScanState?.scanResults ?? []
+			let sourceGraph = currentScanState?.sourceGraph
+
+			UniversalDetailView(
+				selectedTab: selectedTab,
+				peripheryNode: selectedPeripheryNode,
+				filesNode: selectedFilesNode,
+				categoriesNode: selectedCategoriesNode,
+				projectPath: projectPath,
+				hasResults: hasResults,
+				scanResults: scanResults,
+				sourceGraph: sourceGraph,
+				filterState: $filterState
+			)
+			.navigationSplitViewColumnWidth(
+				min: LayoutConstants.detailColumnMinWidth,
+				ideal: LayoutConstants.detailColumnIdealWidth,
+				max: LayoutConstants.detailColumnMaxWidth
+			)
 		}
 		.environment(\.treeLayoutSettings, layoutSettings)
 		.onAppear {
@@ -171,12 +176,30 @@ struct ContentView: View {
 			if case let .gui(scanConfiguration: configName?) = launchMode {
 				handleScanArgument(configName: configName)
 			}
-		}
-		.onChange(of: filesTabSelectedID) { _, newID in
-			updateInspectorState(forFilesSelection: newID)
+
+			recomputeSelectedPeripheryNode()
+			recomputeSelectedFilesNode()
+			recomputeSelectedCategoriesNode()
 		}
 		.onChange(of: peripheryTabSelectedID) { _, newID in
+			recomputeSelectedPeripheryNode()
 			updateInspectorState(forPeripherySelection: newID)
+		}
+		.onChange(of: filesTabSelectedID) { _, newID in
+			recomputeSelectedFilesNode()
+			updateInspectorState(forFilesSelection: newID)
+		}
+		.onChange(of: treeTabSelectedID) {
+			recomputeSelectedCategoriesNode()
+		}
+		.onChange(of: viewExtensionsTabSelectedID) {
+			recomputeSelectedCategoriesNode()
+		}
+		.onChange(of: sharedTabSelectedID) {
+			recomputeSelectedCategoriesNode()
+		}
+		.onChange(of: selectedTab) {
+			recomputeSelectedCategoriesNode()
 		}
 	}
 
