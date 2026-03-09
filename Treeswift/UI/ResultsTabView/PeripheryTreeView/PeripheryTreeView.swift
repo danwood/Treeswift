@@ -22,6 +22,7 @@ struct PeripheryTreeView: View {
 	let sourceGraph: SourceGraph?
 	let filterState: FilterState?
 	@Binding var selectedID: String?
+	var searchNavState: SearchNavigationState
 	@State private var expandedIDs: Set<String> = []
 	@State private var hasAppearedOnce: Bool = false
 	@State private var claimFocusTrigger: Bool = false
@@ -35,6 +36,8 @@ struct PeripheryTreeView: View {
 	@State private var cachedVisibleItems: [String] = []
 	@State private var removalSummary: RemovalSummary?
 	@State private var operationError: OperationError?
+	@State private var typeAheadState = TypeAheadState()
+	@AppStorage("typeAheadSearchAllNodes") private var typeAheadSearchAllNodes: Bool = false
 	@Environment(\.undoManager) private var undoManager
 
 	/**
@@ -54,123 +57,131 @@ struct PeripheryTreeView: View {
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
 
-		LazyVStack(alignment: .leading, spacing: 0) {
-			ForEach(filteredNodesCache, id: \.id) { node in
-				TreeNodeView(
-					node: node,
-					filterState: filterState,
-					scanResults: scanResults,
-					expandedIDs: $expandedIDs,
-					selectedID: $selectedID,
-					removingFileIDs: $removingFileIDs,
-					hiddenWarningIDs: hiddenWarningIDs,
-					resultIndex: resultIndex,
-					onIgnoreAllWarnings: ignoreAllWarnings,
-					onRemoveAllUnusedCode: removeAllUnusedCode,
-					onIgnoreAllWarningsInFolder: ignoreAllWarningsInFolder,
-					onRemoveAllUnusedCodeInFolder: removeAllUnusedCodeInFolder,
-					copyMenuLabel: copyMenuLabel,
-					copyPathMenuLabel: copyPathMenuLabel,
-					copyFilePathsToClipboard: copyFilePathsToClipboard
+		ScrollViewReader { scrollProxy in
+			LazyVStack(alignment: .leading, spacing: 0) {
+				ForEach(filteredNodesCache, id: \.id) { node in
+					TreeNodeView(
+						node: node,
+						filterState: filterState,
+						scanResults: scanResults,
+						expandedIDs: $expandedIDs,
+						selectedID: $selectedID,
+						removingFileIDs: $removingFileIDs,
+						hiddenWarningIDs: hiddenWarningIDs,
+						resultIndex: resultIndex,
+						onIgnoreAllWarnings: ignoreAllWarnings,
+						onRemoveAllUnusedCode: removeAllUnusedCode,
+						onIgnoreAllWarningsInFolder: ignoreAllWarningsInFolder,
+						onRemoveAllUnusedCodeInFolder: removeAllUnusedCodeInFolder,
+						copyMenuLabel: copyMenuLabel,
+						copyPathMenuLabel: copyPathMenuLabel,
+						copyFilePathsToClipboard: copyFilePathsToClipboard
+					)
+					.frame(maxWidth: .infinity, alignment: .leading)
+				}
+			}
+			.focusableTreeNavigation(
+				selectedID: $selectedID,
+				visibleItems: cachedVisibleItems,
+				claimFocusTrigger: $claimFocusTrigger,
+				onCharacterKey: { chars in
+					handleTypeAheadCharacter(chars, scrollProxy: scrollProxy)
+				}
+			)
+			.focusedValue(\.copyableText, currentCopyableText(from: filteredNodesCache))
+			.focusedValue(\.copyMenuTitle, "Copy Periphery Warnings")
+			.onCopyCommand {
+				guard let text = currentCopyableText(from: filteredNodesCache) else { return [] }
+				return [NSItemProvider(object: text as NSString)]
+			}
+			.onAppear {
+				resultIndex.rebuild(from: scanResults)
+				recomputeFilteredNodes()
+				rebuildVisibleItemsCache()
+				// Only expand on first appearance to avoid re-expanding when switching tabs
+				if expandedIDs.isEmpty {
+					expandToFileLevel(using: rootNodes)
+				}
+			}
+			.task {
+				guard !hasAppearedOnce else { return }
+				hasAppearedOnce = true
+				try? await Task.sleep(for: .milliseconds(50))
+				claimFocusTrigger.toggle()
+			}
+			.onChange(of: rootNodes) {
+				recomputeFilteredNodes()
+			}
+			.onChange(of: filterState?.filterChangeCounter) { _, _ in
+				resultIndex.invalidateCache(for: filterState)
+				recomputeFilteredNodes()
+			}
+			.onChange(of: scanResults) {
+				resultIndex.rebuild(from: scanResults)
+				recomputeFilteredNodes()
+			}
+			.onChange(of: hiddenFileIDs) {
+				recomputeFilteredNodes()
+			}
+			.onChange(of: hiddenWarningIDs) {
+				recomputeFilteredNodes()
+			}
+			.onChange(of: filteredNodesCache) {
+				rebuildVisibleItemsCache()
+			}
+			.onChange(of: expandedIDs) {
+				rebuildVisibleItemsCache()
+			}
+			.task {
+				// NotificationCenter.notifications(named:) returns an AsyncSequence that is
+				// automatically cancelled when the task is cancelled (view disappears),
+				// making this superior to onReceive for structured concurrency participation.
+				for await notification in NotificationCenter.default.notifications(
+					named: Notification.Name("PeripheryWarningCompleted")
+				) {
+					if let warningID = notification.object as? String {
+						hiddenWarningIDs.insert(warningID)
+					}
+				}
+			}
+			.task {
+				for await notification in NotificationCenter.default.notifications(
+					named: Notification.Name("PeripheryWarningRestored")
+				) {
+					if let warningID = notification.object as? String {
+						hiddenWarningIDs.remove(warningID)
+					}
+				}
+			}
+			.sheet(isPresented: $showProgressSheet) {
+				FileOperationProgressSheet(
+					progressState: fileOperationProgress,
+					onCancel: {
+						fileOperationProgress.isCancelled = true
+					}
 				)
-				.frame(maxWidth: .infinity, alignment: .leading)
+				.interactiveDismissDisabled()
 			}
-		}
-		.focusableTreeNavigation(
-			selectedID: $selectedID,
-			visibleItems: cachedVisibleItems,
-			claimFocusTrigger: $claimFocusTrigger
-		)
-		.focusedValue(\.copyableText, currentCopyableText(from: filteredNodesCache))
-		.focusedValue(\.copyMenuTitle, "Copy Periphery Warnings")
-		.onCopyCommand {
-			guard let text = currentCopyableText(from: filteredNodesCache) else { return [] }
-			return [NSItemProvider(object: text as NSString)]
-		}
-		.onAppear {
-			resultIndex.rebuild(from: scanResults)
-			recomputeFilteredNodes()
-			rebuildVisibleItemsCache()
-			// Only expand on first appearance to avoid re-expanding when switching tabs
-			if expandedIDs.isEmpty {
-				expandToFileLevel(using: rootNodes)
+			.alert(item: $removalSummary) { summary in
+				Alert(
+					title: Text("Deletion Summary"),
+					message: Text(buildSummaryMessage(summary)),
+					dismissButton: .default(Text("OK"))
+				)
 			}
-		}
-		.task {
-			guard !hasAppearedOnce else { return }
-			hasAppearedOnce = true
-			try? await Task.sleep(for: .milliseconds(50))
-			claimFocusTrigger.toggle()
-		}
-		.onChange(of: rootNodes) {
-			recomputeFilteredNodes()
-		}
-		.onChange(of: filterState?.filterChangeCounter) { _, _ in
-			resultIndex.invalidateCache(for: filterState)
-			recomputeFilteredNodes()
-		}
-		.onChange(of: scanResults) {
-			resultIndex.rebuild(from: scanResults)
-			recomputeFilteredNodes()
-		}
-		.onChange(of: hiddenFileIDs) {
-			recomputeFilteredNodes()
-		}
-		.onChange(of: hiddenWarningIDs) {
-			recomputeFilteredNodes()
-		}
-		.onChange(of: filteredNodesCache) {
-			rebuildVisibleItemsCache()
-		}
-		.onChange(of: expandedIDs) {
-			rebuildVisibleItemsCache()
-		}
-		.task {
-			// NotificationCenter.notifications(named:) returns an AsyncSequence that is
-			// automatically cancelled when the task is cancelled (view disappears),
-			// making this superior to onReceive for structured concurrency participation.
-			for await notification in NotificationCenter.default.notifications(
-				named: Notification.Name("PeripheryWarningCompleted")
+			// Binding(get:set:) is intentional — macOS SwiftUI does not expose the
+			// .alert(item:) overload that iOS has, so isPresented with a manual binding
+			// is the only way to drive an alert from an optional model value on macOS.
+			.alert(
+				"Operation Failed",
+				isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
 			) {
-				if let warningID = notification.object as? String {
-					hiddenWarningIDs.insert(warningID)
-				}
+				Text(operationError?.message ?? "")
 			}
-		}
-		.task {
-			for await notification in NotificationCenter.default.notifications(
-				named: Notification.Name("PeripheryWarningRestored")
-			) {
-				if let warningID = notification.object as? String {
-					hiddenWarningIDs.remove(warningID)
-				}
+			.onChange(of: searchNavState.navigationRequest) {
+				handleNavigationRequest(scrollProxy: scrollProxy)
 			}
-		}
-		.sheet(isPresented: $showProgressSheet) {
-			FileOperationProgressSheet(
-				progressState: fileOperationProgress,
-				onCancel: {
-					fileOperationProgress.isCancelled = true
-				}
-			)
-			.interactiveDismissDisabled()
-		}
-		.alert(item: $removalSummary) { summary in
-			Alert(
-				title: Text("Deletion Summary"),
-				message: Text(buildSummaryMessage(summary)),
-				dismissButton: .default(Text("OK"))
-			)
-		}
-		// Binding(get:set:) is intentional — macOS SwiftUI does not expose the
-		// .alert(item:) overload that iOS has, so isPresented with a manual binding
-		// is the only way to drive an alert from an optional model value on macOS.
-		.alert(
-			"Operation Failed",
-			isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
-		) {
-			Text(operationError?.message ?? "")
-		}
+		} // ScrollViewReader
 	}
 
 	private func recomputeFilteredNodes() {
@@ -188,6 +199,66 @@ struct PeripheryTreeView: View {
 			nodes: filteredNodesCache,
 			expandedIDs: expandedIDs
 		)
+	}
+
+	/**
+	 Handles a typed character for Finder-style type-ahead search.
+	 Accumulates characters in the buffer and selects the first matching node.
+	 */
+	private func handleTypeAheadCharacter(_ chars: String, scrollProxy: ScrollViewProxy) {
+		typeAheadState.appendCharacter(chars) { query in
+			let results = SearchMatchEngine.searchTreeNodes(
+				query,
+				in: filteredNodesCache,
+				expandedIDs: expandedIDs,
+				visibleOnly: !typeAheadSearchAllNodes
+			)
+			guard let best = results.first else { return }
+
+			// Expand parent nodes if searching all nodes
+			if typeAheadSearchAllNodes {
+				for parentID in best.parentIDs {
+					expandedIDs.insert(parentID)
+				}
+			}
+
+			selectedID = best.nodeID
+
+			// Scroll to the matched node after a brief delay to allow expansion
+			Task { @MainActor in
+				try? await Task.sleep(for: .milliseconds(50))
+				withAnimation {
+					scrollProxy.scrollTo(best.nodeID, anchor: .center)
+				}
+			}
+		}
+	}
+
+	/**
+	 Handles a navigation request from toolbar search.
+	 Expands parent nodes, sets selection, and scrolls to the target node.
+	 */
+	private func handleNavigationRequest(scrollProxy: ScrollViewProxy) {
+		guard let request = searchNavState.navigationRequest,
+		      request.targetTab == .periphery else { return }
+
+		// Expand parent nodes to reveal the target
+		for parentID in request.parentIDsToExpand {
+			expandedIDs.insert(parentID)
+		}
+
+		selectedID = request.targetNodeID
+
+		// Clear the request so other views don't also process it
+		searchNavState.navigationRequest = nil
+
+		// Scroll to the target after a brief delay for expansion to take effect
+		Task { @MainActor in
+			try? await Task.sleep(for: .milliseconds(100))
+			withAnimation {
+				scrollProxy.scrollTo(request.targetNodeID, anchor: .center)
+			}
+		}
 	}
 
 	private func expandToFileLevel(using nodes: [TreeNode]) {

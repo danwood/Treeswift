@@ -28,6 +28,7 @@ extension EnvironmentValues {
 
 struct SingleCategoryTabView: View {
 	let section: CategoriesNode?
+	var tab: ResultsTab = .tree
 	@Binding var showOnlyViews: Bool
 	@Binding var showFileName: Bool
 	@Binding var showFileInfo: Bool
@@ -38,8 +39,11 @@ struct SingleCategoryTabView: View {
 	@Binding var selectedID: String?
 	@State private var hasAppearedOnce: Bool = false
 	@State private var claimFocusTrigger: Bool = false
+	@State private var typeAheadState = TypeAheadState()
+	@AppStorage("typeAheadSearchAllNodes") private var typeAheadSearchAllNodes: Bool = false
 	var projectRootPath: String?
 	let showToggle: Bool
+	var searchNavState: SearchNavigationState
 
 	private var sectionNode: SectionNode? {
 		guard case let .section(s) = section else { return nil }
@@ -78,81 +82,90 @@ struct SingleCategoryTabView: View {
 				ProgressView("Loading…")
 					.padding()
 			} else if let sectionNode {
-				VStack(alignment: .leading, spacing: 12) {
-					// Section title at top (not in disclosure group)
-					Text(sectionNode.title)
-						.font(.system(.title3, design: .default))
-						.bold()
-						.foregroundStyle(.primary)
-						.padding(.horizontal)
+				ScrollViewReader { scrollProxy in
+					VStack(alignment: .leading, spacing: 12) {
+						// Section title at top (not in disclosure group)
+						Text(sectionNode.title)
+							.font(.system(.title3, design: .default))
+							.bold()
+							.foregroundStyle(.primary)
+							.padding(.horizontal)
 
-					// Show toggle for tree tab only
-					if showToggle {
-						VStack(alignment: .leading) {
-							HFlow(itemSpacing: 10, rowSpacing: 8) {
-								Toggle("Views Only", isOn: $showOnlyViews)
+						// Show toggle for tree tab only
+						if showToggle {
+							VStack(alignment: .leading) {
+								HFlow(itemSpacing: 10, rowSpacing: 8) {
+									Toggle("Views Only", isOn: $showOnlyViews)
 
-								Toggle("File Name", isOn: $showFileName)
-								Toggle("File Info", isOn: $showFileInfo)
-								Toggle("Conformance", isOn: $showConformance)
-								Toggle("Path", isOn: $showPath)
-								Toggle("Code Size", isOn: $showCodeSize)
-							}
-							.toggleStyle(.switch)
-							.controlSize(.small)
-
-							DisclosureGroup("Legend") {
-								HStack(alignment: .top, spacing: 20) {
-									VStack(alignment: .leading, spacing: 4) {
-										Text("🔷   Main App entry point (@main)")
-										Text("🖼️   SwiftUI View")
-										Text("🟤   AppKit class (inherits from NS* type)")
-										Text("🟦   Struct")
-										Text("🔵   Class")
-										Text("🚦   Enum")
-										Text("📜   Protocol")
-										Text("⚡️   Function")
-										Text("🫥   Property or Variable")
-										Text("🏷️   Type alias")
-										Text("🔮   Macro")
-										Text("⚖️   Precedence group")
-										Text("🧩   Extension")
-										Text("⬜️   Other declaration type")
-										Text("⚠️   No symbols found")
-									}
-									VStack(alignment: .leading, spacing: 4) {
-										Text("📎   Embedded in parent type")
-										Text("↖️   In same file as parent type")
-										Text("\(Image(systemName: "folder"))   Folderprivate folder")
-									}
+									Toggle("File Name", isOn: $showFileName)
+									Toggle("File Info", isOn: $showFileInfo)
+									Toggle("Conformance", isOn: $showConformance)
+									Toggle("Path", isOn: $showPath)
+									Toggle("Code Size", isOn: $showCodeSize)
 								}
+								.toggleStyle(.switch)
+								.controlSize(.small)
 
-								.padding()
-								.background(.foreground.opacity(0.05))
-								.border(Color.secondary, width: 0.5)
+								DisclosureGroup("Legend") {
+									HStack(alignment: .top, spacing: 20) {
+										VStack(alignment: .leading, spacing: 4) {
+											Text("🔷   Main App entry point (@main)")
+											Text("🖼️   SwiftUI View")
+											Text("🟤   AppKit class (inherits from NS* type)")
+											Text("🟦   Struct")
+											Text("🔵   Class")
+											Text("🚦   Enum")
+											Text("📜   Protocol")
+											Text("⚡️   Function")
+											Text("🫥   Property or Variable")
+											Text("🏷️   Type alias")
+											Text("🔮   Macro")
+											Text("⚖️   Precedence group")
+											Text("🧩   Extension")
+											Text("⬜️   Other declaration type")
+											Text("⚠️   No symbols found")
+										}
+										VStack(alignment: .leading, spacing: 4) {
+											Text("📎   Embedded in parent type")
+											Text("↖️   In same file as parent type")
+											Text("\(Image(systemName: "folder"))   Folderprivate folder")
+										}
+									}
+
+									.padding()
+									.background(.foreground.opacity(0.05))
+									.border(Color.secondary, width: 0.5)
+								}
+								.padding(.horizontal, 20)
+								.transaction { $0.animation = nil }
 							}
-							.padding(.horizontal, 20)
+						}
+						// Display children
+						LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+							ForEach(children, id: \.id) { child in
+								CategoriesNodeView(
+									node: child,
+									expandedIDs: $expandedIDs,
+									selectedID: $selectedID,
+									indentLevel: 0,
+									projectRootPath: projectRootPath
+								)
+								.transition(.opacity)
+							}
 						}
 					}
-					// Display children
-					LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-						ForEach(children, id: \.id) { child in
-							CategoriesNodeView(
-								node: child,
-								expandedIDs: $expandedIDs,
-								selectedID: $selectedID,
-								indentLevel: 0,
-								projectRootPath: projectRootPath
-							)
-							.transition(.opacity)
+					.focusableTreeNavigation(
+						selectedID: $selectedID,
+						visibleItems: visible,
+						claimFocusTrigger: $claimFocusTrigger,
+						onCharacterKey: { chars in
+							handleTypeAheadCharacter(chars, scrollProxy: scrollProxy)
 						}
+					)
+					.onChange(of: searchNavState.navigationRequest) {
+						handleNavigationRequest(scrollProxy: scrollProxy)
 					}
-				}
-				.focusableTreeNavigation(
-					selectedID: $selectedID,
-					visibleItems: visible,
-					claimFocusTrigger: $claimFocusTrigger
-				)
+				} // ScrollViewReader
 				.focusedValue(\.copyableText, copyText)
 				.onCopyCommand {
 					guard let text = copyText else { return [] }
@@ -316,6 +329,67 @@ struct SingleCategoryTabView: View {
 					set.insert(decl.id)
 					collectAllExpandableIDs(from: decl.children, into: &set)
 				}
+			}
+		}
+	}
+
+	/**
+	 Handles a typed character for Finder-style type-ahead search.
+	 Accumulates characters in the buffer and selects the first matching node.
+	 */
+	private func handleTypeAheadCharacter(_ chars: String, scrollProxy: ScrollViewProxy) {
+		typeAheadState.appendCharacter(chars) { query in
+			let results = SearchMatchEngine.searchCategoriesNodes(
+				query,
+				in: section,
+				tab: tab,
+				expandedIDs: expandedIDs,
+				visibleOnly: !typeAheadSearchAllNodes
+			)
+			guard let best = results.first else { return }
+
+			// Expand parent nodes if searching all nodes
+			if typeAheadSearchAllNodes {
+				for parentID in best.parentIDs {
+					expandedIDs.insert(parentID)
+				}
+			}
+
+			selectedID = best.nodeID
+
+			// Scroll to the matched node after a brief delay to allow expansion
+			Task { @MainActor in
+				try? await Task.sleep(for: .milliseconds(50))
+				withAnimation {
+					scrollProxy.scrollTo(best.nodeID, anchor: .center)
+				}
+			}
+		}
+	}
+
+	/**
+	 Handles a navigation request from toolbar search.
+	 Expands parent nodes, sets selection, and scrolls to the target node.
+	 */
+	private func handleNavigationRequest(scrollProxy: ScrollViewProxy) {
+		guard let request = searchNavState.navigationRequest,
+		      request.targetTab == tab else { return }
+
+		// Expand parent nodes to reveal the target
+		for parentID in request.parentIDsToExpand {
+			expandedIDs.insert(parentID)
+		}
+
+		selectedID = request.targetNodeID
+
+		// Clear the request so other views don't also process it
+		searchNavState.navigationRequest = nil
+
+		// Scroll to the target after a brief delay for expansion to take effect
+		Task { @MainActor in
+			try? await Task.sleep(for: .milliseconds(100))
+			withAnimation {
+				scrollProxy.scrollTo(request.targetNodeID, anchor: .center)
 			}
 		}
 	}

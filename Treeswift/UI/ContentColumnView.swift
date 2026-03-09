@@ -24,6 +24,7 @@ struct ContentColumnView: View {
 	@Binding var previewOrphansTabSelectedID: String?
 	@Binding var bodyGetterTabSelectedID: String?
 	@Binding var unattachedTabSelectedID: String?
+	var searchNavState: SearchNavigationState
 
 	@State private var isLoadingSchemes = false
 
@@ -88,6 +89,7 @@ struct ContentColumnView: View {
 						unattachedSection: scanState.unattachedSection,
 						fileTreeNodes: scanState.fileTreeNodes,
 						projectPath: scanState.projectPath,
+						searchNavState: searchNavState,
 						filterState: $filterState,
 						peripheryTabSelectedID: $peripheryTabSelectedID,
 						filesTabSelectedID: $filesTabSelectedID,
@@ -161,6 +163,7 @@ struct ContentColumnView: View {
 	@Previewable @State var unattachedID: String?
 	@Previewable @State var filterState = FilterState()
 	@Previewable @State var layoutSettings = TreeLayoutSettings()
+	@Previewable @State var searchNavState = SearchNavigationState()
 	let scanState = ScanState(configurationID: config.id)
 	ContentColumnView(
 		configuration: $config,
@@ -176,6 +179,7 @@ struct ContentColumnView: View {
 		orphansTabSelectedID: $orphansID,
 		previewOrphansTabSelectedID: $previewOrphansID,
 		bodyGetterTabSelectedID: $bodyGetterID,
-		unattachedTabSelectedID: $unattachedID
+		unattachedTabSelectedID: $unattachedID,
+		searchNavState: searchNavState
 	)
 }

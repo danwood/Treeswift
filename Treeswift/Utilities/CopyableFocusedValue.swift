@@ -15,6 +15,10 @@ struct CopyMenuTitleKey: FocusedValueKey {
 	typealias Value = String
 }
 
+struct ActivateSearchKey: FocusedValueKey {
+	typealias Value = () -> Void
+}
+
 extension FocusedValues {
 	var copyableText: CopyableTextKey.Value? {
 		get { self[CopyableTextKey.self] }
@@ -24,5 +28,10 @@ extension FocusedValues {
 	var copyMenuTitle: CopyMenuTitleKey.Value? {
 		get { self[CopyMenuTitleKey.self] }
 		set { self[CopyMenuTitleKey.self] = newValue }
+	}
+
+	var activateSearch: ActivateSearchKey.Value? {
+		get { self[ActivateSearchKey.self] }
+		set { self[ActivateSearchKey.self] = newValue }
 	}
 }

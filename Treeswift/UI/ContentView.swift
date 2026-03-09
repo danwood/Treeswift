@@ -28,6 +28,9 @@ struct ContentView: View {
 	@State private var selectedPeripheryNode: TreeNode?
 	@State private var selectedFilesNode: FileBrowserNode?
 	@State private var selectedCategoriesNode: CategoriesNode?
+	@State private var searchNavState = SearchNavigationState()
+	@State private var searchResults: [SearchMatchEngine.SearchResult] = []
+	@AppStorage("showOnlyViews") private var showOnlyViews: Bool = false
 	@Environment(FileInspectorState.self) private var inspectorState
 
 	init() {
@@ -133,7 +136,8 @@ struct ContentView: View {
 					orphansTabSelectedID: $orphansTabSelectedID,
 					previewOrphansTabSelectedID: $previewOrphansTabSelectedID,
 					bodyGetterTabSelectedID: $bodyGetterTabSelectedID,
-					unattachedTabSelectedID: $unattachedTabSelectedID
+					unattachedTabSelectedID: $unattachedTabSelectedID,
+					searchNavState: searchNavState
 				)
 				.navigationSplitViewColumnWidth(
 					min: LayoutConstants.contentColumnMinWidth,
@@ -165,6 +169,49 @@ struct ContentView: View {
 			)
 		}
 		.environment(\.treeLayoutSettings, layoutSettings)
+		.searchable(
+			text: $searchNavState.toolbarSearchQuery,
+			isPresented: $searchNavState.isSearchPresented,
+			placement: .toolbar
+		)
+		.searchSuggestions {
+			if !searchResults.isEmpty {
+				let currentTabResults = searchResults.filter { $0.tab == selectedTab }
+				let otherTabResults = searchResults.filter { $0.tab != selectedTab }
+
+				if !currentTabResults.isEmpty {
+					ForEach(currentTabResults.prefix(12)) { result in
+						Button {
+							navigateToResult(result)
+						} label: {
+							SearchSuggestionRow(result: result, isCurrentTab: true)
+						}
+					}
+				}
+
+				if !otherTabResults.isEmpty {
+					if !currentTabResults.isEmpty {
+						Divider()
+					}
+					ForEach(otherTabResults.prefix(8)) { result in
+						Button {
+							navigateToResult(result)
+						} label: {
+							SearchSuggestionRow(result: result, isCurrentTab: false)
+						}
+					}
+				}
+			}
+		}
+		.onChange(of: searchNavState.toolbarSearchQuery) {
+			updateSearchResults()
+		}
+		.onChange(of: showOnlyViews) {
+			updateSearchResults()
+		}
+		.onSubmit(of: .search) {
+			handleSearchSubmit()
+		}
 		.onAppear {
 			// Handle initial configuration selection
 			if selectedConfigID.wrappedValue == nil, let firstConfig = configManager.configurations.first {
@@ -200,6 +247,126 @@ struct ContentView: View {
 		}
 		.onChange(of: selectedTab) {
 			recomputeSelectedCategoriesNode()
+		}
+		.focusedSceneValue(\.activateSearch) { [searchNavState] in
+			searchNavState.isSearchPresented = true
+		}
+	}
+
+	// MARK: - Toolbar Search
+
+	/**
+	 Searches across all tabs using SearchMatchEngine and updates the search results.
+	 Current tab results are sorted first by the suggestion UI.
+	 */
+	private func updateSearchResults() {
+		let query = searchNavState.toolbarSearchQuery
+		guard query.count >= 3, let scanState = currentScanState else {
+			searchResults = []
+			return
+		}
+
+		var allResults: [SearchMatchEngine.SearchResult] = []
+
+		// Search Periphery tab (TreeNode hierarchy) — always searches all nodes
+		allResults.append(contentsOf: SearchMatchEngine.searchTreeNodes(
+			query,
+			in: scanState.treeNodes,
+			expandedIDs: [],
+			visibleOnly: false
+		))
+
+		// Search category tabs — always searches all nodes
+		let categoryTabs: [(ResultsTab, CategoriesNode?)] = [
+			(.tree, scanState.treeSection),
+			(.viewExtensions, scanState.viewExtensionsSection),
+			(.shared, scanState.sharedSection)
+		]
+		for (tab, section) in categoryTabs {
+			allResults.append(contentsOf: SearchMatchEngine.searchCategoriesNodes(
+				query,
+				in: section,
+				tab: tab,
+				expandedIDs: [],
+				visibleOnly: false
+			))
+		}
+
+		// Deduplicate by normalized name: strip .swift extension so that
+		// "Foo" (symbol) and "Foo.swift" (file) are treated as the same entry.
+		// Prefer symbol matches over file matches, and current tab over other tabs.
+		var seenNames = Set<String>()
+		let sorted = allResults.sorted { lhs, rhs in
+			let lhsCurrent = lhs.tab == selectedTab
+			let rhsCurrent = rhs.tab == selectedTab
+			if lhsCurrent != rhsCurrent { return lhsCurrent }
+			// Prefer symbol matches over file matches
+			if lhs.matchType != rhs.matchType {
+				return lhs.matchType == .symbolName
+			}
+			return lhs < rhs
+		}
+		searchResults = sorted.filter { result in
+			// When "Views Only" is enabled, skip non-view declarations
+			if showOnlyViews, result.isView == false {
+				return false
+			}
+			return seenNames.insert(deduplicationKey(result.name)).inserted
+		}
+	}
+
+	// Strips .swift extension and lowercases so "Foo" and "Foo.swift" produce the same key.
+	private func deduplicationKey(_ name: String) -> String {
+		if name.hasSuffix(".swift") {
+			String(name.dropLast(6)).lowercased()
+		} else {
+			name.lowercased()
+		}
+	}
+
+	/**
+	 Navigates to a specific search result by switching tabs if needed
+	 and posting a navigation request for the target tree view.
+	 */
+	private func navigateToResult(_ result: SearchMatchEngine.SearchResult) {
+		// Switch tab if needed
+		if selectedTab != result.tab {
+			selectedTab = result.tab
+		}
+
+		// Set the appropriate per-tab selectedID
+		switch result.tab {
+		case .periphery:
+			peripheryTabSelectedID = result.nodeID
+		case .tree:
+			treeTabSelectedID = result.nodeID
+		case .viewExtensions:
+			viewExtensionsTabSelectedID = result.nodeID
+		case .shared:
+			sharedTabSelectedID = result.nodeID
+		}
+
+		// Post navigation request for the tree view to handle expansion and scrolling
+		searchNavState.navigationRequest = SearchNavigationState.NavigationRequest(
+			targetTab: result.tab,
+			targetNodeID: result.nodeID,
+			parentIDsToExpand: result.parentIDs
+		)
+
+		// Clear the search query
+		searchNavState.toolbarSearchQuery = ""
+		searchResults = []
+	}
+
+	/**
+	 Handles search submission (pressing Enter in the search field).
+	 Navigates to the first matching result if available.
+	 */
+	private func handleSearchSubmit() {
+		// Prefer current tab results, then any result
+		let currentTabResult = searchResults.first { $0.tab == selectedTab }
+		if let result = currentTabResult ?? searchResults.first {
+			navigateToResult(result)
 		}
 	}
 

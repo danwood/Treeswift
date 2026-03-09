@@ -28,6 +28,7 @@ struct TreeswiftApp: App {
 		.commands {
 			// Use standard text editing commands, but customize Copy to handle both text and custom tree row data
 			TextEditingCommands()
+			FindCommand()
 			CommandGroup(replacing: .pasteboard) {
 				Button("Cut") {
 					NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
@@ -70,5 +71,18 @@ private struct CopyCommand: View {
 			NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
 		}
 		.keyboardShortcut("c", modifiers: .command)
+	}
+}
+
+private struct FindCommand: Commands {
+	@FocusedValue(\.activateSearch) var activateSearch
+
+	var body: some Commands {
+		CommandGroup(after: .textEditing) {
+			Button("Find\u{2026}") {
+				activateSearch?()
+			}
+			.keyboardShortcut("f", modifiers: .command)
+		}
 	}
 }

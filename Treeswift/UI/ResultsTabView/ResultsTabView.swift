@@ -14,6 +14,15 @@ enum ResultsTab: String, CaseIterable, Sendable {
 	case tree
 	case viewExtensions
 	case shared
+
+	var displayName: String {
+		switch self {
+		case .periphery: "Periphery"
+		case .tree: "Tree"
+		case .viewExtensions: "View Extensions"
+		case .shared: "Shared"
+		}
+	}
 }
 
 extension EnvironmentValues {
@@ -34,6 +43,7 @@ struct ResultsTabView: View {
 	let unattachedSection: CategoriesNode?
 	let fileTreeNodes: [FileBrowserNode]
 	let projectPath: String?
+	var searchNavState: SearchNavigationState
 
 	@Binding var filterState: FilterState
 	@AppStorage("showOnlyViews") private var showOnlyViews: Bool = false
@@ -74,7 +84,8 @@ struct ResultsTabView: View {
 								scanResults: scanResults,
 								sourceGraph: sourceGraph,
 								filterState: filterState,
-								selectedID: $peripheryTabSelectedID
+								selectedID: $peripheryTabSelectedID,
+								searchNavState: searchNavState
 							)
 							.padding()
 						}
@@ -86,6 +97,7 @@ struct ResultsTabView: View {
 			Tab("Tree", systemImage: "tree", value: ResultsTab.tree) {
 				CategoryTab(
 					section: treeSection,
+					tab: .tree,
 					progressLabel: "Building Tree…",
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
@@ -95,7 +107,8 @@ struct ResultsTabView: View {
 					showConformance: $showConformance,
 					selectedID: $treeTabSelectedID,
 					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-					showToggle: true
+					showToggle: true,
+					searchNavState: searchNavState
 				)
 				.frame(maxHeight: .infinity, alignment: .top)
 			}
@@ -103,6 +116,7 @@ struct ResultsTabView: View {
 			Tab("View Extensions", systemImage: "puzzlepiece.extension", value: ResultsTab.viewExtensions) {
 				CategoryTab(
 					section: viewExtensionsSection,
+					tab: .viewExtensions,
 					progressLabel: "Building View Extensions…",
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
@@ -112,7 +126,8 @@ struct ResultsTabView: View {
 					showConformance: $showConformance,
 					selectedID: $viewExtensionsTabSelectedID,
 					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-					showToggle: true
+					showToggle: true,
+					searchNavState: searchNavState
 				)
 				.frame(maxHeight: .infinity, alignment: .top)
 			}
@@ -120,6 +135,7 @@ struct ResultsTabView: View {
 			Tab("Shared", systemImage: "square.stack.3d.up", value: ResultsTab.shared) {
 				CategoryTab(
 					section: sharedSection,
+					tab: .shared,
 					progressLabel: "Building Shared…",
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
@@ -129,7 +145,8 @@ struct ResultsTabView: View {
 					showConformance: $showConformance,
 					selectedID: $sharedTabSelectedID,
 					projectRootPath: projectPath.map { ($0 as NSString).deletingLastPathComponent },
-					showToggle: true
+					showToggle: true,
+					searchNavState: searchNavState
 				)
 				.frame(maxHeight: .infinity, alignment: .top)
 			}
@@ -140,6 +157,7 @@ struct ResultsTabView: View {
 
 private struct CategoryTab: View {
 	let section: CategoriesNode?
+	let tab: ResultsTab
 	let progressLabel: String
 	@Binding var showOnlyViews: Bool
 	@Binding var showFileName: Bool
@@ -150,11 +168,13 @@ private struct CategoryTab: View {
 	@Binding var selectedID: String?
 	var projectRootPath: String?
 	let showToggle: Bool
+	var searchNavState: SearchNavigationState
 
 	var body: some View {
 		if let section {
 			SingleCategoryTabView(
 				section: section,
+				tab: tab,
 				showOnlyViews: $showOnlyViews,
 				showFileName: $showFileName,
 				showFileInfo: $showFileInfo,
@@ -163,7 +183,8 @@ private struct CategoryTab: View {
 				showConformance: $showConformance,
 				selectedID: $selectedID,
 				projectRootPath: projectRootPath,
-				showToggle: showToggle
+				showToggle: showToggle,
+				searchNavState: searchNavState
 			)
 			.padding()
 		} else {

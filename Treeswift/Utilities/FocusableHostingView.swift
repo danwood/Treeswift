@@ -11,6 +11,7 @@ import SwiftUI
 /// Invisible NSView that can become first responder and handle keyboard events
 class FocusableNSView: NSView {
 	fileprivate var onArrowKey: ((KeyboardKey) -> Void)?
+	fileprivate var onCharacterKey: ((String) -> Void)?
 	fileprivate var isInLayout = false
 
 	fileprivate enum KeyboardKey {
@@ -36,14 +37,22 @@ class FocusableNSView: NSView {
 	}
 
 	override func keyDown(with event: NSEvent) {
-		// Handle arrow keys
 		switch event.keyCode {
 		case 126: // Up arrow
 			onArrowKey?(.up)
 		case 125: // Down arrow
 			onArrowKey?(.down)
 		default:
-			super.keyDown(with: event)
+			// Forward printable characters for type-ahead search
+			// (ignore keystrokes with command or control modifiers)
+			if let chars = event.characters,
+			   !chars.isEmpty,
+			   !event.modifierFlags.contains(.command),
+			   !event.modifierFlags.contains(.control) {
+				onCharacterKey?(chars)
+			} else {
+				super.keyDown(with: event)
+			}
 		}
 	}
 }
@@ -53,10 +62,12 @@ struct FocusClaimingView: NSViewRepresentable {
 	@Binding var selectedID: String?
 	let visibleItems: [String]
 	var claimFocusTrigger: Binding<Bool>?
+	var onCharacterKey: ((String) -> Void)?
 
 	func makeNSView(context: Context) -> FocusableNSView {
 		let view = FocusableNSView()
 		view.onArrowKey = context.coordinator.handleArrowKey
+		view.onCharacterKey = context.coordinator.handleCharacterKey
 		return view
 	}
 
@@ -67,7 +78,8 @@ struct FocusClaimingView: NSViewRepresentable {
 		context.coordinator.updateBindings(
 			selectedID: $selectedID,
 			visibleItems: visibleItems,
-			claimFocusTrigger: claimFocusTrigger
+			claimFocusTrigger: claimFocusTrigger,
+			onCharacterKey: onCharacterKey
 		)
 
 		let shouldClaimForSelection = previousSelection != selectedID
@@ -95,28 +107,42 @@ struct FocusClaimingView: NSViewRepresentable {
 	}
 
 	func makeCoordinator() -> Coordinator {
-		Coordinator(selectedID: $selectedID, visibleItems: visibleItems, claimFocusTrigger: claimFocusTrigger)
+		Coordinator(
+			selectedID: $selectedID,
+			visibleItems: visibleItems,
+			claimFocusTrigger: claimFocusTrigger,
+			onCharacterKey: onCharacterKey
+		)
 	}
 
 	class Coordinator: NSObject {
 		fileprivate var selectedID: Binding<String?>
 		private var visibleItems: [String]
 		fileprivate var claimFocusTrigger: Binding<Bool>?
+		private var onCharacterKey: ((String) -> Void)?
 
-		fileprivate init(selectedID: Binding<String?>, visibleItems: [String], claimFocusTrigger: Binding<Bool>?) {
+		fileprivate init(
+			selectedID: Binding<String?>,
+			visibleItems: [String],
+			claimFocusTrigger: Binding<Bool>?,
+			onCharacterKey: ((String) -> Void)?
+		) {
 			self.selectedID = selectedID
 			self.visibleItems = visibleItems
 			self.claimFocusTrigger = claimFocusTrigger
+			self.onCharacterKey = onCharacterKey
 		}
 
 		fileprivate func updateBindings(
 			selectedID: Binding<String?>,
 			visibleItems: [String],
-			claimFocusTrigger: Binding<Bool>?
+			claimFocusTrigger: Binding<Bool>?,
+			onCharacterKey: ((String) -> Void)?
 		) {
 			self.selectedID = selectedID
 			self.visibleItems = visibleItems
 			self.claimFocusTrigger = claimFocusTrigger
+			self.onCharacterKey = onCharacterKey
 		}
 
 		@objc fileprivate func claimFirstResponder(_ nsView: FocusableNSView) {
@@ -137,6 +163,10 @@ struct FocusClaimingView: NSViewRepresentable {
 					visibleItems: visibleItems
 				)
 			}
+		}
+
+		fileprivate func handleCharacterKey(_ chars: String) {
+			onCharacterKey?(chars)
 		}
 	}
 }

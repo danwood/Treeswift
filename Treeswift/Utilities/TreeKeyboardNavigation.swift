@@ -121,12 +121,14 @@ extension View {
 	func focusableTreeNavigation(
 		selectedID: Binding<String?>,
 		visibleItems: [String],
-		claimFocusTrigger: Binding<Bool>
+		claimFocusTrigger: Binding<Bool>,
+		onCharacterKey: ((String) -> Void)? = nil
 	) -> some View {
 		background(FocusClaimingView(
 			selectedID: selectedID,
 			visibleItems: visibleItems,
-			claimFocusTrigger: claimFocusTrigger
+			claimFocusTrigger: claimFocusTrigger,
+			onCharacterKey: onCharacterKey
 		))
 	}
 }
