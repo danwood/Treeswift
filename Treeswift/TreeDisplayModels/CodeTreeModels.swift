@@ -33,6 +33,17 @@ enum CategoriesNode: Identifiable, Hashable, Sendable {
 		}
 	}
 
+	// Children key path for OutlineGroup compatibility.
+	// Returns children array if non-empty, nil for leaf nodes.
+	var outlineChildren: [CategoriesNode]? {
+		let kids: [CategoriesNode] = switch self {
+		case let .section(section): section.children
+		case let .declaration(decl): decl.children
+		case let .syntheticRoot(root): root.children
+		}
+		return kids.isEmpty ? nil : kids
+	}
+
 	/// Collects all descendant IDs recursively
 	func collectDescendantIDs() -> Set<String> {
 		var result = Set<String>()

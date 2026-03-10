@@ -18,6 +18,15 @@ enum TreeNode: Identifiable, Hashable, Sendable {
 		}
 	}
 
+	// Children key path for OutlineGroup compatibility.
+	// Returns folder children or nil for leaf file nodes.
+	var treeChildren: [TreeNode]? {
+		switch self {
+		case let .folder(folder): folder.children.isEmpty ? nil : folder.children
+		case .file: nil
+		}
+	}
+
 	// Collects all descendant IDs recursively
 	func collectDescendantIDs() -> Set<String> {
 		var result = Set<String>()

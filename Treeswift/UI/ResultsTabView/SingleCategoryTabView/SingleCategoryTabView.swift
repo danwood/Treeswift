@@ -73,7 +73,6 @@ struct SingleCategoryTabView: View {
 
 	var body: some View {
 		Group {
-			// Pre-evaluate computed properties once to minimize AttributeGraph dependency cycles
 			let children = filteredChildren
 			let visible = visibleItems
 			let copyText = copyableText
@@ -84,7 +83,7 @@ struct SingleCategoryTabView: View {
 			} else if let sectionNode {
 				ScrollViewReader { scrollProxy in
 					VStack(alignment: .leading, spacing: 12) {
-						// Section title at top (not in disclosure group)
+						// Section title at top
 						Text(sectionNode.title)
 							.font(.system(.title3, design: .default))
 							.bold()
@@ -96,7 +95,6 @@ struct SingleCategoryTabView: View {
 							VStack(alignment: .leading) {
 								HFlow(itemSpacing: 10, rowSpacing: 8) {
 									Toggle("Views Only", isOn: $showOnlyViews)
-
 									Toggle("File Name", isOn: $showFileName)
 									Toggle("File Info", isOn: $showFileInfo)
 									Toggle("Conformance", isOn: $showConformance)
@@ -131,7 +129,6 @@ struct SingleCategoryTabView: View {
 											Text("\(Image(systemName: "folder"))   Folderprivate folder")
 										}
 									}
-
 									.padding()
 									.background(.foreground.opacity(0.05))
 									.border(Color.secondary, width: 0.5)
@@ -140,15 +137,16 @@ struct SingleCategoryTabView: View {
 								.transaction { $0.animation = nil }
 							}
 						}
-						// Display children
-						LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-							ForEach(children, id: \.id) { child in
-								CategoriesNodeView(
+
+						// Tree content using ForEach + recursive outline rows
+						LazyVStack(alignment: .leading, spacing: 0) {
+							ForEach(children) { child in
+								RecursiveOutlineRow(
 									node: child,
 									expandedIDs: $expandedIDs,
 									selectedID: $selectedID,
-									indentLevel: 0,
-									projectRootPath: projectRootPath
+									projectRootPath: projectRootPath,
+									indentLevel: 0
 								)
 								.transition(.opacity)
 							}
@@ -390,6 +388,88 @@ struct SingleCategoryTabView: View {
 			try? await Task.sleep(for: .milliseconds(100))
 			withAnimation {
 				scrollProxy.scrollTo(request.targetNodeID, anchor: .center)
+			}
+		}
+	}
+}
+
+/**
+ Recursive row view that renders a CategoriesNode with a disclosure chevron
+ for nodes with children, and indentation based on nesting level.
+ Option-clicking the chevron expands/collapses all descendants.
+ */
+/* folderprivate */ struct RecursiveOutlineRow: View {
+	let node: CategoriesNode
+	@Binding var expandedIDs: Set<String>
+	@Binding var selectedID: String?
+	var projectRootPath: String?
+	let indentLevel: Int
+
+	private var hasChildren: Bool {
+		node.outlineChildren != nil
+	}
+
+	private var isExpanded: Bool {
+		expandedIDs.contains(node.id)
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			// Row content with selection highlight
+			HStack(spacing: 4) {
+				// Disclosure chevron or spacer
+				if hasChildren {
+					ChevronExpansionButton(
+						expandedIDs: $expandedIDs,
+						id: node.id,
+						toggleWithDescendants: {
+							withAnimation(.easeInOut(duration: 0.2)) {
+								expandedIDs.toggleExpansion(
+									id: node.id,
+									withDescendants: true,
+									collectDescendants: { node.collectDescendantIDs() }
+								)
+							}
+						}
+					)
+				} else {
+					Color.clear.frame(width: 20, height: 1)
+				}
+
+				CategoriesRowContent(
+					node: node,
+					projectRootPath: projectRootPath
+				)
+			}
+			.padding(.vertical, 3)
+			.padding(.leading, CGFloat(indentLevel) * 20)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.contentShape(Rectangle())
+			.background(selectedID == node.id ? Color.accentColor.opacity(0.2) : Color.clear)
+			.clipShape(.rect(cornerRadius: 4))
+			.onTapGesture {
+				selectedID = node.id
+			}
+			.simultaneousGesture(TapGesture(count: 2).onEnded {
+				if hasChildren {
+					withAnimation(.easeInOut(duration: 0.15)) {
+						expandedIDs.toggleExpansion(id: node.id)
+					}
+				}
+			})
+			.id(node.id)
+
+			// Children (when expanded)
+			if isExpanded, let children = node.outlineChildren {
+				ForEach(children) { child in
+					RecursiveOutlineRow(
+						node: child,
+						expandedIDs: $expandedIDs,
+						selectedID: $selectedID,
+						projectRootPath: projectRootPath,
+						indentLevel: indentLevel + 1
+					)
+				}
 			}
 		}
 	}
