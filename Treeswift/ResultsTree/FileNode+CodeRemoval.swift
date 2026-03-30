@@ -18,6 +18,7 @@ extension FileNode {
 		let deletedCount: Int
 		let nonDeletableCount: Int
 		let failedIgnoreCommentsCount: Int
+		let skippedReferencedCount: Int
 	}
 
 	/**
@@ -40,11 +41,14 @@ extension FileNode {
 	 Processes warnings from bottom to top to maintain line number consistency.
 	 Only removes code for warnings where canRemoveCode returns true.
 	 Tracks all file modifications and line adjustments for undo/redo support.
+	 The strategy parameter controls how cross-references between unused declarations are handled.
 	 */
 	func removeAllUnusedCode(
 		scanResults: [ScanResult],
 		filterState: FilterState?,
-		sourceGraph: SourceGraph?
+		sourceGraph: SourceGraph?,
+		strategy: RemovalStrategy = .forceRemoveAll,
+		allUnusedDeclarations: Set<Declaration>? = nil
 	) -> Result<RemovalResult, Error> {
 		// Read original file contents
 		guard (try? String(contentsOfFile: path, encoding: .utf8)) != nil else {
@@ -124,9 +128,29 @@ extension FileNode {
 			))
 		}
 
-		// Use the batch modification helper to process all warnings
-		let result = CodeModificationHelper.executeBatchModifications(
+		// Apply the removal strategy to filter operations
+		let filtered = UnusedDependencyAnalyzer.filterOperations(
 			operations: fileWarnings,
+			strategy: strategy,
+			sourceGraph: sourceGraph,
+			allUnusedDeclarations: allUnusedDeclarations
+		)
+		let skippedReferencedCount = filtered.skippedCount
+
+		let operationsToExecute = filtered.operationsToExecute
+
+		// If all operations were skipped, return early
+		guard !operationsToExecute.isEmpty else {
+			return .failure(NSError(
+				domain: "FileNode",
+				code: 2,
+				userInfo: [NSLocalizedDescriptionKey: "No removable warnings found"]
+			))
+		}
+
+		// Use the batch modification helper to process warnings
+		let result = CodeModificationHelper.executeBatchModifications(
+			operations: operationsToExecute,
 			filePath: path,
 			sourceGraph: sourceGraph
 		)
@@ -134,12 +158,12 @@ extension FileNode {
 		// Add non-deletable count to the result
 		switch result {
 		case let .success(removalResult):
-			// Update deletion stats to include non-deletable count
-			var updatedStats = removalResult.deletionStats
-			updatedStats = DeletionStats(
-				deletedCount: updatedStats.deletedCount,
+			// Update deletion stats to include non-deletable and skipped counts
+			let updatedStats = DeletionStats(
+				deletedCount: removalResult.deletionStats.deletedCount,
 				nonDeletableCount: nonDeletableCount,
-				failedIgnoreCommentsCount: updatedStats.failedIgnoreCommentsCount
+				failedIgnoreCommentsCount: removalResult.deletionStats.failedIgnoreCommentsCount,
+				skippedReferencedCount: skippedReferencedCount
 			)
 
 			let updatedResult = RemovalResult(

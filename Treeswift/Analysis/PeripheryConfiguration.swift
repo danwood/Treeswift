@@ -40,6 +40,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 	var skipBuild: Bool
 	var skipSchemesValidation: Bool
 	var cleanBuild: Bool
+	var enableUserScriptSandboxing: Bool
 	var indexStorePath: [String]
 
 	// MARK: - Retention Settings
@@ -100,6 +101,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		skipBuild: Bool = false,
 		skipSchemesValidation: Bool = false,
 		cleanBuild: Bool = false,
+		enableUserScriptSandboxing: Bool = false,
 		indexStorePath: [String] = [],
 		retainPublic: Bool = false,
 		retainFiles: [String] = [],
@@ -142,6 +144,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.skipBuild = skipBuild
 		self.skipSchemesValidation = skipSchemesValidation
 		self.cleanBuild = cleanBuild
+		self.enableUserScriptSandboxing = enableUserScriptSandboxing
 		self.indexStorePath = indexStorePath
 		self.retainPublic = retainPublic
 		self.retainFiles = retainFiles
@@ -204,6 +207,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		case skipBuild
 		case skipSchemesValidation
 		case cleanBuild
+		case enableUserScriptSandboxing
 		case indexStorePath
 		case retainPublic
 		case retainFiles
@@ -253,6 +257,8 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		skipBuild = try container.decode(Bool.self, forKey: .skipBuild)
 		skipSchemesValidation = try container.decode(Bool.self, forKey: .skipSchemesValidation)
 		cleanBuild = try container.decode(Bool.self, forKey: .cleanBuild)
+		enableUserScriptSandboxing = try container
+			.decodeIfPresent(Bool.self, forKey: .enableUserScriptSandboxing) ?? false
 		indexStorePath = try container.decode([String].self, forKey: .indexStorePath)
 		retainPublic = try container.decode(Bool.self, forKey: .retainPublic)
 		retainFiles = try container.decode([String].self, forKey: .retainFiles)

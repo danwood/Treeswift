@@ -146,100 +146,97 @@ struct DeclarationDeletionHelper {
 		var startLine = declarationLine
 		var checkLine = declarationLine - 1
 
-		// If no attributes, skip attribute search
-		guard !attributes.isEmpty else {
-			// Jump straight to comment search below
-			return startLine
-		}
-
-		// Build patterns to search for (e.g., @State, @FetchRequest, etc.)
-		// Extract just the attribute name (before any parentheses)
-		let attributePatterns = attributes.map { attr -> String in
-			let attrDesc = attr.description
-			let attrName = attrDesc.components(separatedBy: "(").first ?? attrDesc
-			return "@\(attrName)"
-		}
-
-		// Track lines that are part of attributes
-		var attributeLines: [Int] = []
-		var tempCheckLine = checkLine
-		var inMultiLineAttribute = false
-
-		// Look backwards for attribute lines
-		var foundAttributeYet = false
-		while tempCheckLine >= 1 {
-			let lineIndex = tempCheckLine - 1
-			guard lineIndex >= 0 && lineIndex < lines.count else { break }
-			let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
-
-			// Stop at blank lines
-			if line.isEmpty {
-				break
+		// Only search for attributes if the declaration has any
+		if !attributes.isEmpty {
+			// Build patterns to search for (e.g., @State, @FetchRequest, etc.)
+			// Extract just the attribute name (before any parentheses)
+			let attributePatterns = attributes.map { attr -> String in
+				let attrDesc = attr.description
+				let attrName = attrDesc.components(separatedBy: "(").first ?? attrDesc
+				return "@\(attrName)"
 			}
 
-			// Stop at preprocessor directives (#if, #endif, #else, etc.)
-			if line.hasPrefix("#") {
-				break
-			}
+			// Track lines that are part of attributes
+			var attributeLines: [Int] = []
+			var tempCheckLine = checkLine
+			var inMultiLineAttribute = false
 
-			// Stop if we hit another declaration
-			if isDeclarationLine(line) {
-				break
-			}
+			// Look backwards for attribute lines
+			var foundAttributeYet = false
+			while tempCheckLine >= 1 {
+				let lineIndex = tempCheckLine - 1
+				guard lineIndex >= 0 && lineIndex < lines.count else { break }
+				let line = lines[lineIndex].trimmingCharacters(in: .whitespaces)
 
-			// Check if this line contains any of our attribute patterns
-			let containsAttribute = attributePatterns.contains { pattern in
-				line.contains(pattern)
-			}
-
-			if containsAttribute {
-				// Check if it's a complete declaration (another var/func with this attribute)
-				let declarationKeywords = [
-					"var ",
-					"let ",
-					"func ",
-					"class ",
-					"struct ",
-					"enum ",
-					"protocol ",
-					"actor ",
-					"init ",
-					"deinit ",
-					"subscript "
-				]
-				let isDeclaration = declarationKeywords.contains { line.contains($0) }
-
-				if isDeclaration {
+				// Stop at blank lines
+				if line.isEmpty {
 					break
-				} else {
-					attributeLines.insert(tempCheckLine, at: 0)
-					foundAttributeYet = true
-					// Check if this starts a multi-line attribute
-					inMultiLineAttribute = line.contains("(") && !line.contains(")")
-					tempCheckLine -= 1
 				}
-			} else if inMultiLineAttribute ||
-				(!foundAttributeYet && (line.contains(")") || line.contains(":") || line.contains(","))) {
-				// Either: we're in a known multi-line attribute, OR
-				// we haven't found the attribute yet but this looks like it could be part of one
-				attributeLines.insert(tempCheckLine, at: 0)
-				// Check if this closes a paren (might complete the search area)
-				if line.contains(")"), !line.contains("(") {
-					// This line has a closing paren, we're likely exiting an attribute
-					inMultiLineAttribute = true
-				} else if line.contains("(") {
-					inMultiLineAttribute = false
-				}
-				tempCheckLine -= 1
-			} else {
-				break
-			}
-		}
 
-		// Update startLine if we found attributes
-		if !attributeLines.isEmpty {
-			startLine = attributeLines.first!
-			checkLine = attributeLines.first! - 1
+				// Stop at preprocessor directives (#if, #endif, #else, etc.)
+				if line.hasPrefix("#") {
+					break
+				}
+
+				// Stop if we hit another declaration
+				if isDeclarationLine(line) {
+					break
+				}
+
+				// Check if this line contains any of our attribute patterns
+				let containsAttribute = attributePatterns.contains { pattern in
+					line.contains(pattern)
+				}
+
+				if containsAttribute {
+					// Check if it's a complete declaration (another var/func with this attribute)
+					let declarationKeywords = [
+						"var ",
+						"let ",
+						"func ",
+						"class ",
+						"struct ",
+						"enum ",
+						"protocol ",
+						"actor ",
+						"init ",
+						"deinit ",
+						"subscript "
+					]
+					let isDeclaration = declarationKeywords.contains { line.contains($0) }
+
+					if isDeclaration {
+						break
+					} else {
+						attributeLines.insert(tempCheckLine, at: 0)
+						foundAttributeYet = true
+						// Check if this starts a multi-line attribute
+						inMultiLineAttribute = line.contains("(") && !line.contains(")")
+						tempCheckLine -= 1
+					}
+				} else if inMultiLineAttribute ||
+					(!foundAttributeYet && (line.contains(")") || line.contains(":") || line.contains(","))) {
+					// Either: we're in a known multi-line attribute, OR
+					// we haven't found the attribute yet but this looks like it could be part of one
+					attributeLines.insert(tempCheckLine, at: 0)
+					// Check if this closes a paren (might complete the search area)
+					if line.contains(")"), !line.contains("(") {
+						// This line has a closing paren, we're likely exiting an attribute
+						inMultiLineAttribute = true
+					} else if line.contains("(") {
+						inMultiLineAttribute = false
+					}
+					tempCheckLine -= 1
+				} else {
+					break
+				}
+			}
+
+			// Update startLine if we found attributes
+			if !attributeLines.isEmpty {
+				startLine = attributeLines.first!
+				checkLine = attributeLines.first! - 1
+			}
 		}
 
 		// Then look backwards for documentation comments
@@ -494,6 +491,250 @@ struct DeclarationDeletionHelper {
 
 		// Otherwise, don't include trailing blanks (preserve spacing)
 		return declarationEndLine
+	}
+
+	/**
+	 Removes orphaned MARK/TODO/FIXME comments that have no code between them and the next
+	 section marker, end of file, or closing brace.
+
+	 After batch deletion of all declarations under a MARK section, the MARK comment itself
+	 would remain as a stale artifact. This method scans the lines and removes any section
+	 marker comments that have no meaningful code between them and the next boundary.
+	 */
+	static func removeOrphanedSectionMarkers(from lines: [String]) -> [String] {
+		var result = lines
+		var index = 0
+
+		while index < result.count {
+			let trimmed = result[index].trimmingCharacters(in: .whitespaces)
+
+			// Check if this line is a section marker
+			guard trimmed.hasPrefix("// MARK:") ||
+				trimmed.hasPrefix("// TODO:") ||
+				trimmed.hasPrefix("// FIXME:") else {
+				index += 1
+				continue
+			}
+
+			// Found a section marker - check if there's any code between here and the next boundary
+			let hasCode = sectionHasCode(in: result, afterIndex: index)
+
+			if !hasCode {
+				// Remove the marker line and any immediately following blank line
+				result.remove(at: index)
+				if index < result.count,
+				   result[index].trimmingCharacters(in: .whitespaces).isEmpty {
+					result.remove(at: index)
+				}
+				// Don't increment index - check the new line at this position
+			} else {
+				index += 1
+			}
+		}
+
+		return result
+	}
+
+	/**
+	 Collapses runs of two or more consecutive blank lines down to a single blank line.
+
+	 After batch deletion of multiple adjacent declarations, the blank lines that separated
+	 them remain, creating unsightly gaps. This pass normalizes whitespace.
+	 */
+	static func collapseConsecutiveBlankLines(in lines: [String]) -> [String] {
+		var result: [String] = []
+		var lastWasBlank = false
+
+		for line in lines {
+			let isBlank = line.trimmingCharacters(in: .whitespaces).isEmpty
+			if isBlank, lastWasBlank {
+				continue
+			}
+			result.append(line)
+			lastWasBlank = isBlank
+		}
+
+		return result
+	}
+
+	/**
+	 Removes empty containers (extensions, classes, structs, enums, actors) left behind
+	 after batch deletion of their contents.
+
+	 Periphery folds extension members into the extended type's declaration graph, so
+	 `findHighestEmptyAncestor` cannot detect empty extensions. This post-processing pass
+	 scans the source text for container declarations whose body contains only whitespace
+	 and comments, and removes them along with any immediately preceding comments.
+	 */
+	static func removeEmptyContainers(from lines: [String]) -> [String] {
+		var result = lines
+		var index = 0
+
+		let containerKeywords = ["extension ", "class ", "struct ", "enum ", "actor "]
+
+		while index < result.count {
+			let trimmed = result[index].trimmingCharacters(in: .whitespaces)
+
+			// Skip comment lines to avoid false matches
+			guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("/*"), !trimmed.hasPrefix("*") else {
+				index += 1
+				continue
+			}
+
+			// Check if this line starts a container declaration
+			let isContainer = containerKeywords.contains { keyword in
+				trimmed.hasPrefix(keyword) || trimmed.contains(" \(keyword)")
+			}
+
+			guard isContainer, trimmed.contains("{") else {
+				index += 1
+				continue
+			}
+
+			// If the opening brace is on this line, find the matching closing brace
+			let openBraceIndex = index
+			guard let closeBraceIndex = findMatchingCloseBrace(in: result, from: openBraceIndex) else {
+				index += 1
+				continue
+			}
+
+			// Check if the body between braces contains only whitespace and comments.
+			// When openBraceIndex == closeBraceIndex the opening and closing braces
+			// are on the same line (e.g. `extension Foo {}`). In that case, check
+			// whether the text between the braces on that single line is blank.
+			let bodyIsEmpty: Bool
+			if openBraceIndex == closeBraceIndex {
+				let line = result[openBraceIndex]
+				if let openIdx = line.firstIndex(of: "{"),
+				   let closeIdx = line.lastIndex(of: "}"),
+				   openIdx < closeIdx {
+					let between = line[line.index(after: openIdx) ..< closeIdx]
+					bodyIsEmpty = between.allSatisfy(\.isWhitespace)
+				} else {
+					bodyIsEmpty = false
+				}
+			} else {
+				bodyIsEmpty = (openBraceIndex + 1 ..< closeBraceIndex).allSatisfy { lineIdx in
+					let bodyTrimmed = result[lineIdx].trimmingCharacters(in: .whitespaces)
+					return bodyTrimmed.isEmpty ||
+						bodyTrimmed.hasPrefix("//") ||
+						bodyTrimmed.hasPrefix("/*") ||
+						bodyTrimmed.hasPrefix("*") ||
+						bodyTrimmed.hasPrefix("*/")
+				}
+			}
+
+			guard bodyIsEmpty else {
+				index += 1
+				continue
+			}
+
+			// Scan backward to include preceding attributes, comments, and blank lines
+			// (mirrors the logic in findDeletionStartLine for regular declarations).
+			// Section markers (MARK, TODO, FIXME) are NOT consumed here — they are
+			// handled separately by removeOrphanedSectionMarkers, which checks whether
+			// the section still has code below the deleted container.
+			var startIndex = openBraceIndex
+			while startIndex > 0 {
+				let prevTrimmed = result[startIndex - 1].trimmingCharacters(in: .whitespaces)
+
+				// Stop at section markers — these head sections that may contain other code
+				if prevTrimmed.hasPrefix("// MARK:") ||
+					prevTrimmed.hasPrefix("// TODO:") ||
+					prevTrimmed.hasPrefix("// FIXME:") {
+					break
+				}
+
+				if prevTrimmed.hasPrefix("@") ||
+					prevTrimmed.hasPrefix("//") ||
+					prevTrimmed.hasPrefix("/*") ||
+					prevTrimmed.hasPrefix("*") ||
+					prevTrimmed.hasPrefix("*/") ||
+					prevTrimmed.isEmpty {
+					startIndex -= 1
+				} else {
+					break
+				}
+			}
+
+			// Also include trailing blank line after the closing brace if present
+			var endIndex = closeBraceIndex
+			if endIndex + 1 < result.count,
+			   result[endIndex + 1].trimmingCharacters(in: .whitespaces).isEmpty {
+				endIndex += 1
+			}
+
+			result.removeSubrange(startIndex ... endIndex)
+			// Don't increment index — check the new line at this position
+		}
+
+		return result
+	}
+
+	/**
+	 Finds the matching closing brace for a line containing an opening brace.
+
+	 Returns the index of the line containing the matching `}`, tracking brace depth.
+	 */
+	private static func findMatchingCloseBrace(in lines: [String], from startIndex: Int) -> Int? {
+		var depth = 0
+		for idx in startIndex ..< lines.count {
+			let line = lines[idx]
+			for char in line {
+				if char == "{" { depth += 1 }
+				if char == "}" { depth -= 1 }
+			}
+			if depth == 0 {
+				return idx
+			}
+		}
+		return nil
+	}
+
+	/**
+	 Checks whether a MARK/TODO/FIXME section contains any meaningful code lines.
+
+	 Scans forward from the line after the section marker until hitting another section marker,
+	 end of file, or a closing brace at the same or lower indentation level.
+	 */
+	private static func sectionHasCode(in lines: [String], afterIndex markerIndex: Int) -> Bool {
+		var checkIndex = markerIndex + 1
+
+		while checkIndex < lines.count {
+			let trimmed = lines[checkIndex].trimmingCharacters(in: .whitespaces)
+
+			// Skip blank lines
+			if trimmed.isEmpty {
+				checkIndex += 1
+				continue
+			}
+
+			// Another section marker means end of this section
+			if trimmed.hasPrefix("// MARK:") ||
+				trimmed.hasPrefix("// TODO:") ||
+				trimmed.hasPrefix("// FIXME:") {
+				return false
+			}
+
+			// A closing brace at top-level indentation means end of the containing scope
+			if trimmed == "}" {
+				return false
+			}
+
+			// Any other non-empty, non-comment content counts as code
+			if !trimmed.hasPrefix("//"),
+			   !trimmed.hasPrefix("/*"),
+			   !trimmed.hasPrefix("*"),
+			   !trimmed.hasPrefix("*/") {
+				return true
+			}
+
+			// Regular comments don't count as code
+			checkIndex += 1
+		}
+
+		// Reached end of file with no code found
+		return false
 	}
 
 	/**

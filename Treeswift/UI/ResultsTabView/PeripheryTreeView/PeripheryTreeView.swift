@@ -36,9 +36,20 @@ struct PeripheryTreeView: View {
 	@State private var cachedVisibleItems: [String] = []
 	@State private var removalSummary: RemovalSummary?
 	@State private var operationError: OperationError?
+	@State private var showStrategySheet = false
+	@State private var pendingRemovalTarget: RemovalTarget?
+	@State private var pendingDependencyChains: [DependencyChain] = []
 	@State private var typeAheadState = TypeAheadState()
 	@AppStorage("typeAheadSearchAllNodes") private var typeAheadSearchAllNodes: Bool = false
 	@Environment(\.undoManager) private var undoManager
+
+	/**
+	 Target for a pending removal operation (file or folder).
+	 */
+	private enum RemovalTarget {
+		case file(FileNode)
+		case folder(FolderNode)
+	}
 
 	/**
 	 Summary of deletion operations for alert display.
@@ -48,11 +59,12 @@ struct PeripheryTreeView: View {
 		let deletedCount: Int
 		let nonDeletableCount: Int
 		let failedIgnoreCommentsCount: Int
+		let skippedReferencedCount: Int
 		let fileCount: Int
 		let targetName: String
 	}
 
-	fileprivate static let removeAllUnusedCodeLabel = "Remove All Unused Code"
+	fileprivate static let removeUnusedCodeLabel = "Remove Unused Code…"
 
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
@@ -70,9 +82,9 @@ struct PeripheryTreeView: View {
 						hiddenWarningIDs: hiddenWarningIDs,
 						resultIndex: resultIndex,
 						onIgnoreAllWarnings: ignoreAllWarnings,
-						onRemoveAllUnusedCode: removeAllUnusedCode,
+						onRemoveAllUnusedCode: requestRemoveUnusedCode,
 						onIgnoreAllWarningsInFolder: ignoreAllWarningsInFolder,
-						onRemoveAllUnusedCodeInFolder: removeAllUnusedCodeInFolder,
+						onRemoveAllUnusedCodeInFolder: requestRemoveUnusedCodeInFolder,
 						copyMenuLabel: copyMenuLabel,
 						copyPathMenuLabel: copyPathMenuLabel,
 						copyFilePathsToClipboard: copyFilePathsToClipboard
@@ -161,6 +173,23 @@ struct PeripheryTreeView: View {
 					}
 				)
 				.interactiveDismissDisabled()
+			}
+			.sheet(isPresented: $showStrategySheet) {
+				RemovalStrategySheet(
+					targetName: pendingRemovalTargetName,
+					dependencyChains: pendingDependencyChains,
+					onConfirm: { strategy in
+						showStrategySheet = false
+						if let target = pendingRemovalTarget {
+							executePendingRemoval(target: target, strategy: strategy)
+						}
+					},
+					onCancel: {
+						showStrategySheet = false
+						pendingRemovalTarget = nil
+						pendingDependencyChains = []
+					}
+				)
 			}
 			.alert(item: $removalSummary) { summary in
 				Alert(
@@ -318,6 +347,10 @@ struct PeripheryTreeView: View {
 
 		if summary.failedIgnoreCommentsCount > 0 {
 			message += "⚠️ Manual deletion needed: \(summary.failedIgnoreCommentsCount) ignore comment\(summary.failedIgnoreCommentsCount == 1 ? "" : "s")\n"
+		}
+
+		if summary.skippedReferencedCount > 0 {
+			message += "⏭ Skipped: \(summary.skippedReferencedCount) declaration\(summary.skippedReferencedCount == 1 ? "" : "s") still referenced by other unused code\n"
 		}
 
 		return message
@@ -640,17 +673,123 @@ struct PeripheryTreeView: View {
 	}
 
 	/**
+	 Shows the strategy sheet before removing unused code for a file.
+	 */
+	private func requestRemoveUnusedCode(for file: FileNode) {
+		pendingRemovalTarget = .file(file)
+		pendingDependencyChains = buildChainsForTarget(.file(file))
+		showStrategySheet = true
+	}
+
+	/**
+	 Shows the strategy sheet before removing unused code for a folder.
+	 */
+	private func requestRemoveUnusedCodeInFolder(folder: FolderNode) {
+		pendingRemovalTarget = .folder(folder)
+		pendingDependencyChains = buildChainsForTarget(.folder(folder))
+		showStrategySheet = true
+	}
+
+	private var pendingRemovalTargetName: String {
+		switch pendingRemovalTarget {
+		case let .file(file): file.name
+		case let .folder(folder): folder.name
+		case nil: ""
+		}
+	}
+
+	/**
+	 Builds dependency chains for the given removal target.
+	 Gathers the same operations that would be passed to removal,
+	 then calls the analyzer to trace caller chains.
+	 */
+	private func buildChainsForTarget(_ target: RemovalTarget) -> [DependencyChain] {
+		let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
+
+		// Collect file paths in scope
+		var filePaths: [String] = []
+		var scopePath = ""
+
+		switch target {
+		case let .file(file):
+			filePaths = [file.path]
+			scopePath = file.path
+		case let .folder(folder):
+			var files: [FileNode] = []
+			collectFilesWithWarnings(from: .folder(folder), into: &files)
+			filePaths = files.map(\.path)
+			// Scope path is the folder's common prefix
+			if let first = filePaths.first {
+				scopePath = filePaths.reduce(first) { result, path in
+					String(result.commonPrefix(with: path))
+				}
+			}
+		}
+
+		let filePathSet = Set(filePaths)
+
+		// Gather removable operations for all files in scope
+		let operations: [FilteredOperations.Operation] = scanResults.compactMap { scanResult in
+			let declaration = scanResult.declaration
+			let location = ScanResultHelper.location(from: declaration)
+			guard filePathSet.contains(location.file.path.string) else { return nil }
+
+			if let filterState {
+				guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
+					return nil
+				}
+			}
+
+			let hasFullRange = location.endLine != nil && location.endColumn != nil
+			let isImport = declaration.kind == .module
+			guard scanResult.annotation.canRemoveCode(
+				hasFullRange: hasFullRange,
+				isImport: isImport,
+				location: location
+			) else {
+				return nil
+			}
+
+			return (scanResult, declaration, location)
+		}
+
+		return UnusedDependencyAnalyzer.buildDependencyChains(
+			operations: operations,
+			sourceGraph: sourceGraph,
+			allUnusedDeclarations: allUnused,
+			scopePath: scopePath
+		)
+	}
+
+	/**
+	 Dispatches the removal operation after the user picks a strategy.
+	 */
+	private func executePendingRemoval(target: RemovalTarget, strategy: RemovalStrategy) {
+		pendingRemovalTarget = nil
+		pendingDependencyChains = []
+		switch target {
+		case let .file(file):
+			removeAllUnusedCode(for: file, strategy: strategy)
+		case let .folder(folder):
+			removeAllUnusedCodeInFolder(folder: folder, strategy: strategy)
+		}
+	}
+
+	/**
 	 Removes all unused code from a file.
 
 	 Processes all warnings in the file and removes code where possible,
 	 working from bottom to top to preserve line numbers during deletion.
 	 Supports full undo/redo.
 	 */
-	private func removeAllUnusedCode(for file: FileNode) {
+	private func removeAllUnusedCode(for file: FileNode, strategy: RemovalStrategy) {
+		let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
 		let result = file.removeAllUnusedCode(
 			scanResults: scanResults,
 			filterState: filterState,
-			sourceGraph: sourceGraph
+			sourceGraph: sourceGraph,
+			strategy: strategy,
+			allUnusedDeclarations: allUnused
 		)
 
 		switch result {
@@ -664,6 +803,7 @@ struct PeripheryTreeView: View {
 				fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
 
 				if fileWasDeleted {
+					ModificationLogger.log(filePath: file.path, action: "Deleted file")
 					// Hide file from tree
 					hiddenFileIDs.insert(file.id)
 					// Hide empty ancestor folders
@@ -725,12 +865,26 @@ struct PeripheryTreeView: View {
 				deletedCount: removalResult.deletionStats.deletedCount,
 				nonDeletableCount: removalResult.deletionStats.nonDeletableCount,
 				failedIgnoreCommentsCount: removalResult.deletionStats.failedIgnoreCommentsCount,
+				skippedReferencedCount: removalResult.deletionStats.skippedReferencedCount,
 				fileCount: 1,
 				targetName: file.name
 			)
 
 		case let .failure(error):
-			operationError = OperationError(message: "Failed to remove unused code: \(error.localizedDescription)")
+			let nsError = error as NSError
+			if nsError.domain == "FileNode", nsError.code == 2 {
+				// All warnings were skipped — show informational message
+				removalSummary = RemovalSummary(
+					deletedCount: 0,
+					nonDeletableCount: 0,
+					failedIgnoreCommentsCount: 0,
+					skippedReferencedCount: 0,
+					fileCount: 1,
+					targetName: file.name
+				)
+			} else {
+				operationError = OperationError(message: "Failed to remove unused code: \(error.localizedDescription)")
+			}
 		}
 	}
 
@@ -774,7 +928,7 @@ struct PeripheryTreeView: View {
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performRedo()
 				}
-				undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+				undoManager?.setActionName(Self.removeUnusedCodeLabel)
 			}
 		}
 
@@ -807,14 +961,14 @@ struct PeripheryTreeView: View {
 				undoManager?.registerUndo(withTarget: NSObject()) { _ in
 					performUndo()
 				}
-				undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+				undoManager?.setActionName(Self.removeUnusedCodeLabel)
 			}
 		}
 
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
-		undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+		undoManager?.setActionName(Self.removeUnusedCodeLabel)
 	}
 
 	/**
@@ -935,7 +1089,7 @@ struct PeripheryTreeView: View {
 	 Processes each file in the folder (recursively) that has removable warnings.
 	 Supports full undo/redo.
 	 */
-	private func removeAllUnusedCodeInFolder(folder: FolderNode) {
+	private func removeAllUnusedCodeInFolder(folder: FolderNode, strategy: RemovalStrategy) {
 		Task { @MainActor in
 			// Collect all files with warnings in this folder
 			var filesToProcess: [FileNode] = []
@@ -945,6 +1099,8 @@ struct PeripheryTreeView: View {
 				print("No files with warnings in folder")
 				return
 			}
+
+			let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
 
 			// Process each file with progress tracking
 			var fileModifications: [(
@@ -959,6 +1115,7 @@ struct PeripheryTreeView: View {
 			var totalDeleted = 0
 			var totalNonDeletable = 0
 			var totalFailedIgnores = 0
+			var totalSkippedReferenced = 0
 			var filesProcessed = 0
 
 			await processFilesWithProgress(filesToProcess) { file in
@@ -966,7 +1123,9 @@ struct PeripheryTreeView: View {
 				let result = file.removeAllUnusedCode(
 					scanResults: scanResults,
 					filterState: filterState,
-					sourceGraph: sourceGraph
+					sourceGraph: sourceGraph,
+					strategy: strategy,
+					allUnusedDeclarations: allUnused
 				)
 
 				switch result {
@@ -979,6 +1138,7 @@ struct PeripheryTreeView: View {
 						fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
 
 						if fileWasDeleted {
+							ModificationLogger.log(filePath: file.path, action: "Deleted file")
 							// Hide file from tree
 							hiddenFileIDs.insert(file.id)
 						}
@@ -999,6 +1159,7 @@ struct PeripheryTreeView: View {
 					totalDeleted += removalResult.deletionStats.deletedCount
 					totalNonDeletable += removalResult.deletionStats.nonDeletableCount
 					totalFailedIgnores += removalResult.deletionStats.failedIgnoreCommentsCount
+					totalSkippedReferenced += removalResult.deletionStats.skippedReferencedCount
 					filesProcessed += 1
 
 				case let .failure(error):
@@ -1061,11 +1222,12 @@ struct PeripheryTreeView: View {
 			}
 
 			// Show deletion summary if any files were processed
-			if filesProcessed > 0 {
+			if filesProcessed > 0 || totalSkippedReferenced > 0 {
 				removalSummary = RemovalSummary(
 					deletedCount: totalDeleted,
 					nonDeletableCount: totalNonDeletable,
 					failedIgnoreCommentsCount: totalFailedIgnores,
+					skippedReferencedCount: totalSkippedReferenced,
 					fileCount: filesProcessed,
 					targetName: folder.name
 				)
@@ -1118,7 +1280,7 @@ struct PeripheryTreeView: View {
 			undoManager?.registerUndo(withTarget: NSObject()) { _ in
 				performRedo()
 			}
-			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+			undoManager?.setActionName(Self.removeUnusedCodeLabel)
 		}
 
 		@MainActor
@@ -1153,13 +1315,13 @@ struct PeripheryTreeView: View {
 			undoManager?.registerUndo(withTarget: NSObject()) { _ in
 				performUndo()
 			}
-			undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+			undoManager?.setActionName(Self.removeUnusedCodeLabel)
 		}
 
 		undoManager?.registerUndo(withTarget: NSObject()) { _ in
 			performUndo()
 		}
-		undoManager?.setActionName(Self.removeAllUnusedCodeLabel)
+		undoManager?.setActionName(Self.removeUnusedCodeLabel)
 	}
 
 	/**
@@ -1335,7 +1497,7 @@ private struct TreeNodeView: View {
 
 					Divider()
 
-					Button(PeripheryTreeView.removeAllUnusedCodeLabel) {
+					Button(PeripheryTreeView.removeUnusedCodeLabel) {
 						onRemoveAllUnusedCodeInFolder(folder)
 					}
 
@@ -1402,7 +1564,7 @@ private struct TreeNodeView: View {
 
 				Divider()
 
-				Button(PeripheryTreeView.removeAllUnusedCodeLabel) {
+				Button(PeripheryTreeView.removeUnusedCodeLabel) {
 					onRemoveAllUnusedCode(file)
 				}
 

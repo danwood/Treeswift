@@ -91,6 +91,7 @@ final class ScanState {
 		let projectType = configuration.projectType
 		let projectDirectory = configuration.projectDirectory
 		let logToConsole = configuration.shouldLogToConsole
+		ModificationLogger.isEnabled = logToConsole
 
 		scanTask = Task {
 			do {

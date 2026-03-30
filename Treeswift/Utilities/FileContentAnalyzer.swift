@@ -60,19 +60,20 @@ enum FileContentAnalyzer {
 	/**
 	 Checks if the file has any non-import declarations remaining after removal.
 
-	 Uses SourceGraph to find all declarations in the file, excludes removed declarations,
-	 and checks if any remaining declarations are not imports (kind != .module).
+	 Uses SourceGraph to find all declarations in the file, excludes removed declarations
+	 and their descendants, and checks if any remaining declarations are not imports.
 	 */
 	private static func hasNonImportDeclarations(
 		filePath: String,
 		sourceGraph: SourceGraph,
 		removedWarningIDs: [String]
 	) -> Bool {
-		// Extract USRs from removed warning IDs
+		// Extract USRs from removed warning IDs (format: "filePath:usr")
+		// Split on first colon only, since USRs themselves contain colons (e.g., "s:11Module4TypeV")
 		let removedUSRs = Set(removedWarningIDs.compactMap { warningID -> String? in
-			let components = warningID.split(separator: ":")
-			guard components.count >= 2 else { return nil }
-			return String(components[1])
+			guard let colonIndex = warningID.firstIndex(of: ":") else { return nil }
+			let usr = String(warningID[warningID.index(after: colonIndex)...])
+			return usr.isEmpty ? nil : usr
 		})
 
 		// Find all declarations in this file
@@ -80,15 +81,43 @@ enum FileContentAnalyzer {
 			declaration.location.file.path.string == filePath
 		}
 
-		// Filter out removed declarations
+		// Filter out removed declarations and their descendants
+		// (e.g., deleting a struct also removes its properties, methods, etc.)
 		let remainingDeclarations = fileDeclarations.filter { declaration in
-			!declaration.usrs.contains { usr in removedUSRs.contains(usr) }
+			!isRemovedOrDescendantOfRemoved(declaration, removedUSRs: removedUSRs)
 		}
 
 		// Check if any remaining declarations are not imports
 		return remainingDeclarations.contains { declaration in
 			declaration.kind != .module
 		}
+	}
+
+	/**
+	 Checks whether a declaration was removed or is a descendant of a removed declaration.
+
+	 Walks up the parent chain to detect if any ancestor was deleted, which means
+	 this declaration was implicitly removed as well.
+	 */
+	private static func isRemovedOrDescendantOfRemoved(
+		_ declaration: Declaration,
+		removedUSRs: Set<String>
+	) -> Bool {
+		// Check the declaration itself
+		if declaration.usrs.contains(where: { removedUSRs.contains($0) }) {
+			return true
+		}
+
+		// Walk up the parent chain
+		var current = declaration.parent
+		while let parent = current {
+			if parent.usrs.contains(where: { removedUSRs.contains($0) }) {
+				return true
+			}
+			current = parent.parent
+		}
+
+		return false
 	}
 
 	/**

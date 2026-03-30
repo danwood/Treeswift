@@ -9,7 +9,8 @@ struct OptionsDisclosureGroup: View {
 			configuration.skipBuild ||
 			configuration.cleanBuild ||
 			configuration.isVerbose ||
-			configuration.shouldLogToConsole
+			configuration.shouldLogToConsole ||
+			configuration.enableUserScriptSandboxing
 	}
 
 	private var optionsSummary: String {
@@ -19,6 +20,7 @@ struct OptionsDisclosureGroup: View {
 		if configuration.cleanBuild { enabled.append("Clean Build") }
 		if configuration.isVerbose { enabled.append("Verbose") }
 		if configuration.shouldLogToConsole { enabled.append("Log to Console") }
+		if configuration.enableUserScriptSandboxing { enabled.append("User Script Sandboxing") }
 		return enabled.isEmpty ? "None" : enabled.joined(separator: ", ")
 	}
 
@@ -53,6 +55,7 @@ struct OptionsDisclosureGroup: View {
 				Toggle("Clean Build", isOn: $configuration.cleanBuild)
 				Toggle("Verbose", isOn: $configuration.isVerbose)
 				Toggle("Log to Console", isOn: $configuration.shouldLogToConsole)
+				Toggle("Enable User Script Sandboxing", isOn: $configuration.enableUserScriptSandboxing)
 			}
 			.padding(.leading, 20)
 		}

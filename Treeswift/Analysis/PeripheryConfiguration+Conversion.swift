@@ -196,10 +196,14 @@ extension PeripheryConfiguration {
 		config.reportInclude = reportInclude
 
 		// Build Settings
+		var effectiveBuildArguments = buildArguments
+		if !enableUserScriptSandboxing {
+			effectiveBuildArguments.append("ENABLE_USER_SCRIPT_SANDBOXING=NO")
+		}
 		if let destination {
-			config.buildArguments = ["-destination", destination] + buildArguments
+			config.buildArguments = ["-destination", destination] + effectiveBuildArguments
 		} else {
-			config.buildArguments = buildArguments
+			config.buildArguments = effectiveBuildArguments
 		}
 		config.xcodeListArguments = xcodeListArguments
 		config.skipBuild = skipBuild

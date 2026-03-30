@@ -47,26 +47,25 @@ struct CodeModificationHelper {
 	/**
 	 Finds the highest ancestor container that would become empty after deleting the given declaration.
 
-	 Walks up the parent chain to find containers that have only one child (the declaration being deleted,
-	 or its ancestor). Returns the highest such ancestor, or the original declaration if no parents would be empty.
+	 Walks up the parent chain to find containers whose children are ALL being deleted in this batch.
+	 Returns the highest such ancestor, or the original declaration if no parents would become empty.
 
-	 Example:
-	 ```
-	 extension Foo {
-	     struct Bar {
-	         var unused: Int  // Only member
-	     }
-	 }
-	 ```
-	 When deleting `unused`, this returns the `extension Foo` declaration since both `Bar` and the extension
-	 would become empty.
+	 The `allDeletingUSRs` parameter contains USRs of all declarations being deleted in the batch,
+	 enabling detection of cases where multiple siblings are all being removed (e.g., deleting both
+	 members of an extension should delete the extension itself).
 	 */
-	private static func findHighestEmptyAncestor(of declaration: Declaration) -> Declaration {
+	private static func findHighestEmptyAncestor(
+		of declaration: Declaration,
+		allDeletingUSRs: Set<String>
+	) -> Declaration {
 		var current = declaration
 
-		while let parent = current.parent,
-		      parent.declarations.count == 1 {
-			// Parent would be empty after removing current
+		while let parent = current.parent {
+			// Check if ALL siblings would be removed after deleting current
+			let allChildrenDeleted = parent.declarations.allSatisfy { sibling in
+				sibling.usrs.contains { allDeletingUSRs.contains($0) }
+			}
+			guard allChildrenDeleted else { break }
 			current = parent
 		}
 
@@ -109,21 +108,51 @@ struct CodeModificationHelper {
 	}
 
 	/**
-	 Replaces or inserts an access keyword in a line.
-	 If the old keyword exists, replaces it. Otherwise inserts the new keyword.
+	 Removes a setter-specific modifier (e.g. `private(set)`, `internal(set)`) from a line.
+	 */
+	private static func removeSetterModifier(from line: String) -> String {
+		guard let setterPattern = try? Regex("\\b(public|internal|fileprivate|private)\\(set\\)\\s*")
+		else { return line }
+		return line.replacing(setterPattern, with: "")
+	}
+
+	/**
+	 Replaces or inserts an access keyword in a line, removing any setter-specific
+	 modifiers (e.g. `private(set)`, `internal(set)`) that would conflict.
+
+	 Returns both the modified line and a description of the action taken.
 	 */
 	private static func replaceOrInsertAccessKeyword(
 		oldKeyword: String?,
 		newKeyword: String,
 		declarationKind: Declaration.Kind,
 		in line: String
-	) -> String {
+	) -> (line: String, action: String) {
+		// Remove any setter-specific modifier (e.g. "private(set) ", "internal(set) ")
+		// before replacing/inserting the main access keyword
+		var workingLine = line
+		var removedSetterModifier: String?
+		if let setterPattern = try? Regex("\\b(public|internal|fileprivate|private)\\(set\\)\\s*") {
+			if let match = workingLine.firstMatch(of: setterPattern) {
+				let matchedText = String(workingLine[match.range])
+				removedSetterModifier = matchedText.trimmingCharacters(in: .whitespaces)
+				workingLine.replaceSubrange(match.range, with: "")
+			}
+		}
+
 		if let oldKeyword,
 		   let pattern = try? Regex("\\b\(oldKeyword)\\s+"),
-		   line.contains(pattern) {
-			replaceAccessKeyword(oldKeyword, with: newKeyword, in: line)
+		   workingLine.contains(pattern) {
+			let result = replaceAccessKeyword(oldKeyword, with: newKeyword, in: workingLine)
+			return (result, "replaced `\(oldKeyword)` with `\(newKeyword)`")
 		} else {
-			insertAccessKeyword(newKeyword, before: declarationKind, in: line)
+			let result = insertAccessKeyword(newKeyword, before: declarationKind, in: workingLine)
+			let action = if let removedSetterModifier {
+				"replaced `\(removedSetterModifier)` with `\(newKeyword)`"
+			} else {
+				"inserted `\(newKeyword)`"
+			}
+			return (result, action)
 		}
 	}
 
@@ -187,14 +216,16 @@ struct CodeModificationHelper {
 			}
 
 		case .insertPrivate:
-			// Remove any explicit 'internal' keyword before inserting 'private'
-			let lineWithoutInternal = removeAccessKeyword("internal", from: originalLine)
-			newLine = insertAccessKeyword("private", before: declaration.kind, in: lineWithoutInternal)
+			// Remove any explicit 'internal' keyword and setter modifiers before inserting 'private'
+			var workingLine = removeAccessKeyword("internal", from: originalLine)
+			workingLine = removeSetterModifier(from: workingLine)
+			newLine = insertAccessKeyword("private", before: declaration.kind, in: workingLine)
 
 		case .insertFilePrivate:
-			// Remove any explicit 'internal' keyword before inserting 'fileprivate'
-			let lineWithoutInternal = removeAccessKeyword("internal", from: originalLine)
-			newLine = insertAccessKeyword("fileprivate", before: declaration.kind, in: lineWithoutInternal)
+			// Remove any explicit 'internal' keyword and setter modifiers before inserting 'fileprivate'
+			var workingLine = removeAccessKeyword("internal", from: originalLine)
+			workingLine = removeSetterModifier(from: workingLine)
+			newLine = insertAccessKeyword("fileprivate", before: declaration.kind, in: workingLine)
 		}
 
 		lines[lineIndex] = newLine
@@ -206,6 +237,13 @@ struct CodeModificationHelper {
 		} catch {
 			return .failure(CodeModificationError.cannotWriteFile(filePath))
 		}
+
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: location.line,
+			endLine: location.line,
+			action: fix.logDescription
+		)
 
 		return .success(ModificationResult(
 			filePath: filePath,
@@ -338,6 +376,13 @@ struct CodeModificationHelper {
 
 		let linesRemoved = endLine - startLine + 1
 
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: startLine,
+			endLine: endLine,
+			action: "removed `periphery:ignore` comment"
+		)
+
 		return .success(ModificationResult(
 			filePath: filePath,
 			originalContents: fileContents,
@@ -398,6 +443,13 @@ struct CodeModificationHelper {
 				// Invalidate cache
 				SourceFileReader.invalidateCache(for: filePath)
 
+				ModificationLogger.log(
+					filePath: filePath,
+					startLine: location.line,
+					endLine: location.line,
+					action: "removed enum case `\(caseName)`"
+				)
+
 				// Register undo (no line number adjustments needed - we only modified one line)
 				UndoRedoHelper.registerDeletionUndo(
 					undoManager: undoManager,
@@ -419,7 +471,8 @@ struct CodeModificationHelper {
 		}
 
 		// Check if parent should be deleted instead (empty container removal)
-		let actualTarget = findHighestEmptyAncestor(of: declaration)
+		let deletingUSRs = Set(declaration.usrs)
+		let actualTarget = findHighestEmptyAncestor(of: declaration, allDeletingUSRs: deletingUSRs)
 
 		// Use the actual target's location for deletion
 		let targetLocation = actualTarget.location
@@ -474,6 +527,13 @@ struct CodeModificationHelper {
 
 		// Invalidate source file cache
 		SourceFileReader.invalidateCache(for: filePath)
+
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: finalStartLine,
+			endLine: finalEndLine,
+			action: "Deleted"
+		)
 
 		// Adjust line numbers and track which declarations were adjusted
 		let linesRemoved = finalEndLine - finalStartLine + 1
@@ -563,6 +623,13 @@ struct CodeModificationHelper {
 		// Invalidate source file cache
 		SourceFileReader.invalidateCache(for: filePath)
 
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: location.line,
+			endLine: endLine,
+			action: "Deleted"
+		)
+
 		// Adjust line numbers and track which declarations were adjusted
 		let linesRemoved = endLine - location.line + 1
 		let afterLine = endLine
@@ -640,6 +707,13 @@ struct CodeModificationHelper {
 
 		// Invalidate source file cache
 		SourceFileReader.invalidateCache(for: filePath)
+
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: location.line,
+			endLine: location.line,
+			action: "Deleted import"
+		)
 
 		// Adjust line numbers and track which declarations were adjusted
 		let afterLine = location.line
@@ -725,6 +799,13 @@ struct CodeModificationHelper {
 
 		// Invalidate cache
 		SourceFileReader.invalidateCache(for: filePath)
+
+		ModificationLogger.log(
+			filePath: filePath,
+			startLine: insertionLine,
+			endLine: insertionLine,
+			action: "inserted `// periphery:ignore`"
+		)
 
 		// Adjust line numbers for declarations after this one
 		let adjustedUSRs: [String] = if let sourceGraph {
@@ -862,6 +943,16 @@ struct CodeModificationHelper {
 			operationsWithPreviews = operations
 		}
 
+		// Collect all USRs being deleted in this batch so ancestor detection can
+		// identify parents whose children are ALL being removed
+		let allDeletingUSRs: Set<String> = {
+			var usrs = Set<String>()
+			for (_, declaration, _) in operationsWithPreviews {
+				usrs.formUnion(declaration.usrs)
+			}
+			return usrs
+		}()
+
 		// Pre-process operations to handle empty container removal
 		// Track declarations we've already included (by USR) to avoid duplicates when
 		// multiple siblings would all cause the parent to be empty
@@ -871,7 +962,7 @@ struct CodeModificationHelper {
 		for (scanResult, declaration, _) in operationsWithPreviews {
 			// For full declaration deletions, check if parent should be deleted instead
 			let actualTarget: Declaration = if shouldCheckEmptyAncestor(scanResult.annotation, declaration.kind) {
-				findHighestEmptyAncestor(of: declaration)
+				findHighestEmptyAncestor(of: declaration, allDeletingUSRs: allDeletingUSRs)
 			} else {
 				declaration
 			}
@@ -883,6 +974,13 @@ struct CodeModificationHelper {
 				processedOperations.append((scanResult, actualTarget, actualTarget.location))
 			}
 		}
+
+		// Collect log entries during the loop; they'll be merged and emitted after post-processing
+		var pendingLogEntries: [ModificationLogger.PendingEntry] = []
+
+		// Track original line numbers alongside the lines array so post-processing
+		// removals can be mapped back to original coordinates for logging
+		var originalLineNumbers = Array(1 ... lines.count)
 
 		// Process each operation from bottom to top
 		// Since sorted bottom-to-top, each deletion automatically shifts remaining correctly
@@ -896,6 +994,11 @@ struct CodeModificationHelper {
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 				lines[lineIndex] = removeAccessKeyword("public", from: lines[lineIndex])
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(
+					startLine: location.line,
+					endLine: location.line,
+					action: "removed `public`"
+				))
 
 			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
 				// Internal is the default, so keyword may or may not be present
@@ -903,21 +1006,33 @@ struct CodeModificationHelper {
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 
 				if let suggested = suggestedAccessibility {
-					lines[lineIndex] = replaceOrInsertAccessKeyword(
+					let (modifiedLine, action) = replaceOrInsertAccessKeyword(
 						oldKeyword: "internal",
 						newKeyword: suggested.rawValue,
 						declarationKind: declaration.kind,
 						in: lines[lineIndex]
 					)
+					lines[lineIndex] = modifiedLine
+					pendingLogEntries.append(.init(
+						startLine: location.line,
+						endLine: location.line,
+						action: action
+					))
 				} else {
 					// No suggested accessibility means top-level scope
 					// Use 'private' by convention (equivalent to fileprivate at top level)
-					lines[lineIndex] = replaceOrInsertAccessKeyword(
+					let (modifiedLine, action) = replaceOrInsertAccessKeyword(
 						oldKeyword: "internal",
 						newKeyword: "private",
 						declarationKind: declaration.kind,
 						in: lines[lineIndex]
 					)
+					lines[lineIndex] = modifiedLine
+					pendingLogEntries.append(.init(
+						startLine: location.line,
+						endLine: location.line,
+						action: action
+					))
 				}
 				removedWarningIDs.append(warningID)
 
@@ -926,12 +1041,22 @@ struct CodeModificationHelper {
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 				lines[lineIndex] = replaceAccessKeyword("fileprivate", with: "private", in: lines[lineIndex])
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(
+					startLine: location.line,
+					endLine: location.line,
+					action: "replaced `fileprivate` with `private`"
+				))
 
 			} else if case .redundantAccessibility = scanResult.annotation {
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 				lines[lineIndex] = removeAnyAccessKeyword(from: lines[lineIndex])
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(
+					startLine: location.line,
+					endLine: location.line,
+					action: "removed access modifier"
+				))
 
 			} else if scanResult.annotation == ScanResult.Annotation.superfluousIgnoreCommand {
 				// Find and remove periphery:ignore comment
@@ -949,7 +1074,13 @@ struct CodeModificationHelper {
 				guard commentIndex >= 0, commentIndex < lines.count else { continue }
 
 				lines.remove(at: commentIndex)
+				originalLineNumbers.remove(at: commentIndex)
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(
+					startLine: commentLine,
+					endLine: commentLine,
+					action: "removed `periphery:ignore` comment"
+				))
 
 				// Adjust source graph line numbers
 				if let sourceGraph {
@@ -968,7 +1099,13 @@ struct CodeModificationHelper {
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
 
 				lines.remove(at: lineIndex)
+				originalLineNumbers.remove(at: lineIndex)
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(
+					startLine: location.line,
+					endLine: location.line,
+					action: "Deleted import"
+				))
 
 				// Adjust source graph
 				if let sourceGraph {
@@ -996,6 +1133,11 @@ struct CodeModificationHelper {
 						// Successfully handled inline case deletion
 						lines = modifiedLines
 						removedWarningIDs.append(warningID)
+						pendingLogEntries.append(.init(
+							startLine: location.line,
+							endLine: location.line,
+							action: "removed enum case `\(caseName)`"
+						))
 						// No line number adjustments needed - we only modified one line
 						continue
 					}
@@ -1038,7 +1180,9 @@ struct CodeModificationHelper {
 				// Remove lines from array
 				let linesRemoved = endIndex - startIndex + 1
 				lines.removeSubrange(startIndex ... endIndex)
+				originalLineNumbers.removeSubrange(startIndex ... endIndex)
 				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(startLine: finalStartLine, endLine: finalEndLine, action: "Deleted"))
 
 				// Adjust source graph
 				if let sourceGraph {
@@ -1052,6 +1196,40 @@ struct CodeModificationHelper {
 				}
 			}
 		}
+
+		// Snapshot before post-processing so we can detect which lines were removed
+		let linesBeforePostProcessing = lines
+
+		// Remove empty containers (extensions, classes, etc.) left behind after deletions
+		lines = DeclarationDeletionHelper.removeEmptyContainers(from: lines)
+
+		// Remove orphaned MARK/TODO/FIXME comments left behind after deletions
+		lines = DeclarationDeletionHelper.removeOrphanedSectionMarkers(from: lines)
+
+		// Collapse consecutive blank lines left behind by multiple deletions
+		lines = DeclarationDeletionHelper.collapseConsecutiveBlankLines(in: lines)
+
+		// Find lines removed by post-processing and add them as pending deletion entries.
+		// Post-processing only removes lines (no reordering), so we can walk both arrays
+		// with two pointers to find which indices were removed.
+		if ModificationLogger.isEnabled, lines.count < linesBeforePostProcessing.count {
+			var removedIndices: [Int] = []
+			var newIdx = 0
+			for oldIdx in linesBeforePostProcessing.indices {
+				if newIdx < lines.count, lines[newIdx] == linesBeforePostProcessing[oldIdx] {
+					newIdx += 1
+				} else {
+					removedIndices.append(oldIdx)
+				}
+			}
+			for oldIdx in removedIndices {
+				let origLine = originalLineNumbers[oldIdx]
+				pendingLogEntries.append(.init(startLine: origLine, endLine: origLine, action: "Deleted"))
+			}
+		}
+
+		// Emit all collected log entries (merging contiguous deletions)
+		ModificationLogger.emitPendingEntries(pendingLogEntries, filePath: filePath)
 
 		// Join lines back into string
 		let currentContents = lines.joined(separator: "\n")
@@ -1102,7 +1280,8 @@ struct CodeModificationHelper {
 			deletionStats: FileNode.DeletionStats(
 				deletedCount: deletedCount,
 				nonDeletableCount: nonDeletableCount,
-				failedIgnoreCommentsCount: failedIgnoreCommentsCount
+				failedIgnoreCommentsCount: failedIgnoreCommentsCount,
+				skippedReferencedCount: 0
 			)
 		))
 	}
