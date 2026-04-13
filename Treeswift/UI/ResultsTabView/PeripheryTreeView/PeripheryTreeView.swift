@@ -19,7 +19,7 @@ private struct OperationError: Identifiable {
 struct PeripheryTreeView: View {
 	let rootNodes: [TreeNode]
 	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	let filterState: FilterState?
 	@Binding var selectedID: String?
 	var searchNavState: SearchNavigationState
@@ -369,6 +369,10 @@ struct PeripheryTreeView: View {
 			if hiddenFileIDs.contains(file.id) {
 				return nil
 			}
+
+			// When restored from cache, scanResults is empty so the index has no data.
+			// Show all nodes as-is — filtering requires live scan results.
+			guard !scanResults.isEmpty else { return node }
 
 			// Use index to get filtered results for this file
 			let filteredResults = resultIndex.filteredResults(
@@ -784,7 +788,7 @@ struct PeripheryTreeView: View {
 	 */
 	private func removeAllUnusedCode(for file: FileNode, strategy: RemovalStrategy) {
 		let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
-		let result = file.removeAllUnusedCode(
+		let result = file.computeRemoval(
 			scanResults: scanResults,
 			filterState: filterState,
 			sourceGraph: sourceGraph,
@@ -794,9 +798,6 @@ struct PeripheryTreeView: View {
 
 		switch result {
 		case let .success(removalResult):
-			// Invalidate file cache
-			SourceFileReader.invalidateCache(for: file.path)
-
 			// Check if file should be deleted
 			var fileWasDeleted = false
 			if removalResult.shouldDeleteFile {
@@ -819,6 +820,12 @@ struct PeripheryTreeView: View {
 					}
 				}
 			}
+
+			// Write modified contents to disk (if file wasn't trashed)
+			if !fileWasDeleted {
+				try? removalResult.modifiedContents.write(toFile: file.path, atomically: true, encoding: .utf8)
+			}
+			SourceFileReader.invalidateCache(for: file.path)
 
 			// Hide all removed warnings with animation
 			for warningID in removalResult.removedWarningIDs {
@@ -1087,6 +1094,7 @@ struct PeripheryTreeView: View {
 	 Removes all unused code in a folder.
 
 	 Processes each file in the folder (recursively) that has removable warnings.
+	 Uses a two-pass approach: plan all files first (no I/O), then execute all plans.
 	 Supports full undo/redo.
 	 */
 	private func removeAllUnusedCodeInFolder(folder: FolderNode, strategy: RemovalStrategy) {
@@ -1102,7 +1110,39 @@ struct PeripheryTreeView: View {
 
 			let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
 
-			// Process each file with progress tracking
+			// Build the full batch deletion set so skipReferenced treats cross-file
+			// references within this folder as internal, not external.
+			let batchDeletionSet = UnusedDependencyAnalyzer.buildBatchDeletionSet(
+				filePaths: Set(filesToProcess.map(\.path)),
+				scanResults: scanResults
+			)
+
+			// Pass 1 — Plan: compute all modifications without writing or mutating source graph
+			var plans: [(file: FileNode, removalResult: FileNode.RemovalResult)] = []
+
+			await processFilesWithProgress(filesToProcess) { file in
+				let result = file.computeRemoval(
+					scanResults: scanResults,
+					filterState: filterState,
+					sourceGraph: sourceGraph,
+					strategy: strategy,
+					allUnusedDeclarations: allUnused,
+					batchDeletionSet: batchDeletionSet
+				)
+				switch result {
+				case let .success(removalResult):
+					plans.append((file, removalResult))
+				case let .failure(error):
+					let nsError = error as NSError
+					if nsError.domain != "FileNode" || nsError.code != 2 {
+						print("Failed to plan code removal for \(file.path): \(error.localizedDescription)")
+					}
+				}
+			}
+
+			guard !fileOperationProgress.isCancelled else { return }
+
+			// Pass 2 — Execute: write all planned results to disk and adjust source graph
 			var fileModifications: [(
 				path: String,
 				original: String,
@@ -1118,60 +1158,45 @@ struct PeripheryTreeView: View {
 			var totalSkippedReferenced = 0
 			var filesProcessed = 0
 
-			await processFilesWithProgress(filesToProcess) { file in
-				// Process file
-				let result = file.removeAllUnusedCode(
-					scanResults: scanResults,
-					filterState: filterState,
-					sourceGraph: sourceGraph,
-					strategy: strategy,
-					allUnusedDeclarations: allUnused
-				)
+			for (file, removalResult) in plans {
+				// Check if file should be deleted
+				var fileWasDeleted = false
+				if removalResult.shouldDeleteFile {
+					fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
 
-				switch result {
-				case let .success(removalResult):
-					SourceFileReader.invalidateCache(for: file.path)
-
-					// Check if file should be deleted
-					var fileWasDeleted = false
-					if removalResult.shouldDeleteFile {
-						fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: file.path)
-
-						if fileWasDeleted {
-							ModificationLogger.log(filePath: file.path, action: "Deleted file")
-							// Hide file from tree
-							hiddenFileIDs.insert(file.id)
-						}
-					}
-
-					fileModifications.append((
-						removalResult.filePath,
-						removalResult.originalContents,
-						removalResult.modifiedContents,
-						removalResult.removedWarningIDs,
-						fileWasDeleted,
-						file.id
-					))
-
-					allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
-
-					// Accumulate statistics
-					totalDeleted += removalResult.deletionStats.deletedCount
-					totalNonDeletable += removalResult.deletionStats.nonDeletableCount
-					totalFailedIgnores += removalResult.deletionStats.failedIgnoreCommentsCount
-					totalSkippedReferenced += removalResult.deletionStats.skippedReferencedCount
-					filesProcessed += 1
-
-				case let .failure(error):
-					// Only log if it's not the "no removable warnings" case
-					let nsError = error as NSError
-					if nsError.domain == "FileNode", nsError.code == 2 {
-						// This is normal - file has warnings but none are removable
-						// (e.g., .assignOnlyProperty, .redundantProtocol, or filtered warnings)
-					} else {
-						print("Failed to remove unused code from \(file.path): \(error.localizedDescription)")
+					if fileWasDeleted {
+						ModificationLogger.log(filePath: file.path, action: "Deleted file")
+						hiddenFileIDs.insert(file.id)
 					}
 				}
+
+				if !fileWasDeleted {
+					do {
+						try removalResult.modifiedContents.write(toFile: file.path, atomically: true, encoding: .utf8)
+					} catch {
+						print("Failed to write \(file.path): \(error.localizedDescription)")
+						continue
+					}
+				}
+
+				SourceFileReader.invalidateCache(for: file.path)
+
+				fileModifications.append((
+					removalResult.filePath,
+					removalResult.originalContents,
+					removalResult.modifiedContents,
+					removalResult.removedWarningIDs,
+					fileWasDeleted,
+					file.id
+				))
+
+				allRemovedWarningIDs.append(contentsOf: removalResult.removedWarningIDs)
+
+				totalDeleted += removalResult.deletionStats.deletedCount
+				totalNonDeletable += removalResult.deletionStats.nonDeletableCount
+				totalFailedIgnores += removalResult.deletionStats.failedIgnoreCommentsCount
+				totalSkippedReferenced += removalResult.deletionStats.skippedReferencedCount
+				filesProcessed += 1
 			}
 
 			// Only register undo if not cancelled

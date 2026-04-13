@@ -33,7 +33,7 @@ extension EnvironmentValues {
 struct ResultsTabView: View {
 	let treeNodes: [TreeNode]
 	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	let treeSection: CategoriesNode?
 	let viewExtensionsSection: CategoriesNode?
 	let sharedSection: CategoriesNode?

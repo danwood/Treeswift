@@ -107,6 +107,30 @@ The CLI is useful for:
 - Automated testing workflows
 - Debugging scan output
 
+### HTTP Automation API
+
+Treeswift includes an embedded HTTP server for external control — useful for scripting, CI pipelines, and AI-assisted workflows. Launch with `--automation-port <port>` to enable it:
+
+```bash
+open /path/to/Treeswift.app --args --automation-port 21663
+```
+
+When ready, the server writes the active port to `/tmp/treeswift-control.port`. All endpoints are on `http://localhost:<port>/` and return JSON.
+
+**Key endpoints:**
+- `GET /status` — server state (`idle` or `scanning`)
+- `GET /configurations` — list all saved configurations
+- `POST /configurations` — create a new configuration
+- `POST /configurations/:id/scan` — start a scan
+- `GET /configurations/:id/scan/wait` — long-poll until scan completes
+- `GET /configurations/:id/results/summary` — warning counts by type
+- `GET /configurations/:id/results/periphery-tree` — full results hierarchy
+- `POST /configurations/:id/removal/preview` — preview code removal (dry run)
+- `POST /configurations/:id/removal/execute` — execute code removal
+- `POST /quit` — terminate the application
+
+See [docs/automation-api.md](docs/automation-api.md) for the complete API reference with curl examples.
+
 ## Analysis Components
 
 Treeswift integrates the [Periphery](https://github.com/peripheryapp/periphery) static analysis engine as one component of its analysis capabilities. The app includes a recent version of Periphery as a git subtree, with modifications to enable deeper integration and enhanced analysis features.

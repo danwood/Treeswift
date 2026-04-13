@@ -18,6 +18,23 @@ xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build
 
 Treeswift is a GUI application but can also be launched with command-line arguments for testing and automation. See README.md for complete CLI documentation.
 
+## Xcode Project Organization
+
+Treeswift uses **"blue folder" references** in Xcode (not yellow group references). This means:
+
+- Xcode discovers source files by scanning the filesystem directly
+- Files and folders can be freely moved, added, or renamed on disk without touching `Treeswift.xcodeproj`
+- No need to update the project file when reorganizing source folders
+
+### Three-Layer Source Structure
+
+The `Treeswift/` source directory is organized into three layers (see `ideas/external-automation-control.md` for the full intended layout):
+
+- **`Shared/`** — pure Swift helpers with no UI or server dependencies (extensions, formatters)
+- **`Core/`** — back-end processing used by both the UI and the automation server (scanning, analysis, code modification, project access, results models)
+- **`UI/`** — SwiftUI views and UI-only helpers; depends on Core and Shared
+- **`AutomationServer/`** — embedded HTTP server; depends on Core and Shared, no UI dependency
+
 ## Code Formatting
 
 ### Indentation Rules - CRITICAL
@@ -47,7 +64,10 @@ Configuration forms must follow [macOS layout guidelines](https://marioaguzman.g
 - 20pt window margins, 6-12pt control spacing
 
 ### Utilities Location
-Shared helper functions belong in `Utilities/` folder, not scattered across views (e.g., `DeclarationIconHelper.swift`, `TypeLabelFormatter.swift`)
+Place new helpers in the appropriate layer folder, not at the top level:
+- Pure Swift extensions/formatters with no dependencies → `Shared/`
+- Back-end domain utilities (no SwiftUI/AppKit) → `Core/Utilities/`
+- UI-only helpers (SwiftUI/AppKit) → `UI/Helpers/`
 
 ## Modifying PeripherySource/periphery Files
 

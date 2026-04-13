@@ -1,0 +1,497 @@
+//
+//  ScanState.swift
+//  Treeswift
+//
+//  Per-configuration scan state management
+//  Maintains scan results, progress, and task state for a single configuration
+//
+
+import Configuration
+import Foundation
+import Logger
+import PeripheryKit
+import SourceGraph
+import SwiftUI
+
+@Observable
+@MainActor
+final class ScanState {
+	// Scan results - automatically observable with @Observable
+	var scanResults: [ScanResult] = []
+	var sourceGraph: (any SourceGraphProtocol)?
+	var treeNodes: [TreeNode] = []
+	var treeSection: CategoriesNode?
+	var viewExtensionsSection: CategoriesNode?
+	var sharedSection: CategoriesNode?
+	var orphansSection: CategoriesNode?
+	var previewOrphansSection: CategoriesNode?
+	var bodyGetterSection: CategoriesNode?
+	var unattachedSection: CategoriesNode?
+	var fileTreeNodes: [FileBrowserNode] = [] {
+		didSet {
+			fileNodesLookup = Self.buildFileNodesLookup(from: fileTreeNodes)
+		}
+	}
+
+	private var categoriesOutput: String = ""
+	var projectPath: String?
+
+	// Lookup dictionaries for O(1) node access
+	var fileNodesLookup: [String: FileBrowserNode] = [:]
+
+	// Scan progress state
+	var isScanning: Bool = false
+	var scanStatus: String = "Scanning…"
+	var errorMessage: String?
+
+	// Log buffers for automation API
+	var scanLogBuffer: [String] = []
+	var removalLogBuffer: [String] = []
+
+	// Cache state
+	var isRestoredFromCache: Bool = false
+
+	var hasResultsToDisplay: Bool {
+		!scanResults.isEmpty || sourceGraph != nil || isRestoredFromCache
+	}
+
+	// Task management
+	private var scanTask: Task<Void, Never>?
+	private let scanner = PeripheryScanRunner()
+
+	// Background task tracking
+	private var backgroundTasks: [Task<Void, Never>] = []
+	private var backgroundTasksTotal: Int = 0
+	private var backgroundTasksCompleted: Int = 0
+	private var streamCompleted: Bool = false
+
+	private let configurationID: UUID
+
+	init(configurationID: UUID) {
+		self.configurationID = configurationID
+	}
+
+	/// Runs a complete Periphery scan with progressive streaming
+	///
+	/// This method consumes the AsyncThrowingStream from PeripheryScanRunner.runFullScanWithStreaming()
+	/// to provide progressive UI updates:
+	/// - Phase 1: Scan completes → tabs appear immediately
+	/// - Phase 2: Post-processing streams in progressively
+	///   - Categories sections (7 total) build sequentially
+	func startScan(configuration: PeripheryConfiguration) {
+		// Clear cache before wiping state — so a failed scan leaves no stale cache
+		let idToDelete = configurationID
+		Task.detached(priority: .background) {
+			ScanCacheManager.shared.delete(for: idToDelete)
+		}
+
+		isScanning = true
+		isRestoredFromCache = false
+		scanStatus = "Scanning…"
+		errorMessage = nil
+		scanResults = []
+		sourceGraph = nil
+		treeNodes = []
+		treeSection = nil
+		viewExtensionsSection = nil
+		sharedSection = nil
+		orphansSection = nil
+		previewOrphansSection = nil
+		bodyGetterSection = nil
+		unattachedSection = nil
+		fileTreeNodes = []
+		categoriesOutput = ""
+		scanLogBuffer = []
+		projectPath = configuration.project
+		backgroundTasks.removeAll()
+		backgroundTasksTotal = 0
+		backgroundTasksCompleted = 0
+		streamCompleted = false
+
+		// Convert PeripheryConfiguration to Periphery's Configuration object
+		let config = configuration.toConfiguration()
+		let projectPath = configuration.project
+		let projectType = configuration.projectType
+		let projectDirectory = configuration.projectDirectory
+		let logToConsole = configuration.shouldLogToConsole
+		ModificationLogger.isEnabled = logToConsole
+
+		scanTask = Task {
+			do {
+				// Consume the progressive stream
+				for try await progress in scanner.runFullScanWithStreaming(
+					configuration: config,
+					projectPath: projectPath,
+					projectType: projectType,
+					projectDirectory: projectDirectory
+				) {
+					switch progress {
+					case let .statusUpdate(status):
+						// Update UI status and log to console
+						scanStatus = status
+						let statusLine = "* \(status)"
+						statusLine.logToConsole()
+						scanLogBuffer.append(statusLine)
+
+					case let .scanComplete(results, graph):
+						// Phase 1 complete - tabs can appear now
+						scanResults = results
+						sourceGraph = graph
+
+						// Log formatted periphery output to console if enabled
+						if logToConsole, !results.isEmpty {
+							// Task.detached is appropriate here: formatting output is a pure utility operation
+							// that should not inherit @MainActor isolation from the enclosing scan task.
+							// This is truly fire-and-forget — no state mutation, only console logging.
+							Task.detached(priority: .utility) {
+								do {
+									// Create logger for formatting (matches PeripheryScanRunner pattern)
+									let logger = Logger(quiet: false, verbose: false, colorMode: .never)
+									let formatter = config.outputFormat.formatter.init(
+										configuration: config,
+										logger: logger
+									)
+									if let output = try formatter.format(results, colored: false) {
+										"=== Periphery Output ===\n\(output)".logToConsole()
+									}
+								} catch {
+									"Error formatting periphery output: \(error.localizedDescription)".logToConsole()
+								}
+							}
+						}
+
+						// Build tree nodes in background for Periphery tab
+						if !results.isEmpty, let path = projectPath {
+							let projectRoot = URL(fileURLWithPath: path).deletingLastPathComponent().path
+							// Task.detached is used here (rather than Task) to avoid inheriting @MainActor
+							// isolation from the enclosing scanTask. Tree building and file system scanning
+							// are CPU-intensive operations that should run on background executor threads.
+							// All mutations to @MainActor-isolated ScanState properties are routed through
+							// `await MainActor.run { }` blocks.
+							let treeTask = Task.detached(priority: .userInitiated) {
+								let nodes = ResultsTreeBuilder.buildTree(from: results, projectRoot: projectRoot)
+								"* ✓ Periphery tree built".logToConsole()
+								await MainActor.run {
+									self.treeNodes = nodes
+									self.onBackgroundTaskComplete()
+								}
+							}
+							backgroundTasks.append(treeTask)
+							backgroundTasksTotal += 1
+
+							// Scan file system in background for Files tab
+							let fileSystemTask = Task.detached(priority: .userInitiated) {
+								let scanner = FileSystemScanner()
+								let fileAnalyzer = FileTypeAnalyzer()
+								let fileWarningAnalyzer = FileWarningAnalyzer()
+								let folderAnalyzer = FolderTypeAnalyzer()
+								do {
+									let rawFileNodes = try await scanner.scanProject(at: path)
+									let fileNodes = Self.computeContainsSwiftFiles(nodes: rawFileNodes)
+									"* ✓ File system scanned".logToConsole()
+
+									await MainActor.run {
+										self.fileTreeNodes = fileNodes
+									}
+
+									// Capture current scan results and designation manager for type analysis
+									let scanResults = await MainActor.run { self.scanResults }
+									let typeEnrichedNodes = await fileAnalyzer.enrichFilesWithTypeInfo(
+										fileNodes: fileNodes,
+										sourceGraph: graph,
+										scanResults: scanResults
+									)
+									"* ✓ Type analysis complete".logToConsole()
+
+									// Analyze file-level warnings for shared code
+									let fileWarningEnrichedNodes = await fileWarningAnalyzer.analyzeFiles(
+										nodes: typeEnrichedNodes,
+										sourceGraph: graph
+									)
+									"* ✓ File warning analysis complete".logToConsole()
+
+									// Perform folder analysis
+									let folderEnrichedNodes = await folderAnalyzer.analyzeFolders(
+										nodes: fileWarningEnrichedNodes,
+										sourceGraph: graph,
+										projectPath: path
+									)
+									"* ✓ Folder analysis complete".logToConsole()
+
+									await MainActor.run {
+										withAnimation(.easeInOut(duration: 0.3)) {
+											self.fileTreeNodes = folderEnrichedNodes
+										}
+										self.onBackgroundTaskComplete()
+									}
+								} catch {
+									"* ⚠ File system scan failed: \(error.localizedDescription)".logToConsole()
+									await MainActor.run {
+										self.onBackgroundTaskComplete()
+									}
+								}
+							}
+							backgroundTasks.append(fileSystemTask)
+							backgroundTasksTotal += 1
+						}
+
+					case let .categoriesSectionAdded(section):
+						// Route Categories section to appropriate property based on ID
+						guard case let .section(sectionNode) = section else { continue }
+						switch sectionNode.id {
+						case .hierarchy:
+							treeSection = section
+						case .viewExtensions:
+							viewExtensionsSection = section
+						case .shared:
+							sharedSection = section
+						case .orphaned:
+							orphansSection = section
+						case .previewOrphaned:
+							previewOrphansSection = section
+						case .bodyGetter:
+							bodyGetterSection = section
+						case .unattached:
+							unattachedSection = section
+						}
+					}
+				}
+
+				// Stream complete - but background tasks may still be running
+				streamCompleted = true
+				scanStatus = "Processing results..."
+				let completeMsg = "* ✓ Scan workflow complete"
+				completeMsg.logToConsole()
+				scanLogBuffer.append(completeMsg)
+				checkIfFullyComplete()
+
+			} catch is CancellationError {
+				// Cancel all background tasks
+				for task in backgroundTasks {
+					task.cancel()
+				}
+				backgroundTasks.removeAll()
+
+				isScanning = false
+				scanTask = nil
+				streamCompleted = false
+				backgroundTasksTotal = 0
+				backgroundTasksCompleted = 0
+			} catch {
+				// Cancel all background tasks on error
+				for task in backgroundTasks {
+					task.cancel()
+				}
+				backgroundTasks.removeAll()
+
+				print("\(error)")
+				errorMessage = error.localizedDescription
+				scanLogBuffer.append("* ✗ Error: \(error.localizedDescription)")
+				isScanning = false
+				scanTask = nil
+				streamCompleted = false
+				backgroundTasksTotal = 0
+				backgroundTasksCompleted = 0
+			}
+		}
+	}
+
+	func stopScan() {
+		// Cancel main scan task
+		scanTask?.cancel()
+		scanTask = nil
+
+		// Cancel all background tasks
+		for task in backgroundTasks {
+			task.cancel()
+		}
+		backgroundTasks.removeAll()
+
+		// Reset state
+		isScanning = false
+		streamCompleted = false
+		backgroundTasksTotal = 0
+		backgroundTasksCompleted = 0
+	}
+
+	// MARK: - Background Task Completion Tracking
+
+	private func onBackgroundTaskComplete() {
+		backgroundTasksCompleted += 1
+		checkIfFullyComplete()
+	}
+
+	private func checkIfFullyComplete() {
+		if streamCompleted, backgroundTasksCompleted >= backgroundTasksTotal {
+			isScanning = false
+			scanStatus = "Scan complete"
+			scanTask = nil
+			saveCache()
+		}
+	}
+
+	private func saveCache() {
+		let liveGraph = sourceGraph as? SourceGraph
+		let graphSnapshots: (
+			declarations: [DeclarationSnapshot],
+			references: [ReferenceSnapshot],
+			scanResults: [ScanResultSnapshot]
+		) = if let liveGraph {
+			SourceGraphSerializer.serialize(graph: liveGraph, scanResults: scanResults)
+		} else {
+			([], [], [])
+		}
+		let cache = ScanCache(
+			configurationID: configurationID,
+			schemaVersion: ScanCache.currentSchemaVersion,
+			cachedAt: Date(),
+			projectPath: projectPath,
+			treeNodes: treeNodes.map { TreeNodeResponse(from: $0) },
+			treeSection: treeSection.map { CategoriesNodeResponse(from: $0) },
+			viewExtensionsSection: viewExtensionsSection.map { CategoriesNodeResponse(from: $0) },
+			sharedSection: sharedSection.map { CategoriesNodeResponse(from: $0) },
+			orphansSection: orphansSection.map { CategoriesNodeResponse(from: $0) },
+			previewOrphansSection: previewOrphansSection.map { CategoriesNodeResponse(from: $0) },
+			bodyGetterSection: bodyGetterSection.map { CategoriesNodeResponse(from: $0) },
+			unattachedSection: unattachedSection.map { CategoriesNodeResponse(from: $0) },
+			fileTreeNodes: fileTreeNodes.map { FileBrowserNodeResponse(from: $0) },
+			declarationSnapshots: graphSnapshots.declarations,
+			referenceSnapshots: graphSnapshots.references,
+			scanResultSnapshots: graphSnapshots.scanResults
+		)
+		Task.detached(priority: .background) {
+			try? ScanCacheManager.shared.save(cache)
+		}
+	}
+
+	func restoreFromCache(_ cache: ScanCache) {
+		guard !isScanning else { return }
+		projectPath = cache.projectPath
+		treeNodes = cache.restoreTreeNodes()
+		treeSection = cache.treeSection.map { cache.restoreCategoriesNode($0) }
+		viewExtensionsSection = cache.viewExtensionsSection.map { cache.restoreCategoriesNode($0) }
+		sharedSection = cache.sharedSection.map { cache.restoreCategoriesNode($0) }
+		orphansSection = cache.orphansSection.map { cache.restoreCategoriesNode($0) }
+		previewOrphansSection = cache.previewOrphansSection.map { cache.restoreCategoriesNode($0) }
+		bodyGetterSection = cache.bodyGetterSection.map { cache.restoreCategoriesNode($0) }
+		unattachedSection = cache.unattachedSection.map { cache.restoreCategoriesNode($0) }
+		fileTreeNodes = cache.restoreFileTreeNodes()
+
+		if let restored = SourceGraphSerializer.restore(
+			declarationSnapshots: cache.declarationSnapshots,
+			referenceSnapshots: cache.referenceSnapshots,
+			scanResultSnapshots: cache.scanResultSnapshots
+		) {
+			sourceGraph = restored.sourceGraph
+			scanResults = restored.scanResults
+		}
+
+		isRestoredFromCache = true
+		let timestamp = cache.cachedAt.formatted(date: .abbreviated, time: .shortened)
+		scanStatus = "Cached results from \(timestamp)"
+		let projectName = cache.projectPath
+			.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "unknown"
+		"* ✓ Loaded scan results from cache for '\(projectName)' (cached \(timestamp), \(treeNodes.count) tree nodes, \(fileTreeNodes.count) file nodes)"
+			.logToConsole()
+	}
+
+	// MARK: - File Tree Refresh
+
+	func refreshFileTree() {
+		guard let path = projectPath, let graph = sourceGraph as? SourceGraph else { return }
+
+		// NOTE: This Task.detached is intentionally not tracked in backgroundTasks because
+		// refreshFileTree() is a user-initiated manual refresh, separate from the scan lifecycle.
+		// However, if the ScanState is deallocated while a refresh is running, the
+		// `await MainActor.run { self.fileTreeNodes = ... }` will still execute on a
+		// released object. This is safe in practice because ScanState instances live for
+		// the duration of the app session (held by ScanStateManager), but a future
+		// improvement would be to use a cancellable task stored as a property.
+		Task.detached(priority: .userInitiated) {
+			let scanner = FileSystemScanner()
+			let fileAnalyzer = FileTypeAnalyzer()
+			let fileWarningAnalyzer = FileWarningAnalyzer()
+			let folderAnalyzer = FolderTypeAnalyzer()
+
+			do {
+				let rawFileNodes = try await scanner.scanProject(at: path)
+				let fileNodes = Self.computeContainsSwiftFiles(nodes: rawFileNodes)
+
+				// Capture current scan results for type analysis
+				let scanResults = await MainActor.run { self.scanResults }
+				let typeEnrichedNodes = await fileAnalyzer.enrichFilesWithTypeInfo(
+					fileNodes: fileNodes,
+					sourceGraph: graph,
+					scanResults: scanResults
+				)
+
+				// Analyze file-level warnings for shared code
+				let warningEnrichedNodes = await fileWarningAnalyzer.analyzeFiles(
+					nodes: typeEnrichedNodes,
+					sourceGraph: graph
+				)
+
+				// Analyze folder structure
+				let folderEnrichedNodes = await folderAnalyzer.analyzeFolders(
+					nodes: warningEnrichedNodes,
+					sourceGraph: graph,
+					projectPath: path
+				)
+
+				await MainActor.run {
+					self.fileTreeNodes = folderEnrichedNodes
+				}
+			} catch {
+				"* ✗ File tree refresh failed: \(error.localizedDescription)".logToConsole()
+			}
+		}
+	}
+
+	// MARK: - Lookup Dictionary Builders
+
+	private static func buildFileNodesLookup(from nodes: [FileBrowserNode]) -> [String: FileBrowserNode] {
+		var lookup: [String: FileBrowserNode] = [:]
+		buildFileNodesLookupRecursive(nodes: nodes, into: &lookup)
+		return lookup
+	}
+
+	private static func buildFileNodesLookupRecursive(
+		nodes: [FileBrowserNode],
+		into lookup: inout [String: FileBrowserNode]
+	) {
+		for node in nodes {
+			switch node {
+			case let .directory(dir):
+				lookup[dir.id] = node
+				buildFileNodesLookupRecursive(nodes: dir.children, into: &lookup)
+			case let .file(file):
+				lookup[file.id] = node
+			}
+		}
+	}
+
+	// MARK: - containsSwiftFiles Computation
+
+	private nonisolated static func computeContainsSwiftFiles(nodes: [FileBrowserNode]) -> [FileBrowserNode] {
+		nodes.map { node in
+			switch node {
+			case var .directory(dir):
+				let updatedChildren = computeContainsSwiftFiles(nodes: dir.children)
+				dir.children = updatedChildren
+
+				let hasSwiftFiles = updatedChildren.contains { child in
+					switch child {
+					case .file:
+						true
+					case let .directory(childDir):
+						childDir.containsSwiftFiles
+					}
+				}
+				dir.containsSwiftFiles = hasSwiftFiles
+				return .directory(dir)
+			case .file:
+				return node
+			}
+		}
+	}
+}

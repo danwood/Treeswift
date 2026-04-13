@@ -75,7 +75,7 @@ struct ContentColumnView: View {
 						.padding()
 				}
 
-				if !scanState.scanResults.isEmpty || scanState.sourceGraph != nil {
+				if !scanState.scanResults.isEmpty || scanState.sourceGraph != nil || scanState.isRestoredFromCache {
 					ResultsTabView(
 						treeNodes: scanState.treeNodes,
 						scanResults: scanState.scanResults,

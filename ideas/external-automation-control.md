@@ -14,7 +14,7 @@ Enable an external agent (such as Claude Code) to programmatically control a run
 
 | # | Operation | Input | Output |
 |---|-----------|-------|--------|
-| 1 | Launch app | (none or config name) | Confirmation that the app is ready |
+| 1 | Launch app | Port number (via CLI arg) | Confirmation that the app is ready |
 | 2 | Select/create configuration | Project path, scheme, targets | Configuration ID |
 | 3 | Start scan | Configuration ID | Scan started acknowledgment |
 | 4 | Wait for scan completion | Configuration ID | Success/failure + summary stats |
@@ -26,162 +26,71 @@ Enable an external agent (such as Claude Code) to programmatically control a run
 | 10 | Get app status | (none) | Current state (idle, scanning, etc.) |
 | 11 | Quit app | (none) | Confirmation |
 
-## IPC Mechanism Evaluation
+## Chosen IPC Mechanism: HTTP Server (localhost)
 
-### Option A: Unix Domain Socket with JSON-RPC
+Run a lightweight HTTP server inside the app on a localhost port. This is the most practical approach for Claude integration:
 
-A lightweight TCP-like server running inside the app, listening on a Unix domain socket (e.g., `/tmp/treeswift-control.sock`). Commands are JSON-RPC 2.0 messages; responses are JSON.
+- Claude can issue `curl` commands directly from Bash — no special tooling needed
+- JSON request/response is natural for structured data
+- REST endpoints map cleanly to the desired operations
+- Raw text endpoints (e.g., scan logs) return `text/plain` and use a `/raw` path suffix to make this explicit
+- Built-in HTTP status codes handle errors cleanly
 
-**Pros:**
-- Simple request/response model maps directly to our use cases
-- Claude can interact via simple socket reads/writes (e.g., `socat` or a small Swift CLI)
-- No macOS framework dependencies; works in any sandbox configuration
-- Bidirectional: can support async notifications (scan progress) via JSON-RPC notifications
-- Easy to test with `curl --unix-socket` or `nc -U`
-- Fast, low-overhead, no serialization beyond JSON
+**Transport details:**
 
-**Cons:**
-- Need to implement the socket server (though Foundation's `NWListener` makes this straightforward)
-- Need to handle connection lifecycle, error recovery
-- Socket file cleanup on crash
+- Opt-in via launch argument: `--automation-port <port>` (no default; the server only starts if this argument is provided)
+- Port conflict: if the specified port is already in use, the server fails to start with a clear error message; no fallback to another port
+- Port discovery: on launch, the server writes its port number to `/tmp/treeswift-control.port`; this file is cleaned up on graceful shutdown
+- Localhost-only binding; no authentication required for the initial implementation
+- A stale port file (app crashed) is detectable by attempting a connection
 
-### Option B: Custom URL Scheme
+**Why not the alternatives:**
 
-Register a URL scheme (e.g., `treeswift://`) and use `onOpenURL` to handle commands.
+- **Unix domain socket (JSON-RPC):** Valid technically, but `curl` usage is simpler than socket tooling for the Claude use case
+- **Custom URL scheme:** One-way only; no response channel
+- **Apple Events / AppleScript:** Heavyweight; poor fit for SwiftUI apps
+- **XPC Service:** Designed for app-to-helper, not external-to-app control; overkill
 
-**Pros:**
-- Native macOS pattern; trivial to invoke via `open -g treeswift://scan?config=ProdCore`
-- Automatically launches the app if not running
+## HTTP Server Implementation
 
-**Cons:**
-- One-way only: no response channel. The caller cannot get results back.
-- Complex operations (read results, preview removal) don't fit the URL model
-- Requires polling or a separate channel for results
-- Query string encoding is fragile for complex parameters
+Use **Network.framework (`NWListener` + `NWConnection`)** with a minimal HTTP parser. This avoids external dependencies while leveraging Apple's modern networking API. HTTP parsing is handled using `CFHTTPMessage` from Core Foundation, which takes care of the parsing boilerplate without requiring a full web framework.
 
-**Verdict:** Not suitable as the primary mechanism. Could be useful as a supplementary "launch and trigger" mechanism.
+Swift NIO / Vapor would be overkill for this use case.
 
-### Option C: Apple Events / AppleScript
+## Proposed API Design
 
-Expose a scripting dictionary (`.sdef`) and respond to Apple Events.
+All structured-data endpoints return `application/json`. Endpoints that return raw text (e.g., log output) return `text/plain` and include `/raw` in their path to make this unambiguous. Errors use standard HTTP status codes with a JSON error body: `{ "error": "description" }`.
 
-**Pros:**
-- Classic macOS automation pattern
-- `osascript` is available everywhere
-- Can return values
-
-**Cons:**
-- Heavyweight: requires defining an `.sdef` file, Apple Event handlers, Cocoa Scripting support
-- Poor fit for SwiftUI apps (Cocoa Scripting expects an NSDocument-based architecture)
-- Clunky for complex structured data (arrays of trees)
-- Debugging is painful; error messages are cryptic
-- AppleScript syntax is awkward for programmatic use
-
-**Verdict:** Too heavyweight and architecturally mismatched for a SwiftUI app.
-
-### Option D: XPC Service
-
-Create an XPC service that the app hosts; external tools connect to it.
-
-**Pros:**
-- Apple's recommended IPC mechanism
-- Strong typing via NSXPCInterface/Codable
-
-**Cons:**
-- Designed for app-to-helper communication, not external-to-app control
-- Requires the external tool to know the XPC service name and have proper entitlements
-- Complex setup: separate target, interface protocol, connection management
-- Overkill for our use case
-
-**Verdict:** Wrong tool for this job.
-
-### Option E: HTTP Server (localhost)
-
-Run a lightweight HTTP server inside the app on a localhost port.
-
-**Pros:**
-- Universal client support (`curl`, any HTTP library)
-- REST API is well-understood
-- Can serve JSON responses directly
-- Claude can use `curl` commands trivially
-
-**Cons:**
-- Port conflicts (need to pick/discover a port)
-- Slightly heavier than a Unix socket
-- Security consideration: any local process can connect (mitigated by localhost-only binding + optional token)
-
-**Pros over Unix socket:**
-- Easier for Claude to use (`curl http://localhost:PORT/...` vs socket tooling)
-- Built-in HTTP semantics (status codes, content types)
-- Can potentially add a simple web UI for debugging
-
-**Verdict:** Strong candidate. Very practical for the Claude use case.
-
-### Recommendation: **Option E (HTTP Server)** as primary, with **Option A (Unix Socket)** as an alternative
-
-The HTTP server approach is the most practical for Claude integration:
-- Claude can issue `curl` commands directly from Bash
-- JSON request/response is natural
-- REST endpoints map cleanly to our operations
-- No special tooling needed on the client side
-- Foundation's `NWListener` or a lightweight embedded server (e.g., using `HTTPServer` from Swift NIO, or even a simple `NWListener` with HTTP parsing) can handle this
-
-However, a Unix domain socket with JSON-RPC is a solid fallback if HTTP adds unwanted complexity or if port management becomes an issue. The two approaches share the same JSON protocol; only the transport differs.
-
-## Proposed Architecture
-
-### Transport Layer
-
-An embedded HTTP server running on `localhost` with a configurable port (default: a fixed port like `21663`, or written to a known file like `/tmp/treeswift-control.port`).
-
-**Port discovery:** On launch, the server writes its port to `/tmp/treeswift-control.port`. The external agent reads this file to know where to connect. The file is cleaned up on graceful shutdown.
-
-**Authentication:** Optional bearer token written to `/tmp/treeswift-control.token` to prevent other local processes from issuing commands. For initial implementation, this can be skipped (localhost-only is sufficient for dev use).
-
-### Server Component (inside Treeswift)
-
-```
-AutomationServer (new)
-  - Starts/stops with the app lifecycle
-  - Listens on localhost:PORT
-  - Parses HTTP requests, routes to handler methods
-  - Handler methods interact with existing app state:
-      - ConfigurationManager (read/write configurations)
-      - ScanStateManager (trigger scans, read state)
-      - ScanState (read results, trigger operations)
-  - Serializes responses as JSON
-```
-
-The server runs on a background thread but dispatches all state access to `@MainActor` (since all the app's state objects are `@MainActor`).
-
-### API Design
-
-All endpoints return JSON. Errors use standard HTTP status codes with a JSON error body.
-
-#### System
+### System
 
 ```
 GET  /status                    -> { state: "idle"|"scanning"|..., version: "1.0" }
 POST /quit                      -> { ok: true }
 ```
 
-#### Configurations
+### Configurations
 
 ```
 GET  /configurations            -> [{ id, name, projectPath, scheme, ... }]
 GET  /configurations/:id        -> { id, name, projectPath, scheme, ... }
-POST /configurations            -> Create a new configuration (body: JSON)
+POST /configurations            -> Create a new configuration (body: JSON); returns { id, ... }
 ```
 
-#### Scanning
+Configuration IDs are UUIDs assigned at creation time.
+
+### Scanning
 
 ```
-POST /configurations/:id/scan          -> Start a scan; returns { ok: true }
-GET  /configurations/:id/scan/status   -> { isScanning, scanStatus, errorMessage }
-GET  /configurations/:id/scan/wait     -> Long-poll: blocks until scan completes, then returns results summary
+POST /configurations/:id/scan              -> Start a scan; returns { ok: true }
+                                              Returns 409 Conflict if a scan is already running.
+GET  /configurations/:id/scan/status       -> { isScanning, scanStatus, errorMessage }
+GET  /configurations/:id/scan/wait         -> Long-poll: blocks until scan completes, then returns summary.
+                                              No server-side timeout. If client disconnects, continuation
+                                              is discarded but the scan continues unaffected.
+GET  /configurations/:id/scan/log/raw      -> Raw text log output from the most recent scan (text/plain)
 ```
 
-#### Results
+### Results
 
 ```
 GET /configurations/:id/results/periphery-tree    -> Serialized tree JSON
@@ -190,7 +99,9 @@ GET /configurations/:id/results/files-tree         -> File browser tree JSON
 GET /configurations/:id/results/summary            -> { totalResults, byKind: {...} }
 ```
 
-#### Code Operations
+All results endpoints return 404 with `{ "error": "no scan results available" }` if no scan has completed for the configuration.
+
+### Code Operations
 
 ```
 POST /configurations/:id/removal/preview
@@ -200,13 +111,16 @@ POST /configurations/:id/removal/preview
 POST /configurations/:id/removal/execute
   Body: { nodeIds: [...], strategy: "skipReferenced"|"forceRemoveAll"|"cascade" }
   -> { deleted: [...], skipped: [...], errors: [...] }
+
+GET /configurations/:id/removal/log/raw
+  -> Raw text log from the most recent removal operation (text/plain)
 ```
 
-#### Viewing Options
+### Viewing Options
 
 ```
 GET  /configurations/:id/view-options        -> { showOnlyViews, selectedTab, ... }
-POST /configurations/:id/view-options        -> Set options (body: JSON partial)
+POST /configurations/:id/view-options        -> Set options (body: JSON partial); returns { ok: true }
 ```
 
 ### Client Side (for Claude)
@@ -226,6 +140,9 @@ curl -s -X POST http://localhost:21663/configurations/SOME-UUID/scan
 # Wait for scan to complete (long-poll)
 curl -s http://localhost:21663/configurations/SOME-UUID/scan/wait
 
+# Get the raw scan log
+curl -s http://localhost:21663/configurations/SOME-UUID/scan/log/raw
+
 # Get the periphery results tree
 curl -s http://localhost:21663/configurations/SOME-UUID/results/periphery-tree
 
@@ -238,20 +155,102 @@ curl -s -X POST http://localhost:21663/configurations/SOME-UUID/removal/preview 
 curl -s -X POST http://localhost:21663/configurations/SOME-UUID/removal/execute \
   -H "Content-Type: application/json" \
   -d '{"nodeIds": ["path/to/file.swift"], "strategy": "cascade"}'
+
+# Get the raw removal log
+curl -s http://localhost:21663/configurations/SOME-UUID/removal/log/raw
 ```
 
 ## Implementation Milestones
+
+### Milestone 0: Source Tree Reorganization
+
+**Goal:** Reorganize the existing source tree into three clear layers before adding new code, so the server has a clean home and the separation of concerns is explicit.
+
+The current `Treeswift/` source folder gets reorganized into:
+
+```
+Treeswift/
+  main.swift
+  TreeswiftApp.swift
+
+  Shared/                          ← pure helpers; no UI or server deps
+    StringExtensions.swift
+    URLExtensions.swift
+    PathFormatter.swift
+    PrintCapture.swift
+
+  Core/                            ← back-end processing; used by both UI and AutomationServer
+    Analysis/                      ← moved as-is (ConfigurationManager, ScanState, etc.)
+    ProjectAccess/                 ← moved as-is (SchemeCache, XcodeSchemeReader, etc.)
+    ResultsTree/                   ← moved as-is (TreeNode, FileNode+CodeRemoval, SwiftType)
+    CLI/                           ← moved as-is (CLIScanRunner)
+    Operations/                    ← code modification back-end (from Utilities/)
+      CodeModificationError.swift
+      CodeModificationHelper.swift
+      CommentScanner.swift
+      DeclarationDeletionHelper.swift
+      DeclarationExtensions.swift
+      FileChangeDetector.swift
+      FileContentAnalyzer.swift
+      FileDeletionHandler.swift
+      FileOperations.swift
+      ModificationLogger.swift
+      ModificationOperation.swift
+      PeripheryIgnoreCommentInserter.swift
+      PeripheryKit-extensions.swift
+      PreviewDetectionHelper.swift
+      ProjectURLResolver.swift
+      ScanResultIndex.swift
+      SourceFileReader.swift
+      SourceGraphLineAdjuster.swift
+      UndoRedoHelper.swift
+      UnusedDependencyAnalyzer.swift
+      WarningStateManager.swift
+    Utilities/                     ← domain utilities without UI deps (from Utilities/)
+      EditorOpener.swift
+      LaunchArgumentsHandler.swift
+      SearchMatchEngine.swift
+      TreeNodeFinder.swift
+      TypeAheadState.swift
+
+  UI/                              ← SwiftUI layer only
+    (existing UI/ contents, unchanged)
+    DisplayModels/                 ← renamed from TreeDisplayModels/
+      CodeTreeModels.swift
+      FilesTree/
+        FileAnalysis.swift
+        FileBrowserModels.swift
+        FileTypeInfo.swift
+        FolderAnalysis.swift
+        Warnings.swift
+    Helpers/                       ← UI-only helpers (from Utilities/)
+      CopyableFocusedValue.swift
+      EmojiRender.swift
+      FocusableHostingView.swift
+      LayoutConstants.swift
+      NSColorExtensions.swift
+      ScanResultHelper.swift
+      SearchNavigationState.swift
+      TreeCopyFormatter.swift
+      TreeIcon.swift
+      TreeKeyboardNavigation.swift
+      WidthPreservingModifier.swift
+
+  AutomationServer/                ← new; HTTP server (added in Milestone 1)
+```
+
+**Validation:** Project builds cleanly after the move. No code changes — only file/folder moves.
 
 ### Milestone 1: Embedded HTTP Server + Basic Status
 
 **Goal:** Get the server running inside Treeswift and responding to basic queries.
 
-- Create `AutomationServer` class using `NWListener` (Network framework) or a simple `HTTPServer` implementation
-- Start/stop with app lifecycle (in `TreeswiftApp`)
+- Create `AutomationServer` class using `NWListener` + `NWConnection` (Network.framework) with `CFHTTPMessage` for HTTP parsing
+- Start/stop with app lifecycle (in `TreeswiftApp`), only when `--automation-port <port>` is provided
 - Implement `GET /status` endpoint
 - Implement `GET /configurations` endpoint (read-only list)
 - Write port file to `/tmp/treeswift-control.port` on start, clean up on stop
-- Add a preference or launch argument (`--automation-port <port>`) to enable/configure
+- All server code lives in `AutomationServer/` (see Folder Structure below)
 
 **Validation:** `curl http://localhost:21663/status` returns JSON from a running Treeswift instance.
 
@@ -262,9 +261,10 @@ curl -s -X POST http://localhost:21663/configurations/SOME-UUID/removal/execute 
 - Implement `POST /configurations/:id/scan` (trigger scan)
 - Implement `GET /configurations/:id/scan/status` (poll status)
 - Implement `GET /configurations/:id/scan/wait` (long-poll until complete)
+- Implement `GET /configurations/:id/scan/log/raw` (raw scan log text)
 - Handle error cases (config not found, scan already running, scan failure)
 
-**Validation:** Claude can start a scan on ProdCore and wait for it to finish.
+**Validation:** Claude can start a scan on ProdCore and wait for it to finish; raw log is readable.
 
 ### Milestone 3: Results Reading
 
@@ -277,7 +277,7 @@ curl -s -X POST http://localhost:21663/configurations/SOME-UUID/removal/execute 
 - Implement `GET /configurations/:id/results/summary`
 - Include relevant metadata per node (warning kind, line numbers, declaration info)
 
-**Validation:** Claude can read the full results tree and parse it.
+**Validation:** Claude can read the full results tree and parse it. Primary use case is remote debugging of scan and repair operations.
 
 ### Milestone 4: Code Removal Operations
 
@@ -285,54 +285,68 @@ curl -s -X POST http://localhost:21663/configurations/SOME-UUID/removal/execute 
 
 - Implement `POST /configurations/:id/removal/preview`
 - Implement `POST /configurations/:id/removal/execute`
+- Implement `GET /configurations/:id/removal/log/raw`
 - Wire into existing `DeclarationDeletionHelper` / removal infrastructure
 - Return structured results (what was deleted, what was skipped, any errors)
 
-**Validation:** Claude can remove unused code from a file and get confirmation of what changed.
+**Validation:** Claude can remove unused code from a file and get confirmation of what changed; raw removal log is accessible.
 
-### Milestone 5: View Options & Configuration Management
+### Milestone 5: Configuration Creation & View Options
 
 **Goal:** Full control over viewing options and configuration creation.
 
+- Implement `POST /configurations` (create a new configuration)
 - Implement view options read/write endpoints
-- Implement configuration creation endpoint
 - Implement `POST /quit`
 
 **Validation:** Claude can create a configuration for a new project, scan it, and read results without any manual GUI interaction.
 
-### Milestone 6: Polish & Robustness
+### Milestone 6: Results Detail & Files Tree
+
+**Goal:** Complete the results API.
+
+- Implement `GET /configurations/:id/results/files-tree`
+- Implement `GET /configurations/:id/results/categories/:name`
+
+**Validation:** Claude can navigate the full results tree by category and file.
+
+### Milestone 7: Polish & Robustness
 
 **Goal:** Production-quality automation interface.
 
-- Add optional bearer token authentication
 - Add request logging (for debugging)
 - Handle edge cases (concurrent requests, app quitting during a request, etc.)
-- Add a `GET /configurations/:id/results/files-tree` endpoint
 - Document the full API in a markdown file
 - Consider adding a small health-check/keepalive mechanism
 
+## Folder Structure
+
+All server-side code lives in a top-level `AutomationServer/` folder. This keeps it cleanly separated from UI code and makes it easy to extract into a Swift package later.
+
+```
+AutomationServer/
+  AutomationServer.swift        // NWListener setup, lifecycle, port file management
+  HTTPConnection.swift          // Per-connection handler (NWConnection + CFHTTPMessage parsing)
+  Router.swift                  // Route matching and dispatch
+  Handlers/
+    StatusHandler.swift
+    ConfigurationsHandler.swift
+    ScanHandler.swift
+    ResultsHandler.swift
+    RemovalHandler.swift
+    ViewOptionsHandler.swift
+```
+
+Handlers interact with `@MainActor`-isolated app state (e.g., `ConfigurationManager`, `ScanStateManager`) by dispatching to `MainActor`. The server itself runs on a background queue.
+
 ## Technical Considerations
-
-### HTTP Server Implementation
-
-The simplest approach for a macOS app (no external dependencies):
-
-1. **Network.framework (`NWListener`)** -- Apple's modern networking API. Can listen on a TCP port. We'd need to parse HTTP ourselves (straightforward for a simple REST API). Advantages: no external dependencies, modern async-friendly API.
-
-2. **GCDAsyncSocket or raw BSD sockets** -- Lower-level, more boilerplate.
-
-3. **Swift NIO / Vapor** -- Full-featured but adds a heavyweight dependency. Probably overkill.
-
-4. **`python3 -m http.server` style approach (separate process)** -- Defeats the purpose; we need in-process access to app state.
-
-**Recommendation:** Use Network.framework (`NWListener` + `NWConnection`) with a minimal HTTP parser. The API surface is small enough that we don't need a full web framework. Alternatively, use `CFHTTPMessage` for HTTP parsing (it's available in Core Foundation and handles the parsing boilerplate).
 
 ### Concurrency Model
 
-- The HTTP server listens on a background thread/queue
+- The HTTP server listens on a background thread/queue (Network.framework dispatches on its own queue)
 - All handlers that touch app state dispatch to `@MainActor`
 - Long-poll endpoints (`/scan/wait`) use Swift concurrency (`withCheckedContinuation`) to suspend until the scan completes, then resume with the response
-- The server should handle multiple concurrent connections (e.g., status checks while a long-poll is waiting)
+- The server handles multiple concurrent connections (e.g., status checks while a long-poll is waiting)
 
 ### JSON Serialization
 
@@ -342,26 +356,30 @@ The simplest approach for a macOS app (no external dependencies):
 
 ### Lifecycle Management
 
-- Server starts when the app launches (if automation is enabled)
-- Server stops on app termination
-- Port file is written on start, deleted on stop
-- If the app crashes, the stale port file is detected by checking if the port is actually responding
+- Server starts when the app launches only if `--automation-port <port>` is provided
+- Server stops on app termination; port file is deleted on graceful shutdown
+- If the app crashes, the stale port file is detectable by attempting a connection and getting a connection refused
 
-## Alternatives Considered but Rejected
+### Raw Text Endpoints
 
-- **Headless mode (no GUI):** Would require significant refactoring to decouple scan logic from SwiftUI state. The HTTP server approach lets us keep the GUI and control it externally, which also allows visual verification.
-- **Scripting bridge / JXA:** Same issues as AppleScript -- poor fit for SwiftUI apps.
-- **File-based IPC (write commands to a file, poll for results):** Fragile, slow, hard to synchronize. The HTTP approach is strictly better.
-- **Distributed notifications:** One-way, no response channel, limited payload size.
+Endpoints with `/raw` in the path return `Content-Type: text/plain`. These are used for log output that is inherently unstructured. The naming convention makes it unambiguous in the URL that the response is not JSON. Only the most recent operation's log is retained; a second scan overwrites the first log. A request before any operation has run returns a 404.
 
-## Open Questions
+## WebSocket Support (Future Consideration — Not Scheduled)
 
-1. **Should automation be always-on or opt-in?** Leaning toward opt-in via a launch argument (`--enable-automation`) or preference, with the port file serving as the discovery mechanism.
+Long-polling (`/scan/wait`) is sufficient for the Claude automation use case, but a WebSocket channel could provide real-time progress updates without a dedicated polling loop. This would be most useful if:
 
-2. **Should we support creating configurations via the API?** Or require them to be pre-created in the GUI? Creating via API is more useful for full automation but adds complexity.
+- Scan progress events (percentage complete, current file being analyzed) need to stream to the client in real time
+- Multiple clients want to observe the same scan concurrently
+- The client needs to receive push notifications for state changes (scan started by the GUI, for example)
 
-3. **How much of the results tree detail do we need to serialize?** The full tree with all declaration metadata, or a summary? Probably need both: a summary endpoint for quick checks and a detailed endpoint for full inspection.
+A possible design: the server upgrades a connection to WebSocket on `GET /events`, then pushes JSON event objects as they occur:
 
-4. **Should the HTTP server be a separate Swift package/module?** This would keep it cleanly separated from the UI code. Could be a local package within the project.
+```json
+{ "event": "scanStarted", "configId": "...", "timestamp": "..." }
+{ "event": "scanProgress", "configId": "...", "percent": 42 }
+{ "event": "scanCompleted", "configId": "...", "summary": { ... } }
+{ "event": "removalExecuted", "configId": "...", "deleted": [...] }
+```
 
-5. **Do we need WebSocket support for real-time progress updates?** Or is polling/long-polling sufficient? For the Claude use case, long-polling is probably fine.
+This would require either adding WebSocket framing support on top of `NWConnection`, or pulling in a lightweight dependency. Given that long-polling is adequate for the primary use case, this is deferred.
+

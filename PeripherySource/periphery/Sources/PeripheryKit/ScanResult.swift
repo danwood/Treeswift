@@ -19,6 +19,11 @@ public struct ScanResult {
     public
     let annotation: Annotation
 
+    public init(declaration: Declaration, annotation: Annotation) {
+        self.declaration = declaration
+        self.annotation = annotation
+    }
+
     public var usrs: Set<String> {
         declaration.usrs
     }

@@ -17,7 +17,7 @@ struct UniversalDetailView: View {
 	let projectPath: String?
 	let hasResults: Bool
 	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	@Binding var filterState: FilterState
 
 	var body: some View {

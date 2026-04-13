@@ -18,7 +18,7 @@ private struct OperationError: Identifiable {
 struct DetailPeripheryWarningsSection: View {
 	private let filePath: String
 	private let scanResults: [ScanResult]
-	private let sourceGraph: SourceGraph?
+	private let sourceGraph: (any SourceGraphProtocol)?
 	private let filterState: FilterState?
 
 	@AppStorage("showPeripheryWarningDetails") private var showDetails: Bool = false
@@ -33,7 +33,7 @@ struct DetailPeripheryWarningsSection: View {
 	init(
 		filePath: String,
 		scanResults: [ScanResult],
-		sourceGraph: SourceGraph? = nil,
+		sourceGraph: (any SourceGraphProtocol)? = nil,
 		filterState: FilterState? = nil
 	) {
 		self.filePath = filePath
@@ -144,7 +144,7 @@ private struct PeripheryWarningRow: View {
 	let scanResult: ScanResult
 	let declaration: Declaration
 	let showDetails: Bool
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	@Binding var expandedWarnings: Set<String>
 	@Binding var completedActions: Set<String>
 	@Binding var refreshTrigger: Int

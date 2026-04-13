@@ -274,6 +274,47 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 8. Cache Serialization API (+4 lines across 2 files)
+
+**Purpose**: Expose types needed for Treeswift's scan cache serialization, so the full SourceGraph and ScanResults can be reconstructed from disk.
+
+#### `Sources/SourceGraph/Elements/DeclarationAttribute.swift` (+1 line)
+
+**Change**: Made `name` property `public` (was `internal`):
+```swift
+public let name: String
+```
+
+#### `Sources/PeripheryKit/ScanResult.swift` (+4 lines)
+
+**Change**: Added explicit `public init` (Swift auto-generates only an `internal` memberwise init for `public struct`):
+```swift
+public init(declaration: Declaration, annotation: Annotation) {
+    self.declaration = declaration
+    self.annotation = annotation
+}
+```
+
+---
+
+### 9. Observable Macro Property Type Retainer (+2 files)
+
+#### `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift` (NEW FILE)
+
+**Purpose**: Prevent false-positive "unused" reports for types used as property types in `@Observable`-annotated classes/structs.
+
+**Root cause**: Periphery skips `.unit` dependencies in `SwiftIndexer.phaseOne()`, so references inside `@Observable` macro expansion files (`@__swiftmacro_*.swift`) are never indexed. Types used as property types in `@Observable` types appear unreferenced even though they're used in the macro-synthesized accessor code.
+
+**Fix**: A `SourceGraphMutator` that finds all `@Observable`-annotated class/struct declarations, inspects their `varInstance` children's `declaredType` strings, extracts bare type names, and marks matching declarations as retained.
+
+#### `Sources/SourceGraph/SourceGraphMutatorRunner.swift` (+1 line)
+
+**Change**: Registered `ObservableMacroRetainer.self` in the mutator list after `AppIntentsRetainer`.
+
+**Note**: This is a Treeswift-specific workaround for a Periphery analysis gap. Ideally the fix belongs upstream by making `SwiftIndexer.phaseOne()` process `.unit` dependencies (macro expansion records) to collect references. Document in PeripheryIssues.md.
+
+---
+
 ## Critical Files for Future Updates
 
 Files that MUST preserve modifications:
@@ -282,6 +323,10 @@ Files that MUST preserve modifications:
 - ✅ `Sources/Frontend/Scan.swift` - Public API, tuple return, progress delegate
 - ✅ `Sources/Shared/ScanProgressDelegate.swift` - Entire new file
 - ✅ `Sources/SourceGraph/Elements/Location.swift` - End position properties
+- ✅ `Sources/SourceGraph/Elements/DeclarationAttribute.swift` - `name` is public
+- ✅ `Sources/PeripheryKit/ScanResult.swift` - public init
+- ✅ `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift` - Entire new file
+- ✅ `Sources/SourceGraph/SourceGraphMutatorRunner.swift` - ObservableMacroRetainer registration
 
 Files likely to conflict on update:
 - ⚠️ `Sources/ProjectDrivers/XcodeProjectDriver.swift` - Build process changes

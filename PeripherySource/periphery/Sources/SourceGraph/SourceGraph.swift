@@ -94,6 +94,10 @@ public final class SourceGraph {
         redundantInternalAccessibility[declaration] = suggestedAccessibility
     }
 
+    func unmarkRedundantInternalAccessibility(_ declaration: Declaration) {
+        _ = redundantInternalAccessibility.removeValue(forKey: declaration)
+    }
+
     func markRedundantFilePrivateAccessibility(_ declaration: Declaration, containingTypeName: String?) {
         redundantFilePrivateAccessibility[declaration] = containingTypeName
     }

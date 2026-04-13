@@ -1,5 +1,5 @@
 public struct DeclarationAttribute: Hashable, CustomStringConvertible {
-    let name: String
+    public let name: String
     private let arguments: String?
 
     public init(name: String, arguments: String?) {

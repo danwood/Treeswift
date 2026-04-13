@@ -5,16 +5,40 @@
 //	Created by Dan Wood on 10/1/25.
 //
 
+import AppKit
 import SwiftUI
 
+// Application delegate used solely to hook app lifecycle events that SwiftUI doesn't expose cleanly.
+final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
+	var automationServer: AutomationServer?
+
+	func applicationWillTerminate(_ notification: Notification) {
+		automationServer?.stop()
+	}
+}
+
 struct TreeswiftApp: App {
+	@NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+	@State private var configManager = ConfigurationManager()
+	@State private var scanStateManager = ScanStateManager(noCache: noCache)
+	@State private var filterState = FilterState()
 	@State private var inspectorState = FileInspectorState()
+	@State private var automationActivity = AutomationActivityState()
 	@Environment(\.scenePhase) private var scenePhase
 
 	var body: some Scene {
 		WindowGroup {
 			ContentView()
+				.environment(configManager)
+				.environment(scanStateManager)
+				.environment(filterState)
 				.environment(inspectorState)
+				.environment(automationActivity)
+				.onAppear {
+					scanStateManager.restoreAllCaches(for: configManager.configurations)
+					startAutomationServerIfNeeded()
+					appDelegate.automationServer?.markReady()
+				}
 		}
 		.onChange(of: scenePhase) { oldPhase, newPhase in
 			// Check for file changes when app returns to foreground
@@ -55,9 +79,25 @@ struct TreeswiftApp: App {
 			}
 		}
 	}
+
+	private func startAutomationServerIfNeeded() {
+		guard appDelegate.automationServer == nil, let port = automationPort else { return }
+		let server = AutomationServer(
+			port: port,
+			configManager: configManager,
+			scanStateManager: scanStateManager,
+			filterState: filterState,
+			activityState: automationActivity
+		)
+		appDelegate.automationServer = server
+		Task {
+			await server.start()
+		}
+	}
 }
 
-private struct CopyCommand: View {
+/* folderprivate */
+struct CopyCommand: View {
 	@FocusedValue(\.copyMenuTitle) var copyMenuTitle: String?
 
 	var body: some View {
@@ -74,7 +114,8 @@ private struct CopyCommand: View {
 	}
 }
 
-private struct FindCommand: Commands {
+/* folderprivate */
+struct FindCommand: Commands {
 	@FocusedValue(\.activateSearch) var activateSearch
 
 	var body: some Commands {

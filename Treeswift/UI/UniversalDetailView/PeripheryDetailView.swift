@@ -14,7 +14,7 @@ import SystemPackage
 struct PeripheryDetailView: View {
 	let node: TreeNode
 	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	let projectPath: String?
 	@Binding var filterState: FilterState
 
@@ -77,7 +77,7 @@ private struct FolderDetailView: View {
 private struct FileDetailView: View {
 	let file: FileNode
 	let scanResults: [ScanResult]
-	let sourceGraph: SourceGraph?
+	let sourceGraph: (any SourceGraphProtocol)?
 	let projectRoot: String?
 	@Binding var filterState: FilterState
 	@Environment(FileInspectorState.self) var inspectorState

@@ -5,11 +5,15 @@
 //  Main view with three-column navigation: sidebar, content, and detail
 //
 
+import PeripheryKit
 import SwiftUI
 
 struct ContentView: View {
-	@State private var configManager = ConfigurationManager()
-	@State private var scanStateManager: ScanStateManager
+	@Environment(ConfigurationManager.self) private var configManager
+	@Environment(ScanStateManager.self) private var scanStateManager
+	@Environment(FilterState.self) private var filterState
+	@Environment(FileInspectorState.self) private var inspectorState
+	@Environment(AutomationActivityState.self) private var automationActivity
 	@AppStorage("selectedConfigID") private var selectedConfigIDString: String = ""
 	@AppStorage("selectedResultsTab") private var selectedTab: ResultsTab = .periphery
 	@State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -23,7 +27,6 @@ struct ContentView: View {
 	@State private var previewOrphansTabSelectedID: String?
 	@State private var bodyGetterTabSelectedID: String?
 	@State private var unattachedTabSelectedID: String?
-	@State private var filterState = FilterState()
 	@State private var layoutSettings = TreeLayoutSettings()
 	@State private var selectedPeripheryNode: TreeNode?
 	@State private var selectedFilesNode: FileBrowserNode?
@@ -31,11 +34,6 @@ struct ContentView: View {
 	@State private var searchNavState = SearchNavigationState()
 	@State private var searchResults: [SearchMatchEngine.SearchResult] = []
 	@AppStorage("showOnlyViews") private var showOnlyViews: Bool = false
-	@Environment(FileInspectorState.self) private var inspectorState
-
-	init() {
-		_scanStateManager = State(initialValue: ScanStateManager())
-	}
 
 	// Binding(get:set:) is intentional here — @AppStorage cannot store UUID? natively.
 	// A retroactive RawRepresentable conformance on Optional<UUID> doesn't satisfy
@@ -54,6 +52,10 @@ struct ContentView: View {
 	private var currentScanState: ScanState? {
 		guard let selectedID = selectedConfigID.wrappedValue else { return nil }
 		return scanStateManager.getState(for: selectedID)
+	}
+
+	private var filterStateBinding: Binding<FilterState> {
+		Binding(get: { filterState }, set: { _ in })
 	}
 
 	private func recomputeSelectedPeripheryNode() {
@@ -105,6 +107,21 @@ struct ContentView: View {
 	}
 
 	var body: some View {
+		mainNavigationView
+			.overlay(alignment: .top) {
+				if let command = automationActivity.activeCommand {
+					AutomationActivityBanner(command: command)
+						.transition(.move(edge: .top).combined(with: .opacity))
+				}
+			}
+			.animation(.easeInOut(duration: 0.2), value: automationActivity.activeCommand)
+	}
+
+	@ViewBuilder
+	private var mainNavigationView: some View {
+		@Bindable var bindableConfigManager = configManager
+		@Bindable var bindableFilterState = filterState
+		let precomputedFilterBinding: Binding<FilterState> = filterStateBinding
 		NavigationSplitView(columnVisibility: $columnVisibility) {
 			SidebarView(
 				configManager: configManager,
@@ -119,14 +136,20 @@ struct ContentView: View {
 			.navigationTitle("Configurations")
 		} content: {
 			if let selectedID = selectedConfigID.wrappedValue,
-			   let index = configManager.configurations.firstIndex(where: { $0.id == selectedID }) {
+			   let index = configManager.configurations
+			   .firstIndex(where: { (c: PeripheryConfiguration) in c.id == selectedID }) {
+				let configBinding = Binding<PeripheryConfiguration>(
+					get: { () -> PeripheryConfiguration in configManager.configurations[index] },
+					set: { (v: PeripheryConfiguration) in configManager.configurations[index] = v }
+				)
+				let filterBinding: Binding<FilterState> = precomputedFilterBinding
 				ContentColumnView(
-					configuration: $configManager.configurations[index],
+					configuration: configBinding,
 					scanState: scanStateManager.getState(for: selectedID),
 					onUpdate: { updatedConfig in
 						configManager.updateConfiguration(at: index, with: updatedConfig)
 					},
-					filterState: $filterState,
+					filterState: filterBinding,
 					layoutSettings: $layoutSettings,
 					peripheryTabSelectedID: $peripheryTabSelectedID,
 					filesTabSelectedID: $filesTabSelectedID,
@@ -146,9 +169,10 @@ struct ContentView: View {
 				)
 			}
 		} detail: {
+			let filterBinding: Binding<FilterState> = precomputedFilterBinding
 			let projectPath = currentScanState?.projectPath
-			let hasResults = currentScanState.map { !$0.scanResults.isEmpty || $0.sourceGraph != nil } ?? false
-			let scanResults = currentScanState?.scanResults ?? []
+			let hasResults: Bool = currentScanState?.hasResultsToDisplay ?? false
+			let scanResults: [ScanResult] = currentScanState?.scanResults ?? []
 			let sourceGraph = currentScanState?.sourceGraph
 
 			UniversalDetailView(
@@ -160,7 +184,7 @@ struct ContentView: View {
 				hasResults: hasResults,
 				scanResults: scanResults,
 				sourceGraph: sourceGraph,
-				filterState: $filterState
+				filterState: filterBinding
 			)
 			.navigationSplitViewColumnWidth(
 				min: LayoutConstants.detailColumnMinWidth,
@@ -176,31 +200,11 @@ struct ContentView: View {
 		)
 		.searchSuggestions {
 			if !searchResults.isEmpty {
-				let currentTabResults = searchResults.filter { $0.tab == selectedTab }
-				let otherTabResults = searchResults.filter { $0.tab != selectedTab }
-
-				if !currentTabResults.isEmpty {
-					ForEach(currentTabResults.prefix(12)) { result in
-						Button {
-							navigateToResult(result)
-						} label: {
-							SearchSuggestionRow(result: result, isCurrentTab: true)
-						}
-					}
-				}
-
-				if !otherTabResults.isEmpty {
-					if !currentTabResults.isEmpty {
-						Divider()
-					}
-					ForEach(otherTabResults.prefix(8)) { result in
-						Button {
-							navigateToResult(result)
-						} label: {
-							SearchSuggestionRow(result: result, isCurrentTab: false)
-						}
-					}
-				}
+				SearchSuggestionsView(
+					results: searchResults,
+					activeTab: selectedTab,
+					onSelect: navigateToResult
+				)
 			}
 		}
 		.onChange(of: searchNavState.toolbarSearchQuery) {
@@ -220,7 +224,7 @@ struct ContentView: View {
 
 			// Check for --scan launch argument
 			let launchMode = LaunchArgumentsHandler.parseLaunchMode()
-			if case let .gui(scanConfiguration: configName?) = launchMode {
+			if case let .gui(scanConfiguration: configName?, automationPort: _, noCache: _) = launchMode {
 				handleScanArgument(configName: configName)
 			}
 
@@ -375,6 +379,8 @@ struct ContentView: View {
 	 then starting a scan.
 	 */
 	private func handleScanArgument(configName: String) {
+		"* --scan '\(configName)' received".logToConsole()
+
 		// Find configuration matching the display name
 		var foundConfig: PeripheryConfiguration?
 		for config in configManager.configurations {
@@ -412,8 +418,7 @@ struct ContentView: View {
 		// Start the scan
 		let scanState = scanStateManager.getState(for: config.id)
 		scanState.startScan(configuration: config)
-
-		fputs("Started scan for configuration: \(configName)\n", stderr)
+		"* Starting scan for '\(configName)'".logToConsole()
 	}
 
 	/*
@@ -494,6 +499,59 @@ struct ContentView: View {
 	}
 }
 
+/* folderprivate */
+struct AutomationActivityBanner: View {
+	let command: String
+
+	var body: some View {
+		HStack(spacing: 6) {
+			ProgressView()
+				.controlSize(.small)
+			Text("Automation: \(command)")
+				.font(.caption)
+				.foregroundStyle(.secondary)
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 6)
+		.background(.regularMaterial, in: Capsule())
+		.shadow(radius: 4)
+		.padding(.top, 8)
+	}
+}
+
+/* folderprivate */
+struct SearchSuggestionsView: View {
+	let results: [SearchMatchEngine.SearchResult]
+	let activeTab: ResultsTab
+	let onSelect: (SearchMatchEngine.SearchResult) -> Void
+
+	var body: some View {
+		let currentTabResults = results.filter { $0.tab == activeTab }
+		let otherTabResults = results.filter { $0.tab != activeTab }
+
+		if !currentTabResults.isEmpty {
+			ForEach(currentTabResults.prefix(12)) { result in
+				Button { onSelect(result) } label: {
+					SearchSuggestionRow(result: result, isCurrentTab: true)
+				}
+			}
+		}
+		if !otherTabResults.isEmpty {
+			if !currentTabResults.isEmpty { Divider() }
+			ForEach(otherTabResults.prefix(8)) { result in
+				Button { onSelect(result) } label: {
+					SearchSuggestionRow(result: result, isCurrentTab: false)
+				}
+			}
+		}
+	}
+}
+
 #Preview {
 	ContentView()
+		.environment(ConfigurationManager())
+		.environment(ScanStateManager())
+		.environment(FilterState())
+		.environment(FileInspectorState())
+		.environment(AutomationActivityState())
 }

@@ -24,6 +24,18 @@ private func runCLIMode() async {
 // Parse launch mode to determine how to proceed
 private let launchMode = LaunchArgumentsHandler.parseLaunchMode()
 
+// Extract automation port from launch mode so TreeswiftApp can access it.
+let automationPort: UInt16? = {
+	if case let .gui(_, port, _) = launchMode { return port }
+	return nil
+}()
+
+// Extract no-cache flag from launch mode so TreeswiftApp can access it.
+let noCache: Bool = {
+	if case let .gui(_, _, noCacheFlag) = launchMode { return noCacheFlag }
+	return false
+}()
+
 switch launchMode {
 case .list:
 	// CLI-only mode - run and exit
