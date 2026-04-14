@@ -160,20 +160,32 @@ struct CodeModificationHelper {
 			}
 		}
 
+		// First try to replace the expected old keyword.
 		if let oldKeyword,
 		   let pattern = try? Regex("\\b\(oldKeyword)\\s+"),
 		   workingLine.contains(pattern) {
 			let result = replaceAccessKeyword(oldKeyword, with: newKeyword, in: workingLine)
 			return (result, "replaced `\(oldKeyword)` with `\(newKeyword)`")
-		} else {
-			let result = insertAccessKeyword(newKeyword, before: declarationKind, in: workingLine)
-			let action = if let removedSetterModifier {
-				"replaced `\(removedSetterModifier)` with `\(newKeyword)`"
-			} else {
-				"inserted `\(newKeyword)`"
-			}
-			return (result, action)
 		}
+
+		// If expected keyword not found, check for any other existing access keyword.
+		// This prevents inserting a second keyword (e.g. producing `private private var`
+		// or `public private var`) when the declaration already has an explicit access level.
+		for existingKeyword in ["public", "fileprivate", "private", "internal"] {
+			guard let pattern = try? Regex("\\b\(existingKeyword)\\s+"),
+			      workingLine.contains(pattern) else { continue }
+			let result = replaceAccessKeyword(existingKeyword, with: newKeyword, in: workingLine)
+			return (result, "replaced `\(existingKeyword)` with `\(newKeyword)`")
+		}
+
+		// No existing access keyword — safe to insert.
+		let result = insertAccessKeyword(newKeyword, before: declarationKind, in: workingLine)
+		let action = if let removedSetterModifier {
+			"replaced `\(removedSetterModifier)` with `\(newKeyword)`"
+		} else {
+			"inserted `\(newKeyword)`"
+		}
+		return (result, action)
 	}
 
 	// MARK: - Access Control Modifications

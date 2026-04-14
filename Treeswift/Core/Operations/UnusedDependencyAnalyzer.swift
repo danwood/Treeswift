@@ -205,7 +205,15 @@ enum UnusedDependencyAnalyzer {
 
 		for op in operations {
 			// Only apply skip logic to .unused annotations;
-			// access-control fixes and ignore-comment removals are always safe.
+			// ignore-comment removals are always safe.
+			// redundantInternalAccessibility is skipped in this strategy because downgrading
+			// internal → fileprivate/private can cascade: Swift requires any init/method using
+			// the downgraded type as a parameter or return type to also be fileprivate/private,
+			// which breaks callers in other files that Periphery didn't flag.
+			if case .redundantInternalAccessibility = op.scanResult.annotation {
+				skippedCount += 1
+				continue
+			}
 			guard case .unused = op.scanResult.annotation else {
 				kept.append(op)
 				continue
