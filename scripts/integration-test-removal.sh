@@ -77,7 +77,7 @@ done
 # HELPERS
 # ──────────────────────────────────────────────────────────
 
-log() {
+tlog() {
 	local msg="[$(date '+%H:%M:%S')] $*"
 	echo "$msg" >&3
 	echo "$msg" >> "$REPORT_FILE"
@@ -87,11 +87,11 @@ log_section() {
 	local line="──────────────────────────────────────────────────"
 	echo "$line" >&3
 	echo "$line" >> "$REPORT_FILE"
-	log "$*"
+	tlog "$*"
 }
 
 die() {
-	log "ERROR: $*"
+	tlog "ERROR: $*"
 	exit 1
 }
 
@@ -141,7 +141,7 @@ STATUS_FILE="/tmp/treeswift-control.json"
 ERROR_FILE="/tmp/treeswift-control.error"
 
 wait_for_server() {
-	log "Waiting for Treeswift server on port $PORT..."
+	tlog "Waiting for Treeswift server on port $PORT..."
 	# Phase 1: wait for status file (written when NWListener reaches .ready state)
 	# Also watch for error file which signals a startup failure.
 	local attempts=0
@@ -151,7 +151,7 @@ wait_for_server() {
 			die "Server startup failed: $(cat "$ERROR_FILE")"
 		fi
 		if [[ -f "$STATUS_FILE" ]] && python3 -c "import sys,json; d=json.load(open('$STATUS_FILE')); sys.exit(0 if d.get('port')==$PORT else 1)" 2>/dev/null; then
-			log "Status file found — server bound on port $PORT."
+			tlog "Status file found — server bound on port $PORT."
 			break
 		fi
 		sleep 1
@@ -161,13 +161,13 @@ wait_for_server() {
 		die "Status file never appeared after ${max_attempts}s — server did not start"
 	fi
 	# Phase 2: poll /ready until app state (configs, caches) is fully initialized
-	log "Waiting for /ready..."
+	tlog "Waiting for /ready..."
 	attempts=0
 	while [[ $attempts -lt 15 ]]; do
 		local resp
 		resp=$(curl -s --connect-timeout 1 "$BASE_URL/ready" 2>/dev/null)
 		if echo "$resp" | python3 -c "import sys,json; sys.exit(0 if json.load(sys.stdin).get('ready') else 1)" 2>/dev/null; then
-			log "Server ready."
+			tlog "Server ready."
 			return 0
 		fi
 		sleep 1
@@ -177,18 +177,18 @@ wait_for_server() {
 }
 
 launch_treeswift() {
-	log "Locating Treeswift.app..."
+	tlog "Locating Treeswift.app..."
 	local app
 	app=$(find ~/Library/Developer/Xcode/DerivedData -name "Treeswift.app" -maxdepth 8 2>/dev/null \
 		| grep -v "\.dSYM" | grep "Build/Products" | head -1)
 	if [[ -z "$app" ]]; then
 		die "Could not find Treeswift.app in DerivedData. Build it first with: xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build"
 	fi
-	log "Found: $app"
+	tlog "Found: $app"
 	pkill -x Treeswift 2>/dev/null || true
 	sleep 1
 	rm -f "$STATUS_FILE" "$ERROR_FILE"
-	log "Launching Treeswift with --automation-port $PORT..."
+	tlog "Launching Treeswift with --automation-port $PORT..."
 	# Use 'open' (not direct binary) to ensure the app window appears and .onAppear fires,
 	# which is required for the automation server to start.
 	open "$app" --args --automation-port "$PORT"
@@ -201,17 +201,17 @@ get_or_create_config() {
 	existing=$(echo "$configs" | \
 		jq -r --arg name "$CONFIG_NAME" 'first(.[] | select(.name == $name) | .id) // empty')
 	if [[ -n "$existing" ]]; then
-		log "Reusing existing configuration: $existing"
+		tlog "Reusing existing configuration: $existing"
 		echo "$existing"
 		return
 	fi
-	log "Creating Prodcore configuration..."
+	tlog "Creating Prodcore configuration..."
 	local resp
 	resp=$(curl_post "$BASE_URL/configurations" \
 		"{\"name\":\"$CONFIG_NAME\",\"projectType\":\"xcode\",\"project\":\"$PRODCORE_PROJECT\",\"schemes\":[\"$PRODCORE_SCHEME\"]}")
 	local new_id
 	new_id=$(echo "$resp" | jq -r '.id')
-	log "Created configuration: $new_id"
+	tlog "Created configuration: $new_id"
 	echo "$new_id"
 }
 
@@ -220,7 +220,7 @@ build_prodcore_for_index() {
 	# NOTE: This does NOT update the indexstore that Periphery reads. Periphery uses its
 	# own DerivedData path (~/.../com.github.peripheryapp/) and builds the project itself
 	# during scanning. This step is only useful to confirm the source compiles.
-	log "Building Prodcore to verify it compiles (does not update Periphery's indexstore)..."
+	tlog "Building Prodcore to verify it compiles (does not update Periphery's indexstore)..."
 	local build_log
 	build_log=$(mktemp /tmp/xcodebuild-index-XXXXXX)
 	xcodebuild \
@@ -235,11 +235,11 @@ build_prodcore_for_index() {
 		2>&1 | tee "$build_log"
 	local exit_code="${PIPESTATUS[0]}"
 	if [[ "$exit_code" -ne 0 ]]; then
-		log "  WARNING: Pre-scan build failed (exit $exit_code). Source may have issues."
-		log "  Build log: $build_log"
+		tlog "  WARNING: Pre-scan build failed (exit $exit_code). Source may have issues."
+		tlog "  Build tlog: $build_log"
 	else
 		rm -f "$build_log"
-		log "  Build complete."
+		tlog "  Build complete."
 	fi
 }
 
@@ -258,14 +258,14 @@ start_scan() {
 		if [[ "$http_code" == "200" || "$http_code" == "409" ]]; then
 			return 0
 		fi
-		[[ "$attempt" -lt 2 ]] && { log "  start_scan: HTTP $http_code, retrying in 3s..."; sleep 3; }
+		[[ "$attempt" -lt 2 ]] && { tlog "  start_scan: HTTP $http_code, retrying in 3s..."; sleep 3; }
 	done
 	die "Failed to start scan (HTTP $http_code): $response"
 }
 
 wait_for_scan() {
 	local config_id="$1"
-	log "Waiting for scan to complete (timeout: ${SCAN_TIMEOUT}s)..."
+	tlog "Waiting for scan to complete (timeout: ${SCAN_TIMEOUT}s)..."
 	local resp
 	resp=$(curl_get "$BASE_URL/configurations/$config_id/scan/wait" "$SCAN_TIMEOUT")
 	local clean_resp
@@ -277,7 +277,7 @@ wait_for_scan() {
 	fi
 	local status
 	status=$(printf '%s' "$clean_resp" | jq -r '.scanStatus // "unknown"' 2>/dev/null || echo "unknown")
-	log "Scan complete. Status: $status"
+	tlog "Scan complete. Status: $status"
 }
 
 get_periphery_tree() {
@@ -322,7 +322,7 @@ curl_post_resilient() {
 		--max-time 120 2>/dev/null || echo "000")
 	response=$(cat "$body_file"); rm -f "$body_file"
 	if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
-		log "    $label returned HTTP $http_code — waiting for server and retrying..."
+		tlog "    $label returned HTTP $http_code — waiting for server and retrying..."
 		wait_for_server
 		body_file=$(mktemp)
 		http_code=$(curl -s -w "%{http_code}" -o "$body_file" \
@@ -377,9 +377,9 @@ build_prodcore() {
 	local exit_code="${PIPESTATUS[0]}"
 
 	if [[ "$exit_code" -ne 0 ]]; then
-		log "    Build log: $build_log"
+		tlog "    Build tlog: $build_log"
 		grep -E "error:" "$build_log" | grep -v "^Binary file" | head -10 | while IFS= read -r line; do
-			log "      $line"
+			tlog "      $line"
 		done
 
 		# Check if ALL errors are from macro-expansion files (known Periphery analysis gap:
@@ -388,7 +388,7 @@ build_prodcore() {
 		local real_errors
 		real_errors=$(grep -E "error:" "$build_log" | grep -v "^Binary file" | grep -v "@__swiftmacro_" || true)
 		if [[ -z "$real_errors" ]]; then
-			log "    (all errors are in @__swiftmacro_ expansion files — known Periphery gap, not a removal bug)"
+			tlog "    (all errors are in @__swiftmacro_ expansion files — known Periphery gap, not a removal bug)"
 			rm -f "$build_log"
 			return 0
 		fi
@@ -411,7 +411,7 @@ validate_previews() {
 	# Note: skip can legitimately exceed force when access-control fixes remain
 	# after skipReferenced skips some .unused deletions that would have caused
 	# ancestor-promotion (consolidating multiple ops into one) in forceRemoveAll.
-	log "    [INFO] skip($skip_del) vs force($force_del)"
+	tlog "    [INFO] skip($skip_del) vs force($force_del)"
 }
 
 cache_key() {
@@ -432,8 +432,8 @@ cache_record() {
 
 wait_for_scan_with_heartbeat() {
 	local config_id="$1"
-	log "  Waiting for scan to complete (timeout: ${SCAN_TIMEOUT}s)..."
-	(while true; do sleep 30; log "  ... still scanning ..."; done) &
+	tlog "  Waiting for scan to complete (timeout: ${SCAN_TIMEOUT}s)..."
+	(while true; do sleep 30; tlog "  ... still scanning ..."; done) &
 	local hb=$!
 	local resp
 	resp=$(curl_get "$BASE_URL/configurations/$config_id/scan/wait" "$SCAN_TIMEOUT")
@@ -447,7 +447,7 @@ wait_for_scan_with_heartbeat() {
 	if [[ -n "$err" ]]; then
 		die "Scan failed: $err"
 	fi
-	log "  Scan complete."
+	tlog "  Scan complete."
 }
 
 # ──────────────────────────────────────────────────────────
@@ -455,29 +455,29 @@ wait_for_scan_with_heartbeat() {
 # ──────────────────────────────────────────────────────────
 
 main() {
-	# Open fd 3 → terminal (stdout). log() writes to fd 3 so that functions called via
-	# $(...) command substitution can log without their output being captured in the variable.
+	# Open fd 3 → terminal (stdout). tlog() writes to fd 3 so that functions called via
+	# $(...) command substitution can tlog without their output being captured in the variable.
 	exec 3>&1
 	# Initialize report file
 	echo "Treeswift Integration Test — $(date)" > "$REPORT_FILE"
 	echo "" >> "$REPORT_FILE"
-	log "Report: $REPORT_FILE"
+	tlog "Report: $REPORT_FILE"
 
 	if [[ "$RESET_CACHE" == true ]]; then
 		rm -f "$RESULTS_CACHE"
-		log "Results cache cleared."
+		tlog "Results cache cleared."
 	elif [[ -f "$RESULTS_CACHE" ]]; then
-		log "Resuming from cache: $RESULTS_CACHE (use --reset-cache to start fresh)"
+		tlog "Resuming from cache: $RESULTS_CACHE (use --reset-cache to start fresh)"
 	fi
 
 	# Phase 1: Launch / connect
 	if [[ "$SKIP_LAUNCH" == true ]]; then
-		log "Skipping launch (--skip-launch). Checking server..."
+		tlog "Skipping launch (--skip-launch). Checking server..."
 		curl_get "$BASE_URL/status" > /dev/null
-		log "Server is reachable."
+		tlog "Server is reachable."
 	else
 		if curl -s --connect-timeout 2 "$BASE_URL/status" > /dev/null 2>&1; then
-			log "Treeswift already running on port $PORT."
+			tlog "Treeswift already running on port $PORT."
 		else
 			launch_treeswift
 		fi
@@ -487,20 +487,20 @@ main() {
 	CONFIG_ID=$(get_or_create_config)
 
 	if [[ "$SKIP_SCAN" == true ]]; then
-		log "Skipping scan (--skip-scan). Using existing results."
+		tlog "Skipping scan (--skip-scan). Using existing results."
 	else
 		if [[ "$SKIP_BUILD" == true ]]; then
-			log "Skipping pre-scan build (--skip-build). Indexstore may be stale."
+			tlog "Skipping pre-scan build (--skip-build). Indexstore may be stale."
 		else
 			build_prodcore_for_index
 		fi
 		log_section "Starting Prodcore scan (this may take several minutes)..."
 		start_scan "$CONFIG_ID"
-		log "Scan started."
+		tlog "Scan started."
 		wait_for_scan_with_heartbeat "$CONFIG_ID"
 	fi
 
-	log "Fetching periphery tree..."
+	tlog "Fetching periphery tree..."
 	TREE_JSON=$(get_periphery_tree "$CONFIG_ID") || die "Failed to fetch periphery tree (HTTP error — check server logs)"
 
 	# The periphery tree may have a single root folder (e.g., "Prodcore") wrapping
@@ -508,7 +508,7 @@ main() {
 	root_count=$(echo "$TREE_JSON" | jq '[.[] | select(.type=="folder")] | length')
 	if [[ "$root_count" -eq 1 ]]; then
 		root_name=$(echo "$TREE_JSON" | jq -r 'first(.[] | select(.type=="folder") | .name)')
-		log "Single root folder '$root_name' detected — using its children as top-level folders."
+		tlog "Single root folder '$root_name' detected — using its children as top-level folders."
 		# Replace TREE_JSON with the children of the root folder for all subsequent operations
 		TREE_JSON=$(echo "$TREE_JSON" | jq 'first(.[] | select(.type=="folder") | .children)')
 	fi
@@ -522,12 +522,12 @@ main() {
 		die "No folders found in periphery tree. Is the scan producing results?"
 	fi
 
-	log "Top-level folders with warnings: ${ALL_FOLDERS[*]}"
+	tlog "Top-level folders with warnings: ${ALL_FOLDERS[*]}"
 
 	# Apply folder filter if requested
 	if [[ ${#FOLDER_FILTER[@]} -gt 0 ]]; then
 		FOLDERS=("${FOLDER_FILTER[@]}")
-		log "Filtering to: ${FOLDERS[*]}"
+		tlog "Filtering to: ${FOLDERS[*]}"
 	else
 		FOLDERS=("${ALL_FOLDERS[@]}")
 	fi
@@ -544,18 +544,18 @@ main() {
 		FILE_COUNT=$(echo "$NODE_IDS" | jq 'length')
 
 		if [[ "$FILE_COUNT" -eq 0 ]]; then
-			log "  No files with warnings in '$FOLDER', skipping."
+			tlog "  No files with warnings in '$FOLDER', skipping."
 			continue
 		fi
 
-		log "  Files with warnings: $FILE_COUNT"
+		tlog "  Files with warnings: $FILE_COUNT"
 
 		# Preview all 3 strategies before executing any (no disk state change)
-		log "  Running preview: skipReferenced..."
+		tlog "  Running preview: skipReferenced..."
 		P_SKIP=$(preview_removal "$CONFIG_ID" "$NODE_IDS" "skipReferenced")
-		log "  Running preview: forceRemoveAll..."
+		tlog "  Running preview: forceRemoveAll..."
 		P_FORCE=$(preview_removal "$CONFIG_ID" "$NODE_IDS" "forceRemoveAll")
-		log "  Running preview: cascade..."
+		tlog "  Running preview: cascade..."
 		P_CASCADE=$(preview_removal "$CONFIG_ID" "$NODE_IDS" "cascade")
 
 		validate_previews "$P_SKIP" "$P_FORCE"
@@ -566,32 +566,32 @@ main() {
 		SKIP_NONDEL=$(echo "$P_SKIP" | jq '.totalNonDeletable')
 		FORCE_NONDEL=$(echo "$P_FORCE" | jq '.totalNonDeletable')
 
-		log "  Preview deletable:    skipReferenced=$SKIP_DEL  forceRemoveAll=$FORCE_DEL  cascade=$CASCADE_DEL"
-		log "  Preview nonDeletable: skipReferenced=$SKIP_NONDEL  forceRemoveAll=$FORCE_NONDEL"
+		tlog "  Preview deletable:    skipReferenced=$SKIP_DEL  forceRemoveAll=$FORCE_DEL  cascade=$CASCADE_DEL"
+		tlog "  Preview nonDeletable: skipReferenced=$SKIP_NONDEL  forceRemoveAll=$FORCE_NONDEL"
 
 		for STRATEGY in "${STRATEGIES[@]}"; do
 			log_section "  $FOLDER / $STRATEGY"
 
 			# Skip if already recorded in cache
 			if cache_lookup "$FOLDER" "$STRATEGY"; then
-				log "  [SKIP] $FOLDER / $STRATEGY — already passed in a previous run."
+				tlog "  [SKIP] $FOLDER / $STRATEGY — already passed in a previous run."
 				RESULTS+=("$FOLDER|$STRATEGY|—|SKIP")
 				continue
 			fi
 
 			# Execute removal
-			log "    Executing removal (strategy=$STRATEGY, files=$FILE_COUNT)..."
-			(while true; do sleep 30; log "    ... still removing ..."; done) &
+			tlog "    Executing removal (strategy=$STRATEGY, files=$FILE_COUNT)..."
+			(while true; do sleep 30; tlog "    ... still removing ..."; done) &
 			hb_removal=$!
 			EXEC=$(execute_removal "$CONFIG_ID" "$NODE_IDS" "$STRATEGY")
 			kill "$hb_removal" 2>/dev/null; wait "$hb_removal" 2>/dev/null || true
 			DELETED=$(echo "$EXEC" | jq '.totalDeleted')
 			EXEC_ERRORS=$(echo "$EXEC" | jq '.errors | length')
 
-			log "    Deleted: $DELETED  Errors: $EXEC_ERRORS"
+			tlog "    Deleted: $DELETED  Errors: $EXEC_ERRORS"
 			if [[ "$EXEC_ERRORS" -gt 0 ]]; then
 				echo "$EXEC" | jq -r '.errors[]' | while IFS= read -r err; do
-					log "    Error: $err"
+					tlog "    Error: $err"
 				done
 			fi
 
@@ -602,23 +602,23 @@ main() {
 				"cascade")        PREVIEW_DEL="$CASCADE_DEL" ;;
 			esac
 			if [[ "$PREVIEW_DEL" -ne "$DELETED" ]]; then
-				log "    [CHECK] Preview($PREVIEW_DEL) vs Executed($DELETED): MISMATCH"
+				tlog "    [CHECK] Preview($PREVIEW_DEL) vs Executed($DELETED): MISMATCH"
 			else
-				log "    [CHECK] Preview vs Executed ($DELETED): MATCH"
+				tlog "    [CHECK] Preview vs Executed ($DELETED): MATCH"
 			fi
 
 			# Build
-			log "    Building Prodcore (xcodebuild -scheme $PRODCORE_SCHEME)..."
+			tlog "    Building Prodcore (xcodebuild -scheme $PRODCORE_SCHEME)..."
 			BUILD_RESULT="PASS"
 			if ! build_prodcore; then
 				BUILD_RESULT="FAIL"
 			fi
-			log "    Build: $BUILD_RESULT"
+			tlog "    Build: $BUILD_RESULT"
 
 			# Flag unexpected failures; record passing skipReferenced to cache
 			if [[ "$STRATEGY" == "skipReferenced" ]]; then
 				if [[ "$BUILD_RESULT" == "FAIL" ]]; then
-					log "    *** UNEXPECTED: skipReferenced should never break the build! ***"
+					tlog "    *** UNEXPECTED: skipReferenced should never break the build! ***"
 					UNEXPECTED_FAILURES=$((UNEXPECTED_FAILURES + 1))
 				else
 					cache_record "$FOLDER" "$STRATEGY"
@@ -628,15 +628,15 @@ main() {
 			RESULTS+=("$FOLDER|$STRATEGY|$DELETED|$BUILD_RESULT")
 
 			# Git reset
-			log "    Resetting Prodcore to HEAD (git checkout HEAD -- .)..."
+			tlog "    Resetting Prodcore to HEAD (git checkout HEAD -- .)..."
 			git_reset_prodcore
-			log "    Reset complete."
+			tlog "    Reset complete."
 		done
 	done
 
 	# Phase 4: Summary
 	log_section "SUMMARY"
-	log ""
+	tlog ""
 	printf "%-25s  %-18s  %-9s  %-7s\n" "FOLDER" "STRATEGY" "DELETED" "BUILD" | tee -a "$REPORT_FILE"
 	printf "%-25s  %-18s  %-9s  %-7s\n" "-------------------------" "------------------" "---------" "-------" | tee -a "$REPORT_FILE"
 
@@ -648,17 +648,17 @@ main() {
 		printf "%-25s  %-18s  %-9s  %-7s%s\n" "$f" "$s" "$d" "$b" "$marker" | tee -a "$REPORT_FILE"
 	done
 
-	log ""
-	log "Total test combinations: ${#RESULTS[@]}"
-	log "Unexpected failures (skipReferenced build failed): $UNEXPECTED_FAILURES"
-	log ""
-	log "Full report: $REPORT_FILE"
+	tlog ""
+	tlog "Total test combinations: ${#RESULTS[@]}"
+	tlog "Unexpected failures (skipReferenced build failed): $UNEXPECTED_FAILURES"
+	tlog ""
+	tlog "Full report: $REPORT_FILE"
 
 	if [[ "$UNEXPECTED_FAILURES" -gt 0 ]]; then
-		log "RESULT: FAIL — skipReferenced produced build errors (should never happen)"
+		tlog "RESULT: FAIL — skipReferenced produced build errors (should never happen)"
 		exit 1
 	else
-		log "RESULT: PASS — all skipReferenced builds succeeded"
+		tlog "RESULT: PASS — all skipReferenced builds succeeded"
 		exit 0
 	fi
 }

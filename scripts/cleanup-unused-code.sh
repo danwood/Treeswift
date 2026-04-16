@@ -74,12 +74,15 @@ done
 #   build_prodcore, git_reset_prodcore, wait_for_scan_with_heartbeat
 # ──────────────────────────────────────────────────────────
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source <(grep -v '^main "\$@"' "$SCRIPT_DIR/integration-test-removal.sh")
+SCRIPT_DIR="$(dirname "$0" | xargs realpath)"
+_HELPERS_TMP=$(mktemp)
+grep -v '^main ' "$SCRIPT_DIR/integration-test-removal.sh" > "$_HELPERS_TMP"
+source "$_HELPERS_TMP"
+rm -f "$_HELPERS_TMP"
 
 # Declare our own REPORT_FILE AFTER source so the sourced script's global
-# assignments don't clobber ours (log() references $REPORT_FILE by name at
-# call time, so this is safe as long as we set it before the first log() call).
+# assignments don't clobber ours (tlog() references $REPORT_FILE by name at
+# call time, so this is safe as long as we set it before the first tlog() call).
 REPORT_FILE="/tmp/treeswift-cleanup-$(date +%Y%m%d-%H%M%S).txt"
 
 # ──────────────────────────────────────────────────────────
@@ -88,8 +91,8 @@ REPORT_FILE="/tmp/treeswift-cleanup-$(date +%Y%m%d-%H%M%S).txt"
 
 progress_load() {
 	if [[ -f "$PROGRESS_FILE" ]]; then
-		log "Resuming from progress file: $PROGRESS_FILE"
-		log "  (use --reset-progress to start fresh)"
+		tlog "Resuming from progress file: $PROGRESS_FILE"
+		tlog "  (use --reset-progress to start fresh)"
 	else
 		# Create empty progress structure
 		echo '{"processedFolders":{},"skippedFiles":{}}' > "$PROGRESS_FILE"
@@ -156,11 +159,162 @@ extract_all_files() {
 # After git restore, verify Prodcore still builds. If not, the repo was already
 # broken before our removal — die rather than continue against a broken baseline.
 verify_baseline_build() {
-	log "  Verifying baseline build after git restore..."
+	tlog "  Verifying baseline build after git restore..."
 	if ! build_prodcore; then
 		die "Prodcore build is broken AFTER git restore — baseline was already broken. Stopping."
 	fi
-	log "  Baseline verified."
+	tlog "  Baseline verified."
+}
+
+# Run build and write error file paths to a temp file (one per line).
+# Returns 0 if build passed, 1 if failed.
+# Caller reads error paths from $BUILD_ERROR_FILES_TMP.
+BUILD_ERROR_FILES_TMP=$(mktemp)
+build_prodcore_capturing_errors() {
+	local build_log
+	build_log=$(mktemp /tmp/xcodebuild-XXXXXX)
+
+	xcodebuild \
+		-project "$PRODCORE_PROJECT" \
+		-scheme "$PRODCORE_SCHEME" \
+		-destination "platform=macOS,arch=arm64" \
+		-configuration Debug \
+		-quiet \
+		clean build \
+		CODE_SIGN_IDENTITY="" \
+		CODE_SIGNING_REQUIRED=NO \
+		2>&1 | tee "$build_log"
+	local exit_code="${PIPESTATUS[0]}"
+
+	# Extract unique file paths from error lines (filter macro expansion files)
+	grep -E "error:" "$build_log" \
+		| grep -v "^Binary file" \
+		| grep -v "@__swiftmacro_" \
+		| grep -oE "^[^:]+\.swift" \
+		| sort -u \
+		> "$BUILD_ERROR_FILES_TMP" || true
+
+	if [[ "$exit_code" -ne 0 ]]; then
+		# Check if ALL errors are macro-expansion (known false positive)
+		local real_errors
+		real_errors=$(grep -E "error:" "$build_log" | grep -v "^Binary file" | grep -v "@__swiftmacro_" || true)
+		if [[ -z "$real_errors" ]]; then
+			tlog "    (all errors in @__swiftmacro_ expansion files — known Periphery gap)"
+			rm -f "$build_log"
+			return 0
+		fi
+		tlog "    Build log: $build_log"
+		grep -E "error:" "$build_log" | grep -v "^Binary file" | head -10 | while IFS= read -r line; do
+			tlog "      $line"
+		done
+	else
+		rm -f "$build_log"
+	fi
+	return "$exit_code"
+}
+
+# Try to salvage a folder's removals by iteratively restoring only files that
+# caused build errors, then retrying the build.
+#
+# Strategy:
+#   Round A: error files that are modified → restore them directly.
+#   Round B: error files all at HEAD (unmodified) → the root cause is a
+#            modified file that exports a symbol now missing. Restore modified
+#            files one-at-a-time (binary search style isn't worth it here; just
+#            try each one), rebuild after each restore until the error clears.
+#
+# Never gives up on the whole folder just because one round made no progress;
+# keeps going until the build passes or truly nothing remains to restore.
+#
+# Sets SALVAGE_DELETED to the count of deletions kept, SALVAGE_RESTORED to
+# list of restored file paths.
+SALVAGE_DELETED=0
+SALVAGE_RESTORED=()
+salvage_build() {
+	local folder="$1"
+	local initial_deleted="$2"
+	SALVAGE_DELETED="$initial_deleted"
+	SALVAGE_RESTORED=()
+
+	local round=0
+
+	while true; do
+		round=$((round + 1))
+		tlog "  Salvage round $round: building..."
+
+		if build_prodcore_capturing_errors; then
+			tlog "  Salvage succeeded after $round round(s). Kept $SALVAGE_DELETED deletion(s)."
+			return 0
+		fi
+
+		# Read error files
+		local error_files=()
+		while IFS= read -r fp; do
+			[[ -n "$fp" ]] && error_files+=("$fp")
+		done < "$BUILD_ERROR_FILES_TMP"
+
+		if [[ ${#error_files[@]} -eq 0 ]]; then
+			tlog "  Salvage: build failed but no error files identified — giving up."
+			return 1
+		fi
+
+		# Phase A: restore error files that are actually modified
+		tlog "  Salvage: ${#error_files[@]} error file(s) — checking for modified ones:"
+		local restored_count=0
+		for ef in "${error_files[@]}"; do
+			if [[ "$ef" == "$PRODCORE_DIR/"* ]]; then
+				local rel="${ef#$PRODCORE_DIR/}"
+				if git -C "$PRODCORE_DIR" diff --name-only HEAD -- "$rel" | grep -q .; then
+					tlog "    Restoring: $rel"
+					git -C "$PRODCORE_DIR" checkout HEAD -- "$rel" 2>/dev/null || true
+					SALVAGE_RESTORED+=("$ef")
+					restored_count=$((restored_count + 1))
+				else
+					tlog "    Already at HEAD: $rel (not modified)"
+				fi
+			fi
+		done
+
+		if [[ $restored_count -gt 0 ]]; then
+			SALVAGE_DELETED=$(git -C "$PRODCORE_DIR" diff HEAD --name-only 2>/dev/null | wc -l | tr -d ' ')
+			tlog "  Salvage: $restored_count file(s) restored. Remaining modified: $SALVAGE_DELETED"
+			if [[ "$SALVAGE_DELETED" -eq 0 ]]; then
+				tlog "  Salvage: nothing left to keep."
+				return 1
+			fi
+			# Loop back — rebuild with restored files
+			continue
+		fi
+
+		# Phase B: all error files are unmodified — the broken symbol was removed
+		# from a modified file that isn't itself in the error list. Restore modified
+		# files one-by-one until the build passes.
+		tlog "  Salvage: all error files at HEAD — trying one-by-one restore of modified files..."
+		local modified_files=()
+		while IFS= read -r rel; do
+			[[ -n "$rel" ]] && modified_files+=("$rel")
+		done < <(git -C "$PRODCORE_DIR" diff --name-only HEAD 2>/dev/null)
+
+		if [[ ${#modified_files[@]} -eq 0 ]]; then
+			tlog "  Salvage: no modified files remain — giving up."
+			return 1
+		fi
+
+		# Restore ONE modified file and loop (rebuild at top of while)
+		local candidate="${modified_files[0]}"
+		tlog "    Restoring candidate: $candidate"
+		git -C "$PRODCORE_DIR" checkout HEAD -- "$candidate" 2>/dev/null || true
+		SALVAGE_RESTORED+=("$PRODCORE_DIR/$candidate")
+
+		SALVAGE_DELETED=$(git -C "$PRODCORE_DIR" diff HEAD --name-only 2>/dev/null | wc -l | tr -d ' ')
+		tlog "  Salvage: restored 1 candidate. Remaining modified: $SALVAGE_DELETED"
+
+		if [[ "$SALVAGE_DELETED" -eq 0 ]]; then
+			tlog "  Salvage: nothing left to keep."
+			return 1
+		fi
+		# Loop — rebuild with this file restored
+	done
 }
 
 # Build commit message summarizing what was removed/changed.
@@ -203,40 +357,40 @@ verify_branch() {
 # ──────────────────────────────────────────────────────────
 
 main() {
-	# Open fd 3 → terminal so log() can write there even inside $(...) subshells.
+	# Open fd 3 → terminal so tlog() can write there even inside $(...) subshells.
 	exec 3>&1
 
 	# Initialize report file
 	echo "Treeswift Unused Code Cleanup — $(date)" > "$REPORT_FILE"
 	echo "" >> "$REPORT_FILE"
-	log "Report: $REPORT_FILE"
-	log "Progress file: $PROGRESS_FILE"
+	tlog "Report: $REPORT_FILE"
+	tlog "Progress file: $PROGRESS_FILE"
 
 	if [[ "$DRY_RUN" == true ]]; then
-		log "DRY-RUN MODE: using preview endpoint; no files will be modified."
+		tlog "DRY-RUN MODE: using preview endpoint; no files will be modified."
 	fi
 
 	# Verify branch before doing any work (--commit only)
 	if [[ "$AUTO_COMMIT" == true ]]; then
 		verify_branch
-		log "Branch verified: $REQUIRED_BRANCH"
+		tlog "Branch verified: $REQUIRED_BRANCH"
 	fi
 
 	# ── Progress file ──────────────────────────────────────
 	if [[ "$RESET_PROGRESS" == true ]]; then
 		rm -f "$PROGRESS_FILE"
-		log "Progress file cleared (--reset-progress)."
+		tlog "Progress file cleared (--reset-progress)."
 	fi
 	progress_load
 
 	# ── Phase 1: Launch / connect ──────────────────────────
 	if [[ "$SKIP_LAUNCH" == true ]]; then
-		log "Skipping launch (--skip-launch). Checking server..."
+		tlog "Skipping launch (--skip-launch). Checking server..."
 		curl_get "$BASE_URL/status" > /dev/null
-		log "Server is reachable."
+		tlog "Server is reachable."
 	else
 		if curl -s --connect-timeout 2 "$BASE_URL/status" > /dev/null 2>&1; then
-			log "Treeswift already running on port $PORT."
+			tlog "Treeswift already running on port $PORT."
 		else
 			launch_treeswift
 		fi
@@ -246,21 +400,21 @@ main() {
 	CONFIG_ID=$(get_or_create_config)
 
 	if [[ "$SKIP_SCAN" == true ]]; then
-		log "Skipping scan (--skip-scan). Using existing results."
+		tlog "Skipping scan (--skip-scan). Using existing results."
 	else
 		if [[ "$SKIP_BUILD" == true ]]; then
-			log "Skipping pre-scan build (--skip-build)."
+			tlog "Skipping pre-scan build (--skip-build)."
 		else
 			build_prodcore_for_index
 		fi
 		log_section "Starting Prodcore scan (this may take several minutes)..."
 		start_scan "$CONFIG_ID"
-		log "Scan started."
+		tlog "Scan started."
 		wait_for_scan_with_heartbeat "$CONFIG_ID"
 	fi
 
 	# ── Phase 3: Fetch periphery tree ─────────────────────
-	log "Fetching periphery tree..."
+	tlog "Fetching periphery tree..."
 	TREE_JSON=$(get_periphery_tree "$CONFIG_ID") \
 		|| die "Failed to fetch periphery tree (HTTP error — check server logs)"
 
@@ -269,7 +423,7 @@ main() {
 	root_count=$(echo "$TREE_JSON" | jq '[.[] | select(.type=="folder")] | length')
 	if [[ "$root_count" -eq 1 ]]; then
 		root_name=$(echo "$TREE_JSON" | jq -r 'first(.[] | select(.type=="folder") | .name)')
-		log "Single root folder '$root_name' detected — using its children as top-level."
+		tlog "Single root folder '$root_name' detected — using its children as top-level."
 		TREE_JSON=$(echo "$TREE_JSON" | jq 'first(.[] | select(.type=="folder") | .children)')
 	fi
 
@@ -282,11 +436,11 @@ main() {
 		die "No folders found in periphery tree. Is the scan producing results?"
 	fi
 
-	log "Top-level folders with warnings: ${ALL_FOLDERS[*]}"
+	tlog "Top-level folders with warnings: ${ALL_FOLDERS[*]}"
 
 	if [[ ${#FOLDER_FILTER[@]} -gt 0 ]]; then
 		FOLDERS=("${FOLDER_FILTER[@]}")
-		log "Filtering to: ${FOLDERS[*]}"
+		tlog "Filtering to: ${FOLDERS[*]}"
 	else
 		FOLDERS=("${ALL_FOLDERS[@]}")
 	fi
@@ -304,7 +458,7 @@ main() {
 		# Skip folders already recorded in progress file
 		existing_status=$(progress_folder_done "$FOLDER")
 		if [[ -n "$existing_status" ]]; then
-			log "  [RESUME] Already processed ($existing_status) — skipping."
+			tlog "  [RESUME] Already processed ($existing_status) — skipping."
 			FOLDERS_RESUMED+=("$FOLDER ($existing_status)")
 			continue
 		fi
@@ -313,29 +467,29 @@ main() {
 		FILE_COUNT=$(echo "$NODE_IDS" | jq 'length')
 
 		if [[ "$FILE_COUNT" -eq 0 ]]; then
-			log "  No files with warnings in '$FOLDER' — skipping."
+			tlog "  No files with warnings in '$FOLDER' — skipping."
 			FOLDERS_EMPTY+=("$FOLDER")
 			progress_record_folder "$FOLDER" "empty"
 			continue
 		fi
 
-		log "  Files with warnings: $FILE_COUNT"
+		tlog "  Files with warnings: $FILE_COUNT"
 
 		# ── Dry-run branch ──────────────────────────────
 		if [[ "$DRY_RUN" == true ]]; then
-			log "  [DRY-RUN] Running preview (skipReferenced)..."
+			tlog "  [DRY-RUN] Running preview (skipReferenced)..."
 			PREVIEW_RESP=$(preview_removal "$CONFIG_ID" "$NODE_IDS" "skipReferenced")
 			PREVIEW_DEL=$(echo "$PREVIEW_RESP" | jq '.totalDeletable // 0')
 			PREVIEW_NONDEL=$(echo "$PREVIEW_RESP" | jq '.totalNonDeletable // 0')
-			log "  [DRY-RUN] Would delete: $PREVIEW_DEL  (non-deletable: $PREVIEW_NONDEL)"
+			tlog "  [DRY-RUN] Would delete: $PREVIEW_DEL  (non-deletable: $PREVIEW_NONDEL)"
 			TOTAL_DELETED=$((TOTAL_DELETED + PREVIEW_DEL))
 			FOLDERS_CLEANED+=("$FOLDER (+$PREVIEW_DEL, dry-run)")
 			continue
 		fi
 
 		# ── Execute removal ──────────────────────────────
-		log "  Executing removal (strategy=skipReferenced, files=$FILE_COUNT)..."
-		(while true; do sleep 30; log "  ... still removing ..."; done) &
+		tlog "  Executing removal (strategy=skipReferenced, files=$FILE_COUNT)..."
+		(while true; do sleep 30; tlog "  ... still removing ..."; done) &
 		hb_removal=$!
 		EXEC_RESP=$(execute_removal "$CONFIG_ID" "$NODE_IDS" "skipReferenced")
 		kill "$hb_removal" 2>/dev/null; wait "$hb_removal" 2>/dev/null || true
@@ -343,16 +497,16 @@ main() {
 		DELETED=$(echo "$EXEC_RESP" | jq '.totalDeleted // 0')
 		EXEC_ERRORS=$(echo "$EXEC_RESP" | jq '.errors | length')
 
-		log "  Deleted: $DELETED  Errors: $EXEC_ERRORS"
+		tlog "  Deleted: $DELETED  Errors: $EXEC_ERRORS"
 
 		if [[ "$EXEC_ERRORS" -gt 0 ]]; then
 			echo "$EXEC_RESP" | jq -r '.errors[]' | while IFS= read -r err; do
-				log "  API Error: $err"
+				tlog "  API Error: $err"
 			done
 		fi
 
 		if [[ "$DELETED" -eq 0 ]]; then
-			log "  Nothing was deleted — no build needed."
+			tlog "  Nothing was deleted — no build needed."
 			FOLDERS_EMPTY+=("$FOLDER (0 deletions)")
 			progress_record_folder "$FOLDER" "empty"
 			continue
@@ -369,102 +523,119 @@ main() {
 			[[ -n "$fpath" ]] && ALL_TOUCHED_FILES+=("$fpath")
 		done < <(extract_all_files "$EXEC_RESP")
 
-		log "  Modified files (${#MODIFIED_FILES[@]}):"
+		tlog "  Modified files (${#MODIFIED_FILES[@]}):"
 		for mf in "${MODIFIED_FILES[@]}"; do
-			log "    $mf"
+			tlog "    $mf"
 		done
 
-		# ── Build verification ───────────────────────────
-		log "  Building Prodcore..."
-		BUILD_OK=true
-		if ! build_prodcore; then
-			BUILD_OK=false
+		# ── Build verification with salvage ─────────────
+		tlog "  Building Prodcore (initial attempt)..."
+		if build_prodcore_capturing_errors; then
+			KEPT_DELETED="$DELETED"
+			KEPT_RESTORED=()
+		else
+			# Initial build failed — try salvage (restore only error files, retry)
+			tlog "  Initial build FAILED — attempting salvage..."
+			if salvage_build "$FOLDER" "$DELETED"; then
+				KEPT_DELETED="$SALVAGE_DELETED"
+				KEPT_RESTORED=("${SALVAGE_RESTORED[@]+"${SALVAGE_RESTORED[@]}"}")
+				tlog "  Salvage PASSED. Kept $KEPT_DELETED deletion(s), restored ${#KEPT_RESTORED[@]} file(s)."
+			else
+				# Salvage failed — restore any remaining modified files
+				tlog "  Salvage FAILED — restoring remaining modified files."
+				local remaining_modified=()
+				while IFS= read -r rel; do
+					[[ -n "$rel" ]] && remaining_modified+=("$rel")
+				done < <(git -C "$PRODCORE_DIR" diff --name-only HEAD 2>/dev/null)
+				for rel in "${remaining_modified[@]+"${remaining_modified[@]}"}"; do
+					git -C "$PRODCORE_DIR" checkout HEAD -- "$rel" 2>/dev/null || true
+				done
+				verify_baseline_build
+				tlog "  SKIPPED: $FOLDER — could not salvage any removals"
+				FOLDERS_SKIPPED+=("$FOLDER")
+				progress_record_folder "$FOLDER" "skipped"
+				progress_record_skipped_files "$FOLDER" "${ALL_TOUCHED_FILES[@]}"
+				continue
+			fi
 		fi
 
-		if [[ "$BUILD_OK" == true ]]; then
-			# SUCCESS: record this folder as cleaned
-			log "  Build PASSED. $DELETED deletion(s) kept."
-			FOLDERS_CLEANED+=("$FOLDER (+$DELETED)")
-			TOTAL_DELETED=$((TOTAL_DELETED + DELETED))
-			progress_record_folder "$FOLDER" "cleaned"
+		# Build passed (either directly or via salvage)
+		tlog "  Build PASSED. $KEPT_DELETED deletion(s) kept."
+		FOLDERS_CLEANED+=("$FOLDER (+$KEPT_DELETED)")
+		TOTAL_DELETED=$((TOTAL_DELETED + KEPT_DELETED))
+		progress_record_folder "$FOLDER" "cleaned"
 
-			# Optional auto-commit
-			if [[ "$AUTO_COMMIT" == true ]]; then
-				log "  Staging changes for commit..."
-				git -C "$PRODCORE_DIR" add -A
+		# Record salvaged-out files as skipped
+		if [[ ${#KEPT_RESTORED[@]} -gt 0 ]]; then
+			progress_record_skipped_files "$FOLDER" "${KEPT_RESTORED[@]}"
+		fi
 
-				# Paranoia: verify build one more time before committing
-				log "  Pre-commit build verification..."
-				if ! build_prodcore; then
-					log "  WARNING: pre-commit build failed — restoring and skipping commit."
-					git -C "$PRODCORE_DIR" reset HEAD
-					git_reset_prodcore
-					verify_baseline_build
-					progress_record_folder "$FOLDER" "skipped"
-					progress_record_skipped_files "$FOLDER" "${ALL_TOUCHED_FILES[@]}"
-					FOLDERS_SKIPPED+=("$FOLDER (pre-commit build verification failed)")
-					continue
-				fi
+		# Optional auto-commit
+		if [[ "$AUTO_COMMIT" == true ]]; then
+			tlog "  Staging changes for commit..."
+			git -C "$PRODCORE_DIR" add -A
 
-				COMMIT_MSG=$(build_commit_message "$FOLDER" "$EXEC_RESP" "$DELETED")
-				git -C "$PRODCORE_DIR" commit -m "$COMMIT_MSG"
-				log "  Committed: $COMMIT_MSG"
+			# Paranoia: verify build one more time before committing
+			tlog "  Pre-commit build verification..."
+			if ! build_prodcore_capturing_errors; then
+				tlog "  WARNING: pre-commit build failed — full restore, skipping commit."
+				git -C "$PRODCORE_DIR" reset HEAD
+				git_reset_prodcore
+				verify_baseline_build
+				progress_record_folder "$FOLDER" "skipped"
+				progress_record_skipped_files "$FOLDER" "${ALL_TOUCHED_FILES[@]}"
+				FOLDERS_SKIPPED+=("$FOLDER (pre-commit verification failed)")
+				continue
 			fi
 
-		else
-			# FAILURE: restore everything and verify we're back to a clean state
-			log "  Build FAILED. Restoring Prodcore to HEAD..."
-			git_reset_prodcore
-			verify_baseline_build
-			log "  SKIPPED: $FOLDER — build failed after removal"
-			FOLDERS_SKIPPED+=("$FOLDER")
-			progress_record_folder "$FOLDER" "skipped"
-			progress_record_skipped_files "$FOLDER" "${ALL_TOUCHED_FILES[@]}"
+			COMMIT_MSG=$(build_commit_message "$FOLDER" "$EXEC_RESP" "$KEPT_DELETED")
+			git -C "$PRODCORE_DIR" commit -m "$COMMIT_MSG"
+			tlog "  Committed: $COMMIT_MSG"
 		fi
 	done
 
 	# ── Phase 5: Summary ──────────────────────────────────
 	log_section "CLEANUP SUMMARY"
-	log ""
+	tlog ""
 
-	log "Folders cleaned (${#FOLDERS_CLEANED[@]}):"
+	tlog "Folders cleaned (${#FOLDERS_CLEANED[@]}):"
 	for f in "${FOLDERS_CLEANED[@]+"${FOLDERS_CLEANED[@]}"}"; do
-		log "  CLEANED  $f"
+		tlog "  CLEANED  $f"
 	done
 
-	log ""
-	log "Folders skipped — build failed, changes restored (${#FOLDERS_SKIPPED[@]}):"
+	tlog ""
+	tlog "Folders skipped — build failed, changes restored (${#FOLDERS_SKIPPED[@]}):"
 	for f in "${FOLDERS_SKIPPED[@]+"${FOLDERS_SKIPPED[@]}"}"; do
-		log "  SKIPPED  $f"
+		tlog "  SKIPPED  $f"
 	done
 
-	log ""
-	log "Folders with no warnings or zero deletions (${#FOLDERS_EMPTY[@]}):"
+	tlog ""
+	tlog "Folders with no warnings or zero deletions (${#FOLDERS_EMPTY[@]}):"
 	for f in "${FOLDERS_EMPTY[@]+"${FOLDERS_EMPTY[@]}"}"; do
-		log "  EMPTY    $f"
+		tlog "  EMPTY    $f"
 	done
 
-	log ""
-	log "Folders resumed from prior run (${#FOLDERS_RESUMED[@]}):"
+	tlog ""
+	tlog "Folders resumed from prior run (${#FOLDERS_RESUMED[@]}):"
 	for f in "${FOLDERS_RESUMED[@]+"${FOLDERS_RESUMED[@]}"}"; do
-		log "  RESUMED  $f"
+		tlog "  RESUMED  $f"
 	done
 
-	log ""
+	tlog ""
 	if [[ "$DRY_RUN" == true ]]; then
-		log "Total would-be deletions (dry-run): $TOTAL_DELETED"
+		tlog "Total would-be deletions (dry-run): $TOTAL_DELETED"
 	else
-		log "Total actual deletions this run: $TOTAL_DELETED"
+		tlog "Total actual deletions this run: $TOTAL_DELETED"
 	fi
-	log ""
-	log "Progress file: $PROGRESS_FILE"
-	log "Full report:   $REPORT_FILE"
+	tlog ""
+	tlog "Progress file: $PROGRESS_FILE"
+	tlog "Full report:   $REPORT_FILE"
 
 	if [[ ${#FOLDERS_SKIPPED[@]} -gt 0 ]]; then
-		log ""
-		log "Note: ${#FOLDERS_SKIPPED[@]} folder(s) skipped due to build failures."
-		log "Affected files recorded in $PROGRESS_FILE under 'skippedFiles'."
-		log "These likely contain false positives (e.g. @Observable macro references)."
+		tlog ""
+		tlog "Note: ${#FOLDERS_SKIPPED[@]} folder(s) skipped due to build failures."
+		tlog "Affected files recorded in $PROGRESS_FILE under 'skippedFiles'."
+		tlog "These likely contain false positives (e.g. @Observable macro references)."
 	fi
 }
 
