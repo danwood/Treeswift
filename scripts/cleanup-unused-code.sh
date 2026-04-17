@@ -77,8 +77,29 @@ done
 SCRIPT_DIR="$(dirname "$0" | xargs realpath)"
 _HELPERS_TMP=$(mktemp)
 grep -v '^main ' "$SCRIPT_DIR/integration-test-removal.sh" > "$_HELPERS_TMP"
+
+# Save our parsed flag values before sourcing — the integration script has
+# global initializations (SKIP_SCAN=false, FOLDER_FILTER=(), etc.) that run
+# during source and would clobber the values we parsed from our args.
+_SAVED_SKIP_LAUNCH="$SKIP_LAUNCH"
+_SAVED_SKIP_SCAN="$SKIP_SCAN"
+_SAVED_SKIP_BUILD="$SKIP_BUILD"
+_SAVED_AUTO_COMMIT="$AUTO_COMMIT"
+_SAVED_DRY_RUN="$DRY_RUN"
+_SAVED_RESET_PROGRESS="$RESET_PROGRESS"
+_SAVED_FOLDER_FILTER=("${FOLDER_FILTER[@]+"${FOLDER_FILTER[@]}"}")
+
 source "$_HELPERS_TMP"
 rm -f "$_HELPERS_TMP"
+
+# Restore our flag variables after sourcing.
+SKIP_LAUNCH="$_SAVED_SKIP_LAUNCH"
+SKIP_SCAN="$_SAVED_SKIP_SCAN"
+SKIP_BUILD="$_SAVED_SKIP_BUILD"
+AUTO_COMMIT="$_SAVED_AUTO_COMMIT"
+DRY_RUN="$_SAVED_DRY_RUN"
+RESET_PROGRESS="$_SAVED_RESET_PROGRESS"
+FOLDER_FILTER=("${_SAVED_FOLDER_FILTER[@]+"${_SAVED_FOLDER_FILTER[@]}"}")
 
 # Declare our own REPORT_FILE AFTER source so the sourced script's global
 # assignments don't clobber ours (tlog() references $REPORT_FILE by name at
@@ -141,6 +162,27 @@ EOF
 # ──────────────────────────────────────────────────────────
 # CLEANUP-SPECIFIC HELPERS
 # ──────────────────────────────────────────────────────────
+
+# Like collect_file_ids but accepts a slash-separated path (e.g. "Features/Business").
+# Walks the tree one component at a time, then collects all file IDs under the
+# final node.
+collect_file_ids_by_path() {
+	local tree_json="$1"
+	local folder_path="$2"
+	# Split path on '/'
+	IFS='/' read -ra _path_parts <<< "$folder_path"
+	local current_json="$tree_json"
+	for _part in "${_path_parts[@]}"; do
+		current_json=$(echo "$current_json" | jq -r --arg n "$_part" \
+			'map(select(.type=="folder" and .name==$n)) | first | .children // []')
+		if [[ "$current_json" == "null" || "$current_json" == "[]" ]]; then
+			echo "[]"
+			return
+		fi
+	done
+	echo "$current_json" | jq -r '.. | objects | select(.type=="file") | .id' \
+		| jq -Rs 'split("\n") | map(select(length>0))'
+}
 
 # Extract filePaths from an execute_removal response where deletedCount > 0.
 # Prints one path per line.
@@ -287,9 +329,10 @@ salvage_build() {
 		fi
 
 		# Phase B: all error files are unmodified — the broken symbol was removed
-		# from a modified file that isn't itself in the error list. Restore modified
-		# files one-by-one until the build passes.
-		tlog "  Salvage: all error files at HEAD — trying one-by-one restore of modified files..."
+		# from a modified file. Parse the missing symbol names from errors, grep
+		# the modified files to find which ones define those symbols, restore those.
+		tlog "  Salvage: all error files at HEAD — grepping modified files for missing symbols..."
+
 		local modified_files=()
 		while IFS= read -r rel; do
 			[[ -n "$rel" ]] && modified_files+=("$rel")
@@ -300,20 +343,186 @@ salvage_build() {
 			return 1
 		fi
 
-		# Restore ONE modified file and loop (rebuild at top of while)
-		local candidate="${modified_files[0]}"
-		tlog "    Restoring candidate: $candidate"
-		git -C "$PRODCORE_DIR" checkout HEAD -- "$candidate" 2>/dev/null || true
-		SALVAGE_RESTORED+=("$PRODCORE_DIR/$candidate")
+		# Parse error messages from the last build log into structured (type, member) pairs.
+		# Three error patterns:
+		#   1. "cannot find 'Foo' in scope" / "cannot find type 'Foo'" → top-level symbol Foo
+		#   2. "type 'Bar' has no member 'foo'" → member foo on type Bar
+		#   3. "uses an internal type" / "public ... internal type" → type visibility issue;
+		#      the unmodified file references something that became internal — find which
+		#      modified file now lacks a public declaration for that symbol.
+		local last_log
+		last_log=$(ls -t /tmp/xcodebuild-* 2>/dev/null | head -1)
+		local log_src="${last_log:-$BUILD_ERROR_FILES_TMP}"
+
+		# (type, member) pairs: TYPE="" means top-level search
+		# Format: "TYPE\tMEMBER" — TYPE empty for top-level
+		local search_pairs=()
+
+		# Pattern 1: cannot find 'Foo' → top-level Foo
+		while IFS= read -r sym; do
+			[[ -n "$sym" ]] && search_pairs+=("	$sym")
+		done < <(grep -oE "cannot find (type )?'[^']+'" "$log_src" \
+			| grep -oE "'[^']+'" | tr -d "'" | sort -u 2>/dev/null || true)
+
+		# Pattern 2: type 'Bar' has no member 'foo' → search for foo inside Bar
+		while IFS= read -r pair; do
+			[[ -n "$pair" ]] && search_pairs+=("$pair")
+		done < <(grep -oE "type '[^']+' has no member '[^']+'" "$log_src" 2>/dev/null \
+			| sed "s/type '\\([^']*\\)' has no member '\\([^']*\\)'/\\1	\\2/" \
+			| sort -u || true)
+
+		# Pattern 3: "cannot be declared public because its parameter/type uses an internal type"
+		# The error message doesn't name the type, so read the referenced source line and extract
+		# PascalCase type names from it, then search modified files for those types.
+		# Filter out common Swift/SwiftUI builtins to avoid false matches.
+		local -a builtin_types=(String Int Bool Double Float CGFloat UUID URL Data Date
+			View AnyView ViewBuilder Body Content Never Void Optional Array Dictionary Set
+			Binding State StateObject ObservedObject EnvironmentObject Published Observable
+			ObservableObject Equatable Hashable Identifiable Sendable Codable CaseIterable
+			AnyHashable AnyObject NSObject NSCopying Error LocalizedError)
+		while IFS= read -r err_loc; do
+			local err_file err_line
+			err_file=$(echo "$err_loc" | cut -d: -f1)
+			err_line=$(echo "$err_loc" | cut -d: -f2)
+			if [[ -f "$err_file" && "$err_line" =~ ^[0-9]+$ ]]; then
+				local source_line
+				source_line=$(sed -n "${err_line}p" "$err_file" 2>/dev/null || true)
+				# Extract PascalCase identifiers (potential type names), skip builtins
+				while IFS= read -r typename; do
+					[[ -z "$typename" ]] && continue
+					local is_builtin=false
+					for bt in "${builtin_types[@]}"; do
+						[[ "$typename" == "$bt" ]] && is_builtin=true && break
+					done
+					[[ "$is_builtin" == false ]] && search_pairs+=("	$typename")
+				done < <(echo "$source_line" | grep -oE '\b[A-Z][A-Za-z0-9]+\b' | sort -u || true)
+			fi
+		done < <(grep -oE '[^[:space:]]+:[0-9]+:[0-9]+: error: (initializer|property|method|subscript|func) cannot be declared public because its (parameter|type) uses an internal type' "$log_src" 2>/dev/null \
+			| grep -oE '^[^:]+:[0-9]+' | sort -u || true)
+
+		# Pattern 5: "requires that 'X' conform to 'Y'" → extract both X and Y
+		while IFS= read -r raw_type; do
+			[[ -z "$raw_type" ]] && continue
+			local is_builtin=false
+			for bt in String Int Bool Double Float CGFloat UUID URL Data Date \
+				View AnyView ViewBuilder Body Content Never Void Optional Array Dictionary Set \
+				Binding State StateObject ObservedObject EnvironmentObject Published Observable \
+				ObservableObject Equatable Hashable Identifiable Sendable Codable CaseIterable \
+				AnyHashable AnyObject NSObject NSCopying Error LocalizedError; do
+				[[ "$raw_type" == "$bt" ]] && is_builtin=true && break
+			done
+			[[ "$is_builtin" == false ]] && search_pairs+=("	$raw_type")
+		done < <(grep -oE "requires that '[^']+' conform to '[^']+'" "$log_src" 2>/dev/null \
+			| grep -oE "'[^']+'" | tr -d "'" | sort -u || true)
+
+		# Pattern 4: "cannot convert value of type 'X'" or "argument type 'X' does not conform"
+		# or "value of type 'X' has no member" → extract X (strip array/optional wrappers)
+		while IFS= read -r raw_type; do
+			[[ -z "$raw_type" ]] && continue
+			# Strip leading [ and trailing ] (array), ? (optional)
+			local stripped_type
+			stripped_type="${raw_type#\[}"
+			stripped_type="${stripped_type%\]}"
+			stripped_type="${stripped_type%\?}"
+			[[ -z "$stripped_type" ]] && continue
+			local is_builtin=false
+			for bt in String Int Bool Double Float CGFloat UUID URL Data Date \
+				View AnyView ViewBuilder Body Content Never Void Optional Array Dictionary Set \
+				Binding State StateObject ObservedObject EnvironmentObject Published Observable \
+				ObservableObject Equatable Hashable Identifiable Sendable Codable CaseIterable \
+				AnyHashable AnyObject NSObject NSCopying Error LocalizedError; do
+				[[ "$stripped_type" == "$bt" ]] && is_builtin=true && break
+			done
+			[[ "$is_builtin" == false ]] && search_pairs+=("	$stripped_type")
+		done < <(grep -oE "error: (cannot convert value of type|argument type|value of type) '[^']+'" "$log_src" 2>/dev/null \
+			| grep -oE "'[^']+'" | tr -d "'" | sort -u || true)
+
+		if [[ ${#search_pairs[@]} -eq 0 ]]; then
+			tlog "  Salvage: could not extract symbol names from errors — giving up."
+			return 1
+		fi
+
+		# Log what we're looking for
+		local pair_display=()
+		for p in "${search_pairs[@]}"; do
+			local ptype pmember
+			ptype=$(echo "$p" | cut -f1)
+			pmember=$(echo "$p" | cut -f2)
+			if [[ -n "$ptype" ]]; then
+				pair_display+=("$ptype.$pmember")
+			else
+				pair_display+=("$pmember")
+			fi
+		done
+		tlog "  Salvage: searching for: ${pair_display[*]}"
+
+		# For each (type, member) pair, search modified files' HEAD versions
+		local candidates_to_restore=()
+		for p in "${search_pairs[@]}"; do
+			local ptype pmember
+			ptype=$(echo "$p" | cut -f1)
+			pmember=$(echo "$p" | cut -f2)
+			[[ -z "$pmember" ]] && continue
+
+			local found=false
+			for rel in "${modified_files[@]}"; do
+				local head_content
+				head_content=$(git -C "$PRODCORE_DIR" show "HEAD:$rel" 2>/dev/null) || continue
+
+				if [[ -n "$ptype" ]]; then
+					# Member search: find file containing type Bar AND member foo.
+					# For dotted type names (e.g. Foo.Bar.Baz), use only the last component for
+					# the struct/class/enum search since nested types use their short name.
+					local ptype_last
+					ptype_last="${ptype##*.}"
+					if echo "$head_content" | grep -qE "(struct|class|enum|extension)[[:space:]]+$ptype_last([[:space:](<:{]|$)" && \
+					   echo "$head_content" | grep -qE "(func|var|let|static)[[:space:]]+(var |let |func )*$pmember([[:space:](<:=]|$)"; then
+						candidates_to_restore+=("$rel")
+						tlog "    Found '$ptype.$pmember' in: $rel"
+						found=true
+						break
+					fi
+				else
+					# Top-level search: find declaration of pmember
+					if echo "$head_content" | grep -qE "(struct|class|enum|protocol|func|var|let|typealias|extension)[[:space:]]+$pmember([[:space:](<:{]|$)"; then
+						candidates_to_restore+=("$rel")
+						tlog "    Found '$pmember' in: $rel"
+						found=true
+						break
+					fi
+				fi
+			done
+			if [[ "$found" == false ]]; then
+				tlog "    Not found in modified files: ${ptype:+$ptype.}$pmember"
+			fi
+		done
+
+		# Deduplicate candidates
+		local unique_candidates=()
+		while IFS= read -r c; do
+			[[ -n "$c" ]] && unique_candidates+=("$c")
+		done < <(printf '%s\n' "${candidates_to_restore[@]}" | sort -u)
+
+		if [[ ${#unique_candidates[@]} -eq 0 ]]; then
+			tlog "  Salvage: no modified files define the missing symbols — giving up."
+			return 1
+		fi
+
+		tlog "  Salvage: restoring ${#unique_candidates[@]} root-cause file(s):"
+		for rel in "${unique_candidates[@]}"; do
+			tlog "    Restoring: $rel"
+			git -C "$PRODCORE_DIR" checkout HEAD -- "$rel" 2>/dev/null || true
+			SALVAGE_RESTORED+=("$PRODCORE_DIR/$rel")
+		done
 
 		SALVAGE_DELETED=$(git -C "$PRODCORE_DIR" diff HEAD --name-only 2>/dev/null | wc -l | tr -d ' ')
-		tlog "  Salvage: restored 1 candidate. Remaining modified: $SALVAGE_DELETED"
+		tlog "  Salvage: ${#unique_candidates[@]} root-cause file(s) restored. Remaining modified: $SALVAGE_DELETED"
 
 		if [[ "$SALVAGE_DELETED" -eq 0 ]]; then
 			tlog "  Salvage: nothing left to keep."
 			return 1
 		fi
-		# Loop — rebuild with this file restored
+		# Loop — rebuild with root-cause files restored
 	done
 }
 
@@ -463,7 +672,11 @@ main() {
 			continue
 		fi
 
-		NODE_IDS=$(collect_file_ids "$TREE_JSON" "$FOLDER")
+		if [[ "$FOLDER" == */* ]]; then
+			NODE_IDS=$(collect_file_ids_by_path "$TREE_JSON" "$FOLDER")
+		else
+			NODE_IDS=$(collect_file_ids "$TREE_JSON" "$FOLDER")
+		fi
 		FILE_COUNT=$(echo "$NODE_IDS" | jq 'length')
 
 		if [[ "$FILE_COUNT" -eq 0 ]]; then

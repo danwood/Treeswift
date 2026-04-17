@@ -180,7 +180,7 @@ launch_treeswift() {
 	tlog "Locating Treeswift.app..."
 	local app
 	app=$(find ~/Library/Developer/Xcode/DerivedData -name "Treeswift.app" -maxdepth 8 2>/dev/null \
-		| grep -v "\.dSYM" | grep "Build/Products" | head -1)
+		| grep -v "\.dSYM" | grep "Build/Products" | grep -v "Index.noindex" | head -1)
 	if [[ -z "$app" ]]; then
 		die "Could not find Treeswift.app in DerivedData. Build it first with: xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build"
 	fi
