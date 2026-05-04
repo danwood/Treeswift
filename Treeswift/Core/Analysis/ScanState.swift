@@ -365,31 +365,33 @@ final class ScanState {
 	}
 
 	func restoreFromCache(_ cache: ScanCache) {
-		guard !isScanning else { return }
-		projectPath = cache.projectPath
-		treeNodes = cache.restoreTreeNodes()
-		treeSection = cache.treeSection.map { cache.restoreCategoriesNode($0) }
-		viewExtensionsSection = cache.viewExtensionsSection.map { cache.restoreCategoriesNode($0) }
-		sharedSection = cache.sharedSection.map { cache.restoreCategoriesNode($0) }
-		orphansSection = cache.orphansSection.map { cache.restoreCategoriesNode($0) }
-		previewOrphansSection = cache.previewOrphansSection.map { cache.restoreCategoriesNode($0) }
-		bodyGetterSection = cache.bodyGetterSection.map { cache.restoreCategoriesNode($0) }
-		unattachedSection = cache.unattachedSection.map { cache.restoreCategoriesNode($0) }
-		fileTreeNodes = cache.restoreFileTreeNodes()
-
-		if let restored = SourceGraphSerializer.restore(
-			declarationSnapshots: cache.declarationSnapshots,
-			referenceSnapshots: cache.referenceSnapshots,
-			scanResultSnapshots: cache.scanResultSnapshots
-		) {
-			sourceGraph = restored.sourceGraph
-			scanResults = restored.scanResults
+		Task.detached(priority: .userInitiated) {
+			let pre = await PreRestoredCache(from: cache)
+			await MainActor.run { self.applyPreRestoredCache(pre) }
 		}
+	}
+
+	/// Apply a pre-deserialized cache that was prepared off the main actor.
+	/// All assignments here are cheap — the expensive work is done in PreRestoredCache.init.
+	func applyPreRestoredCache(_ pre: PreRestoredCache) {
+		guard !isScanning else { return }
+		projectPath = pre.projectPath
+		treeNodes = pre.treeNodes
+		treeSection = pre.treeSection
+		viewExtensionsSection = pre.viewExtensionsSection
+		sharedSection = pre.sharedSection
+		orphansSection = pre.orphansSection
+		previewOrphansSection = pre.previewOrphansSection
+		bodyGetterSection = pre.bodyGetterSection
+		unattachedSection = pre.unattachedSection
+		fileTreeNodes = pre.fileTreeNodes
+		sourceGraph = pre.sourceGraph
+		scanResults = pre.scanResults
 
 		isRestoredFromCache = true
-		let timestamp = cache.cachedAt.formatted(date: .abbreviated, time: .shortened)
+		let timestamp = pre.cachedAt.formatted(date: .abbreviated, time: .shortened)
 		scanStatus = "Cached results from \(timestamp)"
-		let projectName = cache.projectPath
+		let projectName = pre.projectPath
 			.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "unknown"
 		"* ✓ Loaded scan results from cache for '\(projectName)' (cached \(timestamp), \(treeNodes.count) tree nodes, \(fileTreeNodes.count) file nodes)"
 			.logToConsole()

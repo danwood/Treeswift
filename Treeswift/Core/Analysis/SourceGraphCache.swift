@@ -200,37 +200,129 @@ enum SourceGraphSerializer {
 	/**
 	 Reconstructs a RestoredSourceGraph and ScanResults array from cached snapshots.
 	 Returns nil if reconstruction fails.
+
+	 Steps 1a (build Declaration objects) and 4a (build Reference objects) run
+	 concurrently on background threads, then sequential wiring and set-building
+	 follow. The `progress` callback is invoked after each phase with a 0…1 fraction
+	 and a human-readable label so the UI can report sub-project progress.
 	 */
-	static func restore(
+	nonisolated static func restore(
 		declarationSnapshots: [DeclarationSnapshot],
 		referenceSnapshots: [ReferenceSnapshot],
-		scanResultSnapshots: [ScanResultSnapshot]
-	) -> (sourceGraph: RestoredSourceGraph, scanResults: [ScanResult])? {
-		// Step 1: Build Declaration objects (no parent/refs yet)
-		var usrToDecl: [String: Declaration] = [:]
+		scanResultSnapshots: [ScanResultSnapshot],
+		progress: (@MainActor (Double, String) -> Void)? = nil
+	) async -> (sourceGraph: RestoredSourceGraph, scanResults: [ScanResult])? {
+		// Build SourceFile cache to avoid creating duplicate objects for the same path.
+		// Declarations and references share many file paths — deduplicating cuts allocations significantly.
+		let allPaths = Set(declarationSnapshots.map(\.filePath) + referenceSnapshots.map(\.filePath))
+		let sourceFileByPath: [String: SourceFile] = Dictionary(
+			uniqueKeysWithValues: allPaths.map { path in (path, SourceFile(path: FilePath(path), modules: [])) }
+		)
 
-		for snap in declarationSnapshots {
-			guard let kind = Declaration.Kind(rawValue: snap.kind) else { continue }
-			let sourceFile = SourceFile(path: FilePath(snap.filePath), modules: [])
-			let loc = Location(
-				file: sourceFile,
-				line: snap.line,
-				column: snap.column,
-				endLine: snap.endLine,
-				endColumn: snap.endColumn
-			)
-			let decl = Declaration(kind: kind, usrs: Set(snap.usrs), location: loc)
-			decl.name = snap.name
-			decl.isImplicit = snap.isImplicit
-			decl.modifiers = Set(snap.modifiers)
-			decl.attributes = Set(snap.attributeNames.map { DeclarationAttribute(name: $0, arguments: nil) })
-			if let acc = Accessibility(rawValue: snap.accessibility) {
-				decl.accessibility = DeclarationAccessibility(value: acc, isExplicit: snap.accessibilityIsExplicit)
+		// Split decl and ref arrays into chunks — one chunk per available core — and
+		// process all chunks concurrently. This spreads the object-construction work
+		// across all 10 logical cores instead of running on a single thread.
+		let coreCount = ProcessInfo.processInfo.activeProcessorCount
+		func chunked<T>(_ array: [T], into n: Int) -> [[T]] {
+			guard n > 1, array.count > n else { return [array] }
+			let size = (array.count + n - 1) / n
+			return stride(from: 0, to: array.count, by: size).map {
+				Array(array[$0 ..< min($0 + size, array.count)])
 			}
-			for usr in snap.usrs {
+		}
+
+		// Steps 1a + 4a: build raw objects across all cores concurrently
+		async let declPairs: [(usrs: [String], decl: Declaration)] = withTaskGroup(
+			of: [(usrs: [String], decl: Declaration)].self
+		) { group in
+			for chunk in chunked(declarationSnapshots, into: coreCount) {
+				group.addTask(priority: .userInitiated) {
+					var pairs: [(usrs: [String], decl: Declaration)] = []
+					pairs.reserveCapacity(chunk.count)
+					for snap in chunk {
+						guard let kind = Declaration.Kind(rawValue: snap.kind) else { continue }
+						let sourceFile = sourceFileByPath[snap.filePath] ?? SourceFile(
+							path: FilePath(snap.filePath),
+							modules: []
+						)
+						let loc = Location(
+							file: sourceFile,
+							line: snap.line,
+							column: snap.column,
+							endLine: snap.endLine,
+							endColumn: snap.endColumn
+						)
+						let decl = Declaration(kind: kind, usrs: Set(snap.usrs), location: loc)
+						decl.name = snap.name
+						decl.isImplicit = snap.isImplicit
+						decl.modifiers = Set(snap.modifiers)
+						decl
+							.attributes = Set(snap.attributeNames
+								.map { DeclarationAttribute(name: $0, arguments: nil) })
+						if let acc = Accessibility(rawValue: snap.accessibility) {
+							decl.accessibility = DeclarationAccessibility(
+								value: acc,
+								isExplicit: snap.accessibilityIsExplicit
+							)
+						}
+						pairs.append((snap.usrs, decl))
+					}
+					return pairs
+				}
+			}
+			var all: [(usrs: [String], decl: Declaration)] = []
+			all.reserveCapacity(declarationSnapshots.count)
+			for await chunk in group {
+				all.append(contentsOf: chunk)
+			}
+			return all
+		}
+
+		async let rawRefs: [(ref: Reference, parentUSR: String?)] = withTaskGroup(
+			of: [(ref: Reference, parentUSR: String?)].self
+		) { group in
+			for chunk in chunked(referenceSnapshots, into: coreCount) {
+				group.addTask(priority: .userInitiated) {
+					var refs: [(ref: Reference, parentUSR: String?)] = []
+					refs.reserveCapacity(chunk.count)
+					for snap in chunk {
+						guard let refKind = Reference.Kind(rawValue: snap.kind),
+						      let declKind = Declaration.Kind(rawValue: snap.declarationKind) else { continue }
+						let sourceFile = sourceFileByPath[snap.filePath] ?? SourceFile(
+							path: FilePath(snap.filePath),
+							modules: []
+						)
+						let loc = Location(file: sourceFile, line: snap.line, column: snap.column)
+						let ref = Reference(kind: refKind, declarationKind: declKind, usr: snap.usr, location: loc)
+						ref.name = snap.name
+						if let role = Reference.Role(rawValue: snap.role) {
+							ref.role = role
+						}
+						refs.append((ref, snap.parentUSR))
+					}
+					return refs
+				}
+			}
+			var all: [(ref: Reference, parentUSR: String?)] = []
+			all.reserveCapacity(referenceSnapshots.count)
+			for await chunk in group {
+				all.append(contentsOf: chunk)
+			}
+			return all
+		}
+
+		// Await both concurrent multi-core builds
+		let (resolvedDeclPairs, resolvedRawRefs) = await (declPairs, rawRefs)
+		if let progress { await MainActor.run { progress(0.35, "Building declaration map…") } }
+
+		// Step 1b: populate usrToDecl lookup
+		var usrToDecl: [String: Declaration] = Dictionary(minimumCapacity: resolvedDeclPairs.count * 2)
+		for (usrs, decl) in resolvedDeclPairs {
+			for usr in usrs {
 				usrToDecl[usr] = decl
 			}
 		}
+		if let progress { await MainActor.run { progress(0.5, "Wiring parents…") } }
 
 		// Step 2: Wire parent links and rebuild children sets
 		for snap in declarationSnapshots {
@@ -244,35 +336,29 @@ enum SourceGraphSerializer {
 
 		// Step 3: Build used/unused sets
 		var usedDeclarations = Set<Declaration>()
+		usedDeclarations.reserveCapacity(declarationSnapshots.count / 2)
 		for snap in declarationSnapshots where snap.isUsed {
 			guard let primaryUSR = snap.usrs.first,
 			      let decl = usrToDecl[primaryUSR] else { continue }
 			usedDeclarations.insert(decl)
 		}
 		let allDeclarations = Set(usrToDecl.values)
+		if let progress { await MainActor.run { progress(0.7, "Wiring references…") } }
 
-		// Step 4: Build Reference objects and wire parent links
-		var allReferencesByUsr: [String: Set<Reference>] = [:]
-
-		for snap in referenceSnapshots {
-			guard let refKind = Reference.Kind(rawValue: snap.kind),
-			      let declKind = Declaration.Kind(rawValue: snap.declarationKind) else { continue }
-			let sourceFile = SourceFile(path: FilePath(snap.filePath), modules: [])
-			let loc = Location(file: sourceFile, line: snap.line, column: snap.column)
-			let ref = Reference(kind: refKind, declarationKind: declKind, usr: snap.usr, location: loc)
-			ref.name = snap.name
-			if let role = Reference.Role(rawValue: snap.role) {
-				ref.role = role
-			}
-			if let parentUSR = snap.parentUSR, let parent = usrToDecl[parentUSR] {
+		// Step 4b: Wire reference parent links (needs usrToDecl from Step 1b)
+		var allReferencesByUsr: [String: Set<Reference>] = Dictionary(minimumCapacity: resolvedRawRefs.count)
+		for (ref, parentUSR) in resolvedRawRefs {
+			if let parentUSR, let parent = usrToDecl[parentUSR] {
 				ref.parent = parent
 				parent.references.insert(ref)
 			}
-			allReferencesByUsr[snap.usr, default: []].insert(ref)
+			allReferencesByUsr[ref.usr, default: []].insert(ref)
 		}
+		if let progress { await MainActor.run { progress(0.85, "Reconstructing scan results…") } }
 
 		// Step 5: Reconstruct ScanResults
 		var scanResults: [ScanResult] = []
+		scanResults.reserveCapacity(scanResultSnapshots.count)
 		for snap in scanResultSnapshots {
 			guard let decl = usrToDecl[snap.declarationUSR] else { continue }
 			let annotation = restoreAnnotation(snap, usrToDecl: usrToDecl, allReferencesByUsr: allReferencesByUsr)

@@ -11,9 +11,44 @@ import SwiftUI
 // Application delegate used solely to hook app lifecycle events that SwiftUI doesn't expose cleanly.
 final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
 	var automationServer: AutomationServer?
+	private var cacheProgressPanel: NSPanel?
 
 	func applicationWillTerminate(_ notification: Notification) {
 		automationServer?.stop()
+	}
+
+	/// Show a floating progress panel while cached scan results are loading from disk.
+	@MainActor
+	func showCacheRestorePanel(scanStateManager: ScanStateManager, onCancel: @escaping @MainActor () -> Void) {
+		guard cacheProgressPanel == nil else { return }
+		let panel = NSPanel(
+			contentRect: NSRect(x: 0, y: 0, width: 320, height: 160),
+			styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
+			backing: .buffered,
+			defer: false
+		)
+		panel.title = "Treeswift"
+		panel.titlebarAppearsTransparent = true
+		panel.isMovableByWindowBackground = true
+		panel.level = .floating
+		panel.center()
+		let liveView = NSHostingView(
+			rootView: CacheRestoreLiveView(scanStateManager: scanStateManager) {
+				onCancel()
+				self.dismissCacheRestorePanel()
+			}
+		)
+		liveView.frame = panel.contentView?.bounds ?? .zero
+		liveView.autoresizingMask = [.width, .height]
+		panel.contentView = liveView
+		panel.makeKeyAndOrderFront(nil)
+		cacheProgressPanel = panel
+	}
+
+	@MainActor
+	func dismissCacheRestorePanel() {
+		cacheProgressPanel?.orderOut(nil)
+		cacheProgressPanel = nil
 	}
 }
 
@@ -35,9 +70,22 @@ struct TreeswiftApp: App {
 				.environment(inspectorState)
 				.environment(automationActivity)
 				.onAppear {
+					let hasCaches = configManager.configurations.contains {
+						ScanCacheManager.shared.load(for: $0.id) != nil
+					}
+					if hasCaches {
+						appDelegate.showCacheRestorePanel(scanStateManager: scanStateManager) {
+							scanStateManager.cancelCacheRestore(for: configManager.configurations)
+						}
+					}
 					scanStateManager.restoreAllCaches(for: configManager.configurations)
 					startAutomationServerIfNeeded()
 					appDelegate.automationServer?.markReady()
+				}
+				.onChange(of: scanStateManager.isRestoringCaches) { _, isRestoring in
+					if !isRestoring {
+						appDelegate.dismissCacheRestorePanel()
+					}
 				}
 		}
 		.onChange(of: scenePhase) { oldPhase, newPhase in
