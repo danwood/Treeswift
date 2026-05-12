@@ -36,6 +36,11 @@ private nonisolated struct RemovalExecuteResponse: Codable, Sendable {
 private nonisolated struct RemovalRequest: Codable, Sendable {
 	let nodeIds: [String]?
 	let strategy: String?
+	/// Optional annotation filter: only process scan results whose annotation type matches.
+	/// Valid values: "unused", "assignOnlyProperty", "redundantAccessibility",
+	/// "redundantPublicAccessibility", "redundantInternalAccessibility",
+	/// "redundantFilePrivateAccessibility", "redundantProtocol", "superfluousIgnoreCommand"
+	let annotationFilter: [String]?
 }
 
 enum RemovalHandler {
@@ -57,12 +62,13 @@ enum RemovalHandler {
 		let removalRequest = parseRemovalRequest(request)
 		let strategy = parseStrategy(removalRequest?.strategy)
 		let targetFiles = collectFileNodes(from: treeNodes, ids: removalRequest?.nodeIds)
+		let filteredScanResults = filterScanResults(scanResults, annotationFilter: removalRequest?.annotationFilter)
 
 		// Pre-compute the batch deletion set so skipReferenced can treat cross-file
 		// references within the batch as internal (not external).
 		let batchDeletionSet = UnusedDependencyAnalyzer.buildBatchDeletionSet(
 			filePaths: Set(targetFiles.map(\.path)),
-			scanResults: scanResults
+			scanResults: filteredScanResults
 		)
 
 		var previewFiles: [RemovalPreviewFile] = []
@@ -72,7 +78,7 @@ enum RemovalHandler {
 		let allUnused: Set<Declaration>? = sourceGraph?.unusedDeclarations
 		for fileNode in targetFiles {
 			let result = fileNode.computeRemoval(
-				scanResults: scanResults,
+				scanResults: filteredScanResults,
 				filterState: nil,
 				sourceGraph: sourceGraph,
 				strategy: strategy,
@@ -126,12 +132,13 @@ enum RemovalHandler {
 		let removalRequest = parseRemovalRequest(request)
 		let strategy = parseStrategy(removalRequest?.strategy)
 		let targetFiles = collectFileNodes(from: treeNodes, ids: removalRequest?.nodeIds)
+		let filteredScanResults = filterScanResults(scanResults, annotationFilter: removalRequest?.annotationFilter)
 
 		// Pre-compute the batch deletion set so skipReferenced can treat cross-file
 		// references within the batch as internal (not external).
 		let batchDeletionSet = UnusedDependencyAnalyzer.buildBatchDeletionSet(
 			filePaths: Set(targetFiles.map(\.path)),
-			scanResults: scanResults
+			scanResults: filteredScanResults
 		)
 
 		var executeFiles: [RemovalExecuteFile] = []
@@ -145,7 +152,7 @@ enum RemovalHandler {
 		var plans: [(fileNode: FileNode, removal: FileNode.RemovalResult)] = []
 		for fileNode in targetFiles {
 			let result = fileNode.computeRemoval(
-				scanResults: scanResults,
+				scanResults: filteredScanResults,
 				filterState: nil,
 				sourceGraph: sourceGraph,
 				strategy: strategy,
@@ -218,6 +225,24 @@ enum RemovalHandler {
 	private static func parseRemovalRequest(_ request: Router.Request) -> RemovalRequest? {
 		guard let body = request.body else { return nil }
 		return try? JSONDecoder().decode(RemovalRequest.self, from: body)
+	}
+
+	private static func filterScanResults(_ scanResults: [ScanResult], annotationFilter: [String]?) -> [ScanResult] {
+		guard let filter = annotationFilter, !filter.isEmpty else { return scanResults }
+		let filterSet = Set(filter)
+		return scanResults.filter { result in
+			let annotationKey = switch result.annotation {
+			case .unused: "unused"
+			case .assignOnlyProperty: "assignOnlyProperty"
+			case .redundantAccessibility: "redundantAccessibility"
+			case .redundantPublicAccessibility: "redundantPublicAccessibility"
+			case .redundantInternalAccessibility: "redundantInternalAccessibility"
+			case .redundantFilePrivateAccessibility: "redundantFilePrivateAccessibility"
+			case .redundantProtocol: "redundantProtocol"
+			case .superfluousIgnoreCommand: "superfluousIgnoreCommand"
+			}
+			return filterSet.contains(annotationKey)
+		}
 	}
 
 	private static func parseStrategy(_ name: String?) -> RemovalStrategy {
