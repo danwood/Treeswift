@@ -89,6 +89,7 @@ struct ContentColumnView: View {
 						unattachedSection: scanState.unattachedSection,
 						fileTreeNodes: scanState.fileTreeNodes,
 						projectPath: scanState.projectPath,
+						isScanning: scanState.isScanning,
 						searchNavState: searchNavState,
 						filterState: $filterState,
 						peripheryTabSelectedID: $peripheryTabSelectedID,

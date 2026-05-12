@@ -43,6 +43,7 @@ struct ResultsTabView: View {
 	let unattachedSection: CategoriesNode?
 	let fileTreeNodes: [FileBrowserNode]
 	let projectPath: String?
+	let isScanning: Bool
 	var searchNavState: SearchNavigationState
 
 	@Binding var filterState: FilterState
@@ -99,6 +100,7 @@ struct ResultsTabView: View {
 					section: treeSection,
 					tab: .tree,
 					progressLabel: "Building Tree…",
+					isScanning: isScanning,
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
 					showFileInfo: $showFileInfo,
@@ -118,6 +120,7 @@ struct ResultsTabView: View {
 					section: viewExtensionsSection,
 					tab: .viewExtensions,
 					progressLabel: "Building View Extensions…",
+					isScanning: isScanning,
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
 					showFileInfo: $showFileInfo,
@@ -137,6 +140,7 @@ struct ResultsTabView: View {
 					section: sharedSection,
 					tab: .shared,
 					progressLabel: "Building Shared…",
+					isScanning: isScanning,
 					showOnlyViews: $showOnlyViews,
 					showFileName: $showFileName,
 					showFileInfo: $showFileInfo,
@@ -159,6 +163,7 @@ private struct CategoryTab: View {
 	let section: CategoriesNode?
 	let tab: ResultsTab
 	let progressLabel: String
+	let isScanning: Bool
 	@Binding var showOnlyViews: Bool
 	@Binding var showFileName: Bool
 	@Binding var showFileInfo: Bool
@@ -187,8 +192,12 @@ private struct CategoryTab: View {
 				searchNavState: searchNavState
 			)
 			.padding()
-		} else {
+		} else if isScanning {
 			ProgressView(progressLabel)
+				.padding()
+		} else {
+			Text("No results")
+				.foregroundStyle(.secondary)
 				.padding()
 		}
 	}

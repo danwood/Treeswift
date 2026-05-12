@@ -422,6 +422,10 @@ final class Dumper: Sendable {
 		typeToReferencers: [Declaration: [String: Relation]],
 		rootDeclaration: Declaration
 	) -> Set<Declaration> {
+		let multiReferenced = typeToReferencers.filter { $0.value.count > 1 }
+		let line = "* [extractSharedTypes] \(typeToReferencers.count) total, \(multiReferenced.count) multi-referenced\n"
+		if let data = line.data(using: .utf8) { try? FileHandle.standardError.write(contentsOf: data) }
+
 		func hasCommonAncestors(_ referencers: [Declaration], rootDeclaration: Declaration) -> Bool {
 			for i in 0 ..< referencers.count {
 				for j in (i + 1) ..< referencers.count {
@@ -575,19 +579,30 @@ final class Dumper: Sendable {
 		projectRootPath: String? = nil,
 		onSectionBuilt: @Sendable (CategoriesNode) -> Void
 	) -> [CategoriesNode] {
+		let t0 = Date()
+		func elapsed() -> String { String(format: "%.2fs", Date().timeIntervalSince(t0)) }
+		func log(_ msg: String) {
+			let line = "* [buildCategories \(elapsed())] \(msg)\n"
+			if let data = line.data(using: .utf8) { try? FileHandle.standardError.write(contentsOf: data) }
+		}
+
 		var filteredDeclarations = filterHighLevelDeclarations(sourceGraph: sourceGraph)
+		log("filterHighLevelDeclarations → \(filteredDeclarations.count) decls")
 		guard !filteredDeclarations.isEmpty else { return [] }
 
 		let rootDeclaration = filteredDeclarations.first(where: isMainApp) ?? filteredDeclarations.first!
+		log("rootDeclaration = \(rootDeclaration.name ?? "<nil>")")
 		var visited: Set<Declaration> = []
 		var displayedTypes: Set<Declaration> = []
 		let typeToReferencers = buildTypeToReferencers(from: filteredDeclarations, sourceGraph: sourceGraph)
+		log("buildTypeToReferencers done → \(typeToReferencers.count) entries")
 
 		// Pre-compute shared types so the hierarchy tree doesn't claim them
 		let sharedTypes = extractSharedTypesNoCommonAncestor(
 			typeToReferencers: typeToReferencers,
 			rootDeclaration: rootDeclaration
 		)
+		log("extractSharedTypesNoCommonAncestor done → \(sharedTypes.count) shared types")
 
 		var sections: [CategoriesNode] = []
 
@@ -601,10 +616,12 @@ final class Dumper: Sendable {
 			displayedTypes: &displayedTypes,
 			projectRootPath: projectRootPath
 		)
+		log("Section 1 (hierarchy) built")
 		sections.append(.section(section1))
 		onSectionBuilt(.section(section1))
 		// Remove displayed types from filteredDeclarations after Section 1
 		filteredDeclarations.removeAll { displayedTypes.contains($0) }
+		log("After section 1 removal → \(filteredDeclarations.count) decls remain")
 
 		// Section 2: View Extensions
 		let section2: SectionNode = buildViewExtensionsSection(
@@ -614,10 +631,12 @@ final class Dumper: Sendable {
 			displayedTypes: &displayedTypes,
 			projectRootPath: projectRootPath
 		)
+		log("Section 2 (viewExtensions) built")
 		sections.append(.section(section2))
 		onSectionBuilt(.section(section2))
 		// Remove displayed types from filteredDeclarations after Section 2
 		filteredDeclarations.removeAll { displayedTypes.contains($0) }
+		log("After section 2 removal → \(filteredDeclarations.count) decls remain")
 
 		// Section 3: Shared Types (pre-computed before hierarchy building)
 		let section3: SectionNode = buildSharedTypesSection(
@@ -626,10 +645,12 @@ final class Dumper: Sendable {
 			displayedTypes: displayedTypes,
 			projectRootPath: projectRootPath
 		)
+		log("Section 3 (shared) built")
 		sections.append(.section(section3))
 		onSectionBuilt(.section(section3))
 		// Remove shared types from filteredDeclarations after Section 3
 		filteredDeclarations.removeAll { sharedTypes.contains($0) }
+		log("After section 3 removal → \(filteredDeclarations.count) decls remain")
 
 		// Section 4: Orphaned Types
 		let orphanedTypes = extractOrphanedTypes(from: &filteredDeclarations, sourceGraph: sourceGraph)
@@ -640,6 +661,7 @@ final class Dumper: Sendable {
 			section: .orphaned,
 			projectRootPath: projectRootPath
 		)
+		log("Section 4 (orphaned) built → \(orphanedTypes.count) types")
 		sections.append(.section(section4))
 		onSectionBuilt(.section(section4))
 
@@ -656,6 +678,7 @@ final class Dumper: Sendable {
 			section: .previewOrphaned,
 			projectRootPath: projectRootPath
 		)
+		log("Section 5 (previewOrphaned) built → \(previewOnlyTypes.count) types")
 		sections.append(.section(section5))
 		onSectionBuilt(.section(section5))
 
@@ -672,6 +695,7 @@ final class Dumper: Sendable {
 			section: .bodyGetter,
 			projectRootPath: projectRootPath
 		)
+		log("Section 6 (bodyGetter) built → \(onlyBodyGetterTypes.count) types")
 		sections.append(.section(section6))
 		onSectionBuilt(.section(section6))
 
@@ -687,9 +711,11 @@ final class Dumper: Sendable {
 			section: .unattached,
 			projectRootPath: projectRootPath
 		)
+		log("Section 7 (unattached) built → \(usedButNotAttachedTypes.count) types")
 		sections.append(.section(section7))
 		onSectionBuilt(.section(section7))
 
+		log("ALL SECTIONS COMPLETE")
 		return sections
 	}
 
