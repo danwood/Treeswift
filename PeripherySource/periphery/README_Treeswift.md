@@ -5,16 +5,71 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 ## Base Version
 
 - **Upstream**: https://github.com/danwood/periphery (branch: combine-master-redundant-nested-1062)
-- **Base commit**: 8ebf4a42 (includes post-3.4.0 + additional fixes)
-- **Previous upstream**: https://github.com/peripheryapp/periphery (commit 5a4ac8b)
 - **Current modifications**: 17 files changed, 488 insertions, 25 deletions
-- **Migration**: Switched from peripheryapp/periphery to danwood/periphery combine-master-redundant-nested-1062 branch
 
 **What's in the combine-master-redundant-nested-1062 branch:**
-- All changes from upstream periphery post-3.4.0
-- Redundant internal/fileprivate accessibility markers (master branch)
-- Redundant nested access detection (redundant-nested branch)
-- Fix to issue 1062 (fix-1062 branch)
+- All changes from upstream peripheryapp/periphery `master`
+- Redundant internal/fileprivate accessibility markers (`master` branch in danwood/periphery)
+- Redundant nested access detection (`redundant-nested` branch in danwood/periphery)
+- Fix to issue 1062 (`fix-1062` branch in danwood/periphery)
+
+## Repository Layout (danwood/periphery)
+
+The `danwood/periphery` repo at `/Users/dwood/code/periphery-dan-private` has these branches:
+
+| Branch | Description |
+|--------|-------------|
+| `master` | Redundant internal/fileprivate accessibility markers. Rebased onto `upstream/master` after each upstream update. Many commits of development. |
+| `redundant-nested` | Redundant nested access detection. Rebased onto `master` after each upstream update. |
+| `fix-1062` | Fix for Periphery issue 1062. Rebased onto `upstream/master` after each upstream update. |
+| `combine-master-redundant-nested-1062` | **The destination branch.** Merges all three above. This is what Treeswift tracks as subtree upstream. |
+| `upstream` | Tracks peripheryapp/periphery upstream master. |
+
+**Branch ancestry**: `master` and `fix-1062` both rebase directly onto `upstream/master`. `redundant-nested` rebases onto `master`. `combine-master-redundant-nested-1062` is built by branching from `redundant-nested` tip and merging `fix-1062` with `--no-ff`.
+
+### Branch Diagram (ASCII)
+
+```
+peripheryapp/periphery upstream/master
+       │
+  upstream/master tip
+       │
+       ├──────────────────────────────┐
+       │                              │
+       ▼                              ▼
+    master                         fix-1062
+ (redundant internal/            (issue 1062 fix,
+  fileprivate markers,            2 commits)
+  many commits)                       │
+       │                              │
+       ▼ (redundant-nested            │
+          commits rebased             │
+          on top of master)           │
+  redundant-nested tip                │
+       │                              │
+       └──────────── merge ───────────┘
+                        │
+                        ▼
+        combine-master-redundant-nested-1062
+                        │
+                        │  git subtree pull (from Treeswift)
+                        ▼
+         Treeswift / PeripherySource/periphery/
+         + Treeswift-specific commits on top:
+           public APIs, progress delegate,
+           end-position tracking, etc.
+```
+
+### How `combine-master-redundant-nested-1062` Was Built
+
+The construction order matters when rebuilding after an upstream update:
+
+1. Start from `master` tip (redundant internal/fileprivate feature)
+2. Cherry-pick or rebase `redundant-nested` commits on top of `master`
+3. Merge `fix-1062` branch into the result
+4. The merged result becomes the new `combine-master-redundant-nested-1062` tip
+
+**Why this order**: `redundant-nested` builds on the accessibility marker infrastructure in `master`, so it must come after. `fix-1062` is independent and can be merged in last.
 
 ## What Belongs Here vs. Upstream
 
@@ -353,56 +408,119 @@ By maintaining a local modified copy of the package, we can:
 
 The `PeripherySource/periphery` directory is managed as a **git subtree** tracking danwood/periphery changes.
 
-**Current Setup:**
+**Current Setup (Treeswift repo remotes):**
 ```bash
-# Configured remotes
-git remote add periphery-upstream https://github.com/peripheryapp/periphery.git  # Original upstream
-git remote add danwood-fork https://github.com/danwood/periphery                 # Current source
-
-# Current baseline: 8ebf4a42 from danwood/periphery combine-master-redundant-nested-1062 branch
+# These remotes are already configured in the Treeswift repo
+# danwood-fork  → https://github.com/danwood/periphery   (current source)
+# periphery-upstream → https://github.com/peripheryapp/periphery.git
 ```
 
-**To update to the latest combine-master-redundant-nested-1062 branch:**
+---
+
+### Pulling Latest from danwood/periphery (normal update)
+
+Use this when new commits have been pushed to `combine-master-redundant-nested-1062` in `periphery-dan-private`:
 
 ```bash
-# Pull the latest combine-master-redundant-nested-1062 branch from danwood fork
-git fetch danwood-fork combine-master-redundant-nested-1062
+# Run from the Treeswift repo root
+git fetch danwood-fork
 git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
+```
 
-# After the merge, verify local modifications are still present
-# Resolve any conflicts, prioritizing Treeswift modifications
+If there are conflicts (see below), resolve them, then:
 
-# Stage changes
+```bash
 git add PeripherySource/periphery/
 git commit -m "Update subtree to latest danwood/periphery combine-master-redundant-nested-1062"
 ```
 
-**To switch back to upstream peripheryapp/periphery:**
+---
+
+### Pulling Latest from peripheryapp/periphery Upstream
+
+Use this when you want to absorb new upstream Periphery releases into the danwood/periphery branches. **This is a two-phase process** — first update `periphery-dan-private`, then pull into Treeswift.
+
+#### Phase 1 — Update danwood/periphery branches (in `periphery-dan-private`)
+
+Use the automated script — it handles all rebases, conflict detection, and force-pushing:
 
 ```bash
-# Pull from the original upstream
-git subtree pull --prefix=PeripherySource/periphery periphery-upstream master --squash
-
-# After the merge, verify and re-apply local modifications if needed
-git add PeripherySource/periphery/
-git commit -m "Switch subtree back to peripheryapp/periphery upstream"
+cd /Users/dwood/code/periphery-dan-private
+./update-from-upstream.sh
 ```
 
-**Git subtree workflow:**
-- The `danwood-fork` remote currently points to `https://github.com/danwood/periphery`
-- The `periphery-upstream` remote still points to `https://github.com/peripheryapp/periphery`
-- Updates are pulled with `git subtree pull` and squashed into a single commit
-- Treeswift modifications are preserved in separate commits on top
-- When merging new upstream versions, git will attempt to preserve your changes
-- If conflicts occur, resolve them prioritizing Treeswift modifications
+**What the script does (5 steps):**
 
-**Benefits of git subtree:**
-- Keeps the complete periphery source code in your repository
-- Tracks upstream changes and allows easy updates
-- Preserves your local modifications in git history
-- No need for separate submodule checkouts
-- Simple merge workflow for pulling upstream changes
-- The local package can be referenced directly in Xcode
+1. **fetch** — `git fetch upstream`
+2. **rebase-master** — Rebase `master` onto `upstream/master`
+3. **rebase-fix-1062** — Rebase `fix-1062` onto `upstream/master`
+4. **rebase-rn** — Rebase `redundant-nested` onto `master`
+5. **combine** — Recreate `combine-master-redundant-nested-1062` by branching from `redundant-nested` tip and merging `fix-1062` with `--no-ff`
+
+Then force-pushes all four branches to `origin`.
+
+**If the script pauses on a conflict**, it prints instructions. After resolving:
+
+```bash
+git add <resolved-files>
+git rebase --continue   # (or git merge --continue for the combine step)
+./update-from-upstream.sh --resume <STEP_NAME>
+```
+
+Step names for `--resume`: `fetch`, `rebase-master`, `rebase-fix-1062`, `rebase-rn`, `combine`
+
+**Before running**, check what's new upstream:
+
+```bash
+git fetch upstream
+git log --oneline upstream/master ^master   # commits in upstream not yet in master
+```
+
+#### Phase 2 — Pull into Treeswift (in Treeswift repo)
+
+```bash
+git fetch danwood-fork
+git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
+# Resolve conflicts (see below), then commit
+```
+
+---
+
+### Resolving Conflicts
+
+These files are most likely to conflict when pulling upstream changes:
+
+| File | Why | Resolution strategy |
+|------|-----|---------------------|
+| `Sources/ProjectDrivers/XcodeProjectDriver.swift` | We add `progressDelegate`, `excludeTests`, target name fixes | Keep our additions; take upstream changes to surrounding logic |
+| `Sources/Indexer/SwiftIndexer.swift` | We change location lookup to match by start-pos only | Keep our `first { }` lookup block; integrate upstream changes around it |
+| `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift` | We add `, endPosition:` to all 22 `result()` calls | Re-apply our leading-comma insertions after upstream changes; use `git diff` to confirm all `result()` calls still have `endPosition` |
+| `Sources/Frontend/Scan.swift` | We change return type to tuple, add delegate calls | Keep tuple return and delegate calls; integrate upstream logic changes |
+| `Package.swift` | We split Frontend into executable+library, add 10 products | Always keep our version entirely; upstream Package.swift changes rarely affect our added targets |
+
+**General conflict rule**: our modifications are almost always pure additions (new parameters, new files, new methods). When in doubt, keep our additions and take upstream's changes to the surrounding code.
+
+**After resolving any conflict file:**
+```bash
+# Verify 🌲 markers are all still present
+grep -r "🌲" PeripherySource/periphery/Sources/
+
+# Verify new files still exist
+ls PeripherySource/periphery/Sources/Shared/ScanProgressDelegate.swift
+ls PeripherySource/periphery/Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift
+```
+
+---
+
+### Verifying Modifications After Any Update
+
+```bash
+# View all Treeswift modifications against danwood fork baseline
+git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
+
+# Count changed lines (expect ~17 files, ~488 insertions, ~25 deletions)
+git diff --stat danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
+```
 
 ---
 
@@ -467,41 +585,11 @@ These markers make it easy to identify Treeswift-specific changes when reviewing
 
 **Verification command:**
 ```bash
-git diff 4dd2a038 HEAD -- PeripherySource/periphery/
+# Run from Treeswift repo root — should show only Treeswift-specific additions, minimal line modifications
+git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
 ```
 
 This should show minimal modifications to existing lines.
-
----
-
-## Update Workflow
-
-When updating to a newer Periphery version:
-
-1. **Create baseline**: Replace PeripherySource/periphery/ with clean upstream code (creates new baseline commit like 4dd2a038)
-2. **Generate patch**: Run `git diff <old-baseline> <old-modified> -- PeripherySource/periphery/ > periphery_modifications.patch`
-3. **Apply patch**: Use `git apply` or `patch` to apply modifications to new baseline
-4. **Manual fixes**: Resolve any .rej files from failed patch hunks (API changes, moved files, etc.)
-5. **Test thoroughly**: Ensure Treeswift builds and scans work correctly
-6. **Update this README**: Document any new modifications or changes to existing ones
-7. **Commit**: Create commit with modifications applied
-
-## Viewing Current Modifications
-
-To see all Treeswift modifications to Periphery (excluding upstream changes):
-combine-master-redundant-nested-1062
-```bash
-# View all local modifications against danwood fork baseline
-git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
-
-# Generate patch file
-git diff danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/ > current_modifications.patch
-
-# View statistics
-git diff --stat danwood-fork/combine-master-redundant-nested-1062 HEAD -- PeripherySource/periphery/
-```
-
-**Note**: The current baseline is commit `8ebf4a42` from danwood/periphery combine-master-redundant-nested-1062 branch. All diffs against this show only Treeswift modifications, not danwood fork changes.
 
 ## References
 
@@ -512,6 +600,4 @@ git diff --stat danwood-fork/combine-master-redundant-nested-1062 HEAD -- Periph
 
 ---
 
-*Periphery base: 3.4.0+ (commit 5a4ac8b)*
-*Baseline commit: 4dd2a038*
-*Last updated: 2026-01-17*
+*Last updated: 2026-05-26*
