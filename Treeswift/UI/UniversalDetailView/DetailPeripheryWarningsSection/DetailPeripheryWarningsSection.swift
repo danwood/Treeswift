@@ -227,8 +227,15 @@ private struct PeripheryWarningRow: View {
 				if declarationLineIndex >= 0, declarationLineIndex < lines.count {
 					let declarationFullLine = lines[declarationLineIndex]
 
-					// If declaration line has @ modifier, format with secondary styling
-					if let atIndex = declarationFullLine.firstIndex(of: "@") {
+					// If declaration line has @ modifier BEFORE the symbol, format with secondary styling
+					let symbolAppearsAfterAt: Bool = {
+						guard let atIndex = declarationFullLine.firstIndex(of: "@"),
+						      let symbolName = declaration.name,
+						      let symbolRange = declarationFullLine.range(of: symbolName)
+						else { return false }
+						return atIndex < symbolRange.lowerBound
+					}()
+					if let atIndex = symbolAppearsAfterAt ? declarationFullLine.firstIndex(of: "@") : nil {
 						// Find where the @ modifier ends (at whitespace after closing paren or after modifier name)
 						var modifierEndIndex = atIndex
 
