@@ -500,7 +500,7 @@ struct ContentView: View {
 }
 
 /* folderprivate */
-struct AutomationActivityBanner: View {
+private struct AutomationActivityBanner: View {
 	let command: String
 
 	var body: some View {
@@ -520,7 +520,7 @@ struct AutomationActivityBanner: View {
 }
 
 /* folderprivate */
-struct SearchSuggestionsView: View {
+private struct SearchSuggestionsView: View {
 	let results: [SearchMatchEngine.SearchResult]
 	let activeTab: ResultsTab
 	let onSelect: (SearchMatchEngine.SearchResult) -> Void

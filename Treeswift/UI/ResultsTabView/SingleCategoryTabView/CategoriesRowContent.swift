@@ -79,13 +79,13 @@ private struct SyntheticRootLabel: View {
 private struct DeclarationLabel: View {
 	let declaration: DeclarationNode
 	var projectRootPath: String?
-	@Environment(\.showCodeSize) private var showCodeSize
-	@Environment(\.showFileInfo) private var showFileInfo
-	@Environment(\.showFileName) private var showFileName
-	@Environment(\.showConformance) private var showConformance
-	@Environment(\.showPath) private var showPath
+	@Environment(\.showCodeSize) var showCodeSize
+	@Environment(\.showFileInfo) var showFileInfo
+	@Environment(\.showFileName) var showFileName
+	@Environment(\.showConformance) var showConformance
+	@Environment(\.showPath) var showPath
 
-	private var fileNameMatchesSymbol: Bool {
+	var fileNameMatchesSymbol: Bool {
 		guard let fileName = declaration.locationInfo.fileName else { return false }
 		let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
 		return fileNameWithoutExtension == declaration.displayName

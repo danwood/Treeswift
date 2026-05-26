@@ -398,7 +398,7 @@ struct SingleCategoryTabView: View {
  for nodes with children, and indentation based on nesting level.
  Option-clicking the chevron expands/collapses all descendants.
  */
-/* folderprivate */ struct RecursiveOutlineRow: View {
+/* folderprivate */ private struct RecursiveOutlineRow: View {
 	let node: CategoriesNode
 	@Binding var expandedIDs: Set<String>
 	@Binding var selectedID: String?

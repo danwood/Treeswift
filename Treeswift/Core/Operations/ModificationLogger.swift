@@ -43,11 +43,11 @@ enum ModificationLogger {
 	 contiguous deletion ranges appear as a single log entry.
 	 */
 	struct PendingEntry {
-		var startLine: Int
-		var endLine: Int
-		let action: String
+		fileprivate var startLine: Int
+		fileprivate var endLine: Int
+		fileprivate let action: String
 		// For deletions, tracks the original sub-ranges before merging
-		var subRanges: [(start: Int, end: Int)]
+		fileprivate var subRanges: [(start: Int, end: Int)]
 
 		init(startLine: Int, endLine: Int, action: String) {
 			self.startLine = startLine
@@ -57,7 +57,7 @@ enum ModificationLogger {
 		}
 
 		/// Whether this entry represents a line deletion (as opposed to an in-place edit).
-		var isDeletion: Bool {
+		fileprivate var isDeletion: Bool {
 			action == "Deleted" || action.hasPrefix("Deleted import") || action.hasPrefix("removed `periphery:ignore`")
 		}
 	}

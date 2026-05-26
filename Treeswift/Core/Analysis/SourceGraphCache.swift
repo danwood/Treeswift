@@ -420,7 +420,7 @@ final class RestoredSourceGraph: SourceGraphProtocol {
 	let unusedDeclarations: Set<Declaration>
 	private let allReferencesByUsr: [String: Set<Reference>]
 
-	init(
+	fileprivate init(
 		allDeclarations: Set<Declaration>,
 		usedDeclarations: Set<Declaration>,
 		allReferencesByUsr: [String: Set<Reference>]
