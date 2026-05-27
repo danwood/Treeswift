@@ -216,6 +216,27 @@ extension SourceGraph {
             }
         }
 
+        // For stored properties (varInstance/varStatic), the Swift indexer emits references
+        // to implicit accessor children (getter/setter USRs) rather than the property itself.
+        // Check those accessor children so cross-type access is detected correctly.
+        if decl.kind == .varInstance || decl.kind == .varStatic {
+            for child in decl.declarations {
+                let childSameFileRefs = references(to: child).filter { $0.location.file == file }
+                for ref in childSameFileRefs {
+                    guard let refParent = ref.parent else { continue }
+                    guard let refContainingType = immediateContainingType(of: refParent) else {
+                        return true
+                    }
+
+                    let refLogicalType = logicalType(of: refContainingType, inFile: file)
+
+                    if declLogicalType !== refLogicalType {
+                        return true
+                    }
+                }
+            }
+        }
+
         return false
     }
 }

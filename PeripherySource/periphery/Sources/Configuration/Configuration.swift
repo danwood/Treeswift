@@ -107,6 +107,12 @@ public final class Configuration {
     @Setting(key: "retain_encodable_properties", defaultValue: false)
     public var retainEncodableProperties: Bool
 
+    @Setting(key: "retain_equatable_properties", defaultValue: false)
+    public var retainEquatableProperties: Bool
+
+    @Setting(key: "retain_hashable_properties", defaultValue: false)
+    public var retainHashableProperties: Bool
+
     @Setting(key: "verbose", defaultValue: false)
     public var verbose: Bool
 
@@ -158,8 +164,14 @@ public final class Configuration {
     @Setting(key: "bazel_filter", defaultValue: nil)
     public var bazelFilter: String?
 
+    @Setting(key: "bazel_query", defaultValue: nil)
+    public var bazelQuery: String?
+
     @Setting(key: "bazel_index_store", defaultValue: nil)
     public var bazelIndexStore: FilePath?
+
+    @Setting(key: "bazel_check_visibility", defaultValue: false)
+    public var bazelCheckVisibility: Bool
 
     // Non user facing.
     public var guidedSetup: Bool = false
@@ -228,13 +240,14 @@ public final class Configuration {
         $project, $schemes, $excludeTargets, $excludeTests, $indexExclude, $reportExclude, $reportInclude, $outputFormat,
         $retainPublic, $noRetainSPI, $retainFiles, $retainAssignOnlyProperties, $retainAssignOnlyPropertyTypes, $retainObjcAccessible,
         $retainObjcAnnotated, $retainUnusedProtocolFuncParams, $retainSwiftUIPreviews, $disableRedundantPublicAnalysis,
-        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility,  $disableRedundantAccessAnalysis,
+        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility, $disableRedundantAccessAnalysis,
         $disableUnusedImportAnalysis, $superfluousIgnoreComments, $retainUnusedImportedModules,
         $externalEncodableProtocols, $externalCodableProtocols, $externalTestCaseClasses, $verbose, $quiet, $color,
         $disableUpdateCheck, $strict, $indexStorePath,
         $skipBuild, $skipSchemesValidation, $cleanBuild, $buildArguments, $xcodeListArguments, $relativeResults,
-        $jsonPackageManifestPath, $retainCodableProperties, $retainEncodableProperties, $baseline, $writeBaseline,
-        $writeResults, $genericProjectConfig, $bazel, $bazelFilter, $bazelIndexStore,
+        $jsonPackageManifestPath, $retainCodableProperties, $retainEncodableProperties, $retainEquatableProperties,
+        $retainHashableProperties, $baseline, $writeBaseline,
+        $writeResults, $genericProjectConfig, $bazel, $bazelFilter, $bazelQuery, $bazelIndexStore, $bazelCheckVisibility,
     ]
 
     private func buildFilenameMatchers(with patterns: [String]) -> [FilenameMatcher] {

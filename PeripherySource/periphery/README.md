@@ -33,6 +33,7 @@
     - [Unused Imports](#unused-imports)
     - [Objective-C](#objective-c)
     - [Codable](#codable)
+    - [Equatable and Hashable](#equatable-and-hashable)
     - [XCTestCase](#xctestcase)
     - [Interface Builder](#interface-builder)
     - [SPI (System Programming Interface)](#spi-system-programming-interface)
@@ -326,6 +327,10 @@ Swift synthesizes additional code for `Codable` types that is not visible to Per
 
 If `Codable` conformance is declared by a protocol in an external module not scanned by Periphery, you can instruct Periphery to identify the protocols as `Codable` with `--external-codable-protocols "ExternalProtocol"`.
 
+### Equatable and Hashable
+
+Swift synthesizes additional code for `Equatable` and `Hashable` types that is not visible to Periphery and can result in false positives for properties not directly referenced from non-synthesized code. If your project contains many such types, you can retain all properties on `Equatable` types with `--retain-equatable-properties`, or all properties on `Hashable` types with `--retain-hashable-properties`. The `Equatable` option also retains properties on `Hashable` types because `Hashable` refines `Equatable`.
+
 ### XCTestCase
 
 Any class that inherits `XCTestCase` is automatically retained along with its test methods. However, when a class inherits `XCTestCase` indirectly via another class, e.g., `UnitTestCase`, and that class resides in a target that isn't scanned by Periphery, you need to use the `--external-test-case-classes UnitTestCase` option to instruct Periphery to treat `UnitTestCase` as an `XCTestCase` subclass.
@@ -472,7 +477,14 @@ By default, Periphery looks for the index store at `.build/debug/index/store`. T
 bazel run @periphery -- scan --bazel
 ```
 
-The `--bazel` option enables Bazel mode, which provides seamless integration with your project. It works by querying your project to identify all top-level targets, generating a hidden implementation of the [scan](https://github.com/peripheryapp/periphery/blob/master/bazel/rules.bzl) rule, and then invoking `bazel run`. You can filter the top-level targets with the `--bazel-filter <value>` option, where `<value>` will be passed as the first argument to Bazel's [filter](https://bazel.build/query/language#filter) operator. The generated query can be seen in the console with the `--verbose` option.
+The `--bazel` option enables Bazel mode, which provides seamless integration with your project. It works by querying your project to identify all top-level targets, generating a hidden implementation of the [scan](https://github.com/peripheryapp/periphery/blob/master/bazel/rules.bzl) rule, and then invoking `bazel run`. You can filter the default top-level target query with the `--bazel-filter <value>` option, where `<value>` will be passed as the first argument to Bazel's [filter](https://bazel.build/query/language#filter) operator. You can also override the generated query entirely with `--bazel-query <value>`, which is useful when you need to exclude targets such as ones tagged `manual`, or avoid building targets that use an incorrect transition when built directly. The generated query can be seen in the console with the `--verbose` option.
+
+Periphery's generated scan rule follows embedded bundle and plugin edges transitively, so you can root the scan in application targets while still analyzing code that is only reachable through extensions, app clips, watch applications, or Swift compiler plugins.
+
+> [!TIP]
+> By default, Periphery passes `--check_visibility=false` to `bazel run` to simplify integration, since the generated scan target references your project's targets which may not otherwise be visible. However, disabling visibility checking can invalidate Bazel's analysis cache, resulting in slower subsequent builds.
+>
+> You can disable this behavior with the `--bazel-check-visibility` option. You must ensure the necessary targets are visible to Periphery's generated package, for example by adding the `@@+generated+periphery//bazel:generated` visibility label to your targets.
 
 ### Other
 
@@ -510,9 +522,6 @@ You can then invoke Periphery as follows:
 ```sh
 periphery scan --generic-project-config config.json
 ```
-
-> [!TIP]
-> Both options support multiple paths.
 
 ## Platforms
 

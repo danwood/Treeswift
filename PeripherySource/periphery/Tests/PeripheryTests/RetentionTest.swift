@@ -970,6 +970,14 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    func testRetainsDynamicMemberLookupSubscriptInExternalTypeExtension() {
+        analyze(retainPublic: true) {
+            assertReferenced(.extensionEnum("AttributeDynamicLookup")) {
+                self.assertReferenced(.functionSubscript("subscript(dynamicMember:)"))
+            }
+        }
+    }
+
     func testRetainsCodableProperties() {
         analyze(
             retainPublic: true,
@@ -1011,6 +1019,64 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             retainEncodableProperties: true
         ) {
             assertReferenced(.struct("FixtureStruct15")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsEquatableProperties() {
+        analyze(
+            retainPublic: true,
+            retainEquatableProperties: false,
+            retainAssignOnlyProperties: false
+        ) {
+            assertReferenced(.struct("FixtureStruct222")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+
+        analyze(
+            retainPublic: true,
+            retainEquatableProperties: true
+        ) {
+            assertReferenced(.struct("FixtureStruct222")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+
+            assertReferenced(.struct("FixtureStruct223")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+
+            assertReferenced(.class("FixtureClass222")) {
+                self.assertAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsHashableProperties() {
+        analyze(
+            retainPublic: true,
+            retainHashableProperties: false,
+            retainAssignOnlyProperties: false
+        ) {
+            assertReferenced(.struct("FixtureStruct224")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+
+        analyze(
+            retainPublic: true,
+            retainHashableProperties: true
+        ) {
+            assertReferenced(.struct("FixtureStruct224")) {
                 self.assertNotReferenced(.functionConstructor("init(unused:)"))
                 self.assertReferenced(.varInstance("unused"))
                 self.assertNotAssignOnlyProperty(.varInstance("unused"))
@@ -1173,13 +1239,16 @@ final class RetentionTest: FixtureSourceGraphTestCase {
     }
 
     func testIgnoreAllComment() {
-        analyze(retainPublic: true) {
+        analyze(retainPublic: false) {
             assertReferenced(.class("Fixture115")) {
                 self.assertReferenced(.functionMethodInstance("someFunc(param:)")) {
                     self.assertReferenced(.varParameter("param"))
                 }
             }
             assertReferenced(.class("Fixture116"))
+
+            assertNotSuperfluousIgnoreCommand(.class("Fixture115"))
+            assertNotSuperfluousIgnoreCommand(.class("Fixture116"))
         }
     }
 
@@ -1229,6 +1298,12 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodB()"))
             assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodC()"))
 
+            // Assign-only properties with ignore comments are NOT superfluous
+            assertReferenced(.struct("AssignOnlyIgnoreStruct")) {
+                self.assertNotSuperfluousIgnoreCommand(.varInstance("assignOnlyIgnored"))
+                self.assertReferenced(.varInstance("usedProperty"))
+            }
+
             // Test superfluous ignore for parameters
             assertReferenced(.class("ParameterIgnoreClass")) {
                 self.assertReferenced(.functionMethodInstance("superfluousParamIgnore(usedParam:)")) {
@@ -1246,6 +1321,22 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             // Superfluous ignore warnings should be suppressed when disabled.
             assertNotSuperfluousIgnoreCommand(.functionFree("superfluouslyIgnoredFunc()"))
             assertNotSuperfluousIgnoreCommand(.class("SuperfluouslyIgnoredClass"))
+        }
+    }
+
+    func testSuperfluousIgnoreCommandOnProtocolMember() {
+        analyze(retainPublic: true) {
+            // Protocol member with ignore that only has related references (from conformances
+            // and default implementations) - the ignore is NOT superfluous.
+            assertReferenced(.protocol("CorrectlyIgnoredProtocol")) {
+                self.assertNotSuperfluousIgnoreCommand(.varInstance("ignoredProperty"))
+            }
+
+            // Protocol member with ignore that has normal references (actually used) -
+            // the ignore IS superfluous.
+            assertReferenced(.protocol("SuperfluouslyIgnoredProtocol")) {
+                self.assertSuperfluousIgnoreCommand(.varInstance("superfluousProperty"))
+            }
         }
     }
 
@@ -1783,7 +1874,7 @@ final class RetentionTest: FixtureSourceGraphTestCase {
 
     func testRetainsInitializerCalledOnTypeAlias() {
         // Resolved by https://github.com/swiftlang/swift/commit/178d6c315dcce9d1110bb23ad905dffaf28c2c3b
-        guard Self.swiftVersion.version.isVersion(greaterThan: "6.2.3") else {
+        guard Self.swiftVersion.version.isVersion(greaterThan: "6.2.4") else {
             return
         }
 

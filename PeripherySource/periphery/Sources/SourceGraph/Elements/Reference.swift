@@ -9,6 +9,7 @@ public final class Reference {
         case varType
         case returnType
         case parameterType
+        case throwType
         case genericParameterType
         case genericRequirementType
         case inheritedType
@@ -21,7 +22,7 @@ public final class Reference {
 
         var isPubliclyExposable: Bool {
             switch self {
-            case .varType, .returnType, .parameterType, .genericParameterType, .genericRequirementType, .inheritedType, .refinedProtocolType, .initializerType, .variableInitFunctionCall, .functionCallMetatypeArgument:
+            case .varType, .returnType, .parameterType, .throwType, .genericParameterType, .genericRequirementType, .inheritedType, .refinedProtocolType, .initializerType, .variableInitFunctionCall, .functionCallMetatypeArgument:
                 true
             default:
                 false
@@ -32,7 +33,7 @@ public final class Reference {
     public let location: Location
     public let kind: Kind
     public let declarationKind: Declaration.Kind
-    public var name: String?
+    public let name: String
     public var parent: Declaration?
     public var references: Set<Reference> = []
     public let usr: String
@@ -41,11 +42,13 @@ public final class Reference {
     private let hashValueCache: Int
 
     public init(
+        name: String,
         kind: Kind,
         declarationKind: Declaration.Kind,
         usr: String,
         location: Location
     ) {
+        self.name = name
         self.kind = kind
         self.declarationKind = declarationKind
         self.usr = usr
@@ -75,8 +78,8 @@ extension Reference: CustomStringConvertible {
         "Reference(\(descriptionParts.joined(separator: ", ")))"
     }
 
-    private var descriptionParts: [String] {
-        let formattedName = name != nil ? "'\(name!)'" : "nil"
+    var descriptionParts: [String] {
+        let formattedName = "'\(name)'"
 
         return [kind.rawValue, declarationKind.rawValue, formattedName, "'\(usr)'", role.rawValue, location.shortDescription]
     }
@@ -84,6 +87,6 @@ extension Reference: CustomStringConvertible {
 
 extension Reference: Comparable {
     public static func < (lhs: Reference, rhs: Reference) -> Bool {
-        lhs.location < rhs.location
+        (lhs.location, lhs.usr) < (rhs.location, rhs.usr)
     }
 }

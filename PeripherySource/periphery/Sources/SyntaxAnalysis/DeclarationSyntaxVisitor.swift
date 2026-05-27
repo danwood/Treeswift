@@ -14,6 +14,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         variableTypeLocations: Set<Location>,
         parameterTypeLocations: Set<Location>,
         returnTypeLocations: Set<Location>,
+        throwTypeLocations: Set<Location>,
         inheritedTypeLocations: Set<Location>,
         genericParameterLocations: Set<Location>,
         genericConformanceRequirementLocations: Set<Location>,
@@ -126,8 +127,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         } else if let identifierType = node.extendedType.as(IdentifierTypeSyntax.self),
                   let genericArgumentClause = identifierType.genericArgumentClause
         {
-            if swiftVersion.version.isVersion(lessThanOrEqualTo: "6.2.3") {
-                // Swift <= 6.2.3: Generic protocol extensions in the form `extension Foo<Type>` have incorrect locations
+            if swiftVersion.version.isVersion(lessThanOrEqualTo: "6.2.4") {
+                // Swift <= 6.2.4: Generic protocol extensions in the form `extension Foo<Type>` have incorrect locations
                 // in the index store. This results in syntax metadata not being applied to the declaration due to the
                 // location mismatch. To workaround this, parse this node with the incorrect location.
                 position = genericArgumentClause.rightAngle.positionAfterSkippingLeadingTrivia
@@ -153,6 +154,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
             parameterClause: node.signature.parameterClause,
+            throwsClause: node.signature.effectSpecifiers?.throwsClause,
             returnClause: node.signature.returnClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
@@ -167,6 +169,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
             parameterClause: node.signature.parameterClause,
+            throwsClause: node.signature.effectSpecifiers?.throwsClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             at: node.initKeyword.positionAfterSkippingLeadingTrivia
@@ -321,6 +324,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         parameterClause: FunctionParameterClauseSyntax? = nil,
         closureParameterClause: ClosureParameterClauseSyntax? = nil,
         enumCaseParameterClause: EnumCaseParameterClauseSyntax? = nil,
+        throwsClause: ThrowsClauseSyntax? = nil,
         returnClause: ReturnClauseSyntax? = nil,
         inheritanceClause: InheritanceClauseSyntax? = nil,
         genericParameterClause: GenericParameterClauseSyntax? = nil,
@@ -383,6 +387,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             variableTypeLocations: typeLocations(for: variableType),
             parameterTypeLocations: allParameterClauseLocations,
             returnTypeLocations: returnClauseTypeLocations.mapSet { $0.location },
+            throwTypeLocations: typeLocations(for: throwsClause?.type),
             inheritedTypeLocations: typeLocations(for: inheritanceClause),
             genericParameterLocations: typeLocations(for: genericParameterClause),
             genericConformanceRequirementLocations: typeLocations(for: genericWhereClause),
@@ -510,6 +515,10 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         return clause.requirements.reduce(into: .init()) { result, requirement in
             if let conformanceRequirementType = requirement.requirement.as(ConformanceRequirementSyntax.self) {
                 result.formUnion(typeSyntaxInspector.typeLocations(for: conformanceRequirementType.rightType))
+            } else if let sameTypeRequirement = requirement.requirement.as(SameTypeRequirementSyntax.self) {
+                if case let .type(rightType) = sameTypeRequirement.rightType {
+                    result.formUnion(typeSyntaxInspector.typeLocations(for: rightType))
+                }
             }
         }
     }

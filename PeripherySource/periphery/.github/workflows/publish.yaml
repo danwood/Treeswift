@@ -1,0 +1,51 @@
+name: Publish to BCR
+on:
+  push:
+    tags:
+      - '*'
+  # Allow manual dispatch in case of problems
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+jobs:
+  publish:
+    uses: bazel-contrib/publish-to-bcr/.github/workflows/publish.yaml@v1.1.0
+    with:
+      tag_name: ${{ inputs.tag_name || github.ref_name }}
+      registry_fork: peripheryapp/bazel-central-registry
+      tag_prefix: ""
+      attest: false
+      draft: false
+    permissions:
+      contents: write
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
+
+  skip-unstable-url:
+    needs: publish
+    if: ${{ needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      REGISTRY: bazelbuild/bazel-central-registry
+      REGISTRY_FORK: peripheryapp/bazel-central-registry
+      TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
+      COMMENT_BODY: "@bazel-io skip_check unstable_url"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Locate BCR pull request
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.BCR_PUBLISH_TOKEN }}
+        run: bash .github/scripts/locate_bcr_pr.sh
+
+      - name: Post unstable URL skip comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.BCR_PUBLISH_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: bash .github/scripts/post_bcr_skip_comment.sh
