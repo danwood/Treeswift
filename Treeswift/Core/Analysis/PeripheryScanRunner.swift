@@ -302,11 +302,18 @@ final class PeripheryScanRunner: Sendable {
 		configuration.retainFilesMatchers = configuration.retainFiles.map {
 			FilenameMatcher(relativePattern: $0, to: pwd, caseSensitive: false)
 		}
+		// Automatically exclude PeripherySource from results when it exists alongside the project file.
+		// This folder is a git subtree of Periphery's own source and should not be treated as
+		// user code to clean up.
+		let projectRoot = configuration.project.map { ($0.string as NSString).deletingLastPathComponent } ?? pwd
+		if FileManager.default.fileExists(atPath: (projectRoot as NSString).appendingPathComponent("PeripherySource")) {
+			configuration.reportExclude.append("**/PeripherySource/**")
+		}
 		configuration.reportExcludeMatchers = configuration.reportExclude.map {
-			FilenameMatcher(relativePattern: $0, to: pwd, caseSensitive: false)
+			FilenameMatcher(relativePattern: $0, to: projectRoot, caseSensitive: false)
 		}
 		configuration.reportIncludeMatchers = configuration.reportInclude.map {
-			FilenameMatcher(relativePattern: $0, to: pwd, caseSensitive: false)
+			FilenameMatcher(relativePattern: $0, to: projectRoot, caseSensitive: false)
 		}
 
 		// Create logger with configuration settings
