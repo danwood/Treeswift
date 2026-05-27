@@ -117,6 +117,12 @@ struct ScanCommand: ParsableCommand {
     @Flag(help: "Retain properties on Encodable types only")
     private var retainEncodableProperties: Bool = defaultConfiguration.$retainEncodableProperties.defaultValue
 
+    @Flag(help: "Retain properties on Equatable types, including Hashable types")
+    var retainEquatableProperties: Bool = defaultConfiguration.$retainEquatableProperties.defaultValue
+
+    @Flag(help: "Retain properties on Hashable types")
+    var retainHashableProperties: Bool = defaultConfiguration.$retainHashableProperties.defaultValue
+
     @Flag(help: "Clean existing build artifacts before building")
     private var cleanBuild: Bool = defaultConfiguration.$cleanBuild.defaultValue
 
@@ -168,8 +174,14 @@ struct ScanCommand: ParsableCommand {
     @Option(help: "Filter pattern applied to the Bazel top-level targets query")
     private var bazelFilter: String?
 
+    @Option(help: "Query expression used for the Bazel top-level targets query. Overrides the default query and bypasses bazelFilter.")
+    var bazelQuery: String?
+
     @Option(help: "Path to a global index store populated by Bazel. If provided, will be used instead of individual module stores.")
     private var bazelIndexStore: FilePath?
+
+    @Flag(help: "Enable Bazel visibility checking")
+    var bazelCheckVisibility: Bool = defaultConfiguration.$bazelCheckVisibility.defaultValue
 
     private static let defaultConfiguration = Configuration()
 
@@ -227,6 +239,8 @@ struct ScanCommand: ParsableCommand {
         configuration.apply(\.$relativeResults, relativeResults)
         configuration.apply(\.$retainCodableProperties, retainCodableProperties)
         configuration.apply(\.$retainEncodableProperties, retainEncodableProperties)
+        configuration.apply(\.$retainEquatableProperties, retainEquatableProperties)
+        configuration.apply(\.$retainHashableProperties, retainHashableProperties)
         configuration.apply(\.$jsonPackageManifestPath, jsonPackageManifestPath)
         configuration.apply(\.$baseline, baseline)
         configuration.apply(\.$writeBaseline, writeBaseline)
@@ -234,7 +248,9 @@ struct ScanCommand: ParsableCommand {
         configuration.apply(\.$genericProjectConfig, genericProjectConfig)
         configuration.apply(\.$bazel, bazel)
         configuration.apply(\.$bazelFilter, bazelFilter)
+        configuration.apply(\.$bazelQuery, bazelQuery)
         configuration.apply(\.$bazelIndexStore, bazelIndexStore)
+        configuration.apply(\.$bazelCheckVisibility, bazelCheckVisibility)
 
         configuration.buildFilenameMatchers()
 
@@ -250,11 +266,6 @@ struct ScanCommand: ParsableCommand {
         logger.debug(swiftVersion.fullVersion)
         try swiftVersion.validateVersion()
 
-        if swiftVersion.version.isVersion(equalTo: "6.1"), !retainAssignOnlyProperties {
-            logger.warn("Assign-only property analysis is disabled with Swift 6.1 due to a Swift bug: https://github.com/swiftlang/swift/issues/80394.")
-            configuration.retainAssignOnlyProperties = true
-        }
-
         let project: Project = if configuration.guidedSetup {
             try GuidedSetup(configuration: configuration, shell: shell, logger: logger).perform()
         } else {
@@ -264,12 +275,19 @@ struct ScanCommand: ParsableCommand {
         let updateChecker = UpdateChecker(logger: logger, configuration: configuration)
         updateChecker.run()
 
-        let results = try Scan(
+        let scanOutput = try Scan(
             configuration: configuration,
             logger: logger,
             swiftVersion: swiftVersion
         ).perform(project: project)
 
+        let planSuggester = PlanSuggester(
+            logger: logger,
+            loc: scanOutput.loc
+        )
+        planSuggester.run()
+
+        let results = scanOutput.results
         let interval = logger.beginInterval("result:output")
         var baseline: Baseline?
 
@@ -282,7 +300,6 @@ struct ScanCommand: ParsableCommand {
 
         if let baselinePath = configuration.writeBaseline {
             let usrs = filteredResults
-                .filter(\.includeInBaseline)
                 .flatMapSet { $0.usrs }
                 .union(baseline?.usrs ?? [])
             let baseline = Baseline.v1(usrs: usrs.sorted())
@@ -317,6 +334,7 @@ struct ScanCommand: ParsableCommand {
         logger.endInterval(interval)
 
         updateChecker.notifyIfAvailable()
+        planSuggester.notifyIfSuggested()
 
         if !filteredResults.isEmpty, configuration.strict {
             throw PeripheryError.foundIssues(count: filteredResults.count)

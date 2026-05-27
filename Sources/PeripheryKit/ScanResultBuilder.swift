@@ -45,20 +45,29 @@ public enum ScanResultBuilder {
             .init(declaration: $0.0, annotation: .redundantPublicAccessibility(modules: $0.1))
         }
         let annotatedRedundantInternalAccessibility: [ScanResult] = redundantInternalAccessibility.map {
+<<<<<<< HEAD
             .init(declaration: $0.key, annotation: .redundantInternalAccessibility(suggestedAccessibility: $0.value))
         }
         let annotatedRedundantFilePrivateAccessibility: [ScanResult] = redundantFilePrivateAccessibility.map {
             .init(declaration: $0.key, annotation: .redundantFilePrivateAccessibility(containingTypeName: $0.value))
+=======
+            .init(declaration: $0.0, annotation: .redundantInternalAccessibility(files: $0.1.files, suggestedAccessibility: $0.1.suggestedAccessibility))
+        }
+        let annotatedRedundantFilePrivateAccessibility: [ScanResult] = redundantFilePrivateAccessibility.map {
+            .init(declaration: $0.0, annotation: .redundantFilePrivateAccessibility(files: $0.1.files, containingTypeName: $0.1.containingTypeName))
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         }
 
         let annotatedSuperfluousIgnoreCommands: [ScanResult] = {
             guard configuration.superfluousIgnoreComments else { return [] }
 
-            // Detect superfluous ignore commands
-            // 1. Declarations with ignore comments that have references from non-ignored code
-            let superfluousDeclarations = graph.explicitlyIgnoredDeclarations
+            // Detect superfluous ignore commands.
+            let superfluousDeclarations = graph.commandIgnoredDeclarations
+                .filter { _, kind in kind == .declaration }
+                .keys
                 .filter { decl in
                     hasReferencesFromNonIgnoredCode(decl, graph: graph)
+                        && !graph.suppressedAssignOnlyProperties.contains(decl)
                 }
 
             // 2. Parameters with ignore comments that are actually used (not in unusedParameters)
@@ -101,19 +110,21 @@ public enum ScanResultBuilder {
             }
     }
 
-    /// Checks if a declaration has references from code that is not part of the explicitly ignored set.
+    /// Checks if a declaration has references from code that is not part of the command ignored set.
     /// This indicates that the declaration would have been marked as used even without the ignore command.
     private static func hasReferencesFromNonIgnoredCode(_ decl: Declaration, graph: SourceGraph) -> Bool {
         let references = graph.references(to: decl)
+        let isProtocolMember = decl.parent?.kind == .protocol
 
         for ref in references {
             guard ref.kind != .retained, let parent = ref.parent else { continue }
 
-            // Check if the parent is not in the explicitly ignored set.
-            // This covers deeply nested declarations because retainHierarchy marks
-            // the entire descendant tree as explicitly ignored, not just the root.
-            if !graph.explicitlyIgnoredDeclarations.contains(parent) {
-                // Also check that the parent is actually used (not itself unused)
+            // Protocol members naturally accumulate related references from conformances and
+            // default implementations even when genuinely unused. Only normal references indicate
+            // actual usage.
+            if isProtocolMember, ref.kind != .normal { continue }
+
+            if graph.commandIgnoredDeclarations[parent] == nil {
                 if graph.usedDeclarations.contains(parent) {
                     return true
                 }
@@ -136,9 +147,13 @@ public enum ScanResultBuilder {
                 if !unusedParamNames.contains(ignoredParamName) {
                     // The ignored parameter is actually used - create a result for it
                     let parentUsrs = decl.usrs.sorted().joined(separator: "-")
-                    let usr = "param-\(ignoredParamName)-\(decl.name ?? "unknown-function")-\(parentUsrs)"
-                    let paramDecl = Declaration(kind: .varParameter, usrs: [usr], location: decl.location)
-                    paramDecl.name = ignoredParamName
+                    let usr = "param-\(ignoredParamName)-\(decl.name)-\(parentUsrs)"
+                    let paramDecl = Declaration(
+                        name: ignoredParamName,
+                        kind: .varParameter,
+                        usrs: [usr],
+                        location: decl.location
+                    )
                     paramDecl.parent = decl
                     results.append(.init(declaration: paramDecl, annotation: .superfluousIgnoreCommand))
                 }

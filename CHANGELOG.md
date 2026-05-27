@@ -2,6 +2,126 @@
 
 ##### Breaking
 
+- None.
+
+##### Enhancements
+
+- Added the `--retain-equatable-properties` and `--retain-hashable-properties` options to retain all properties on `Equatable` and `Hashable` types.
+- Expose a stable `@periphery//bazel:generated` package group so Bazel projects can grant visibility to Periphery's generated scan target and use `--bazel-check-visibility` safely.
+- Added a `--bazel-query` option to override the default Bazel top-level target query.
+
+##### Bug Fixes
+
+- Follow embedded bundle and plugin edges transitively in the generated Bazel scan rule so custom Bazel queries can avoid building incorrectly transitioned targets while still analyzing extension- and plugin-reachable code.
+
+## 3.7.4 (2026-04-26)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- None.
+
+##### Bug Fixes
+
+- Fix Homebrew releases.
+
+## 3.7.3 (2026-04-25)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- None.
+
+##### Bug Fixes
+
+- Fix mixed Swift/Objective-C indexing failures caused by non-Swift symbols being processed from the index store, which could trigger unknown extension reference errors and duplicate declaration conflicts.
+
+## 3.7.2 (2026-03-31)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- None.
+
+##### Bug Fixes
+
+- Fix Homebrew Linux builds failing to link `libIndexStore` when Swift is resolved through shimmed toolchain paths.
+
+## 3.7.1 (2026-03-31)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- None.
+
+##### Bug Fixes
+
+- Fix runtime crash due to absolute libIndexStore.dylib path in pre-built binary.
+- Fix building on Linux with SwiftPM and non-standard Swift install location for Homebrew release.
+
+## 3.7.0 (2026-03-30)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- Added support for Bazel 9.x.
+
+##### Bug Fixes
+
+- Fix false positive redundant public accessibility for types used in typed throws clauses, e.g. `throws(MyError)`.
+- Fix false positive superfluous ignore comment results for assign-only properties.
+- Fix incorrect generic protocol extension handling in Swift 6.2.4.
+
+## 3.6.0 (2026-02-18)
+
+##### Breaking
+
+- The minimum supported Swift version is now 6.1.2.
+
+##### Enhancements
+
+- Added the `--bazel-check-visibility` to disable passing `--check_visibility=false` to `bazel run`.
+
+##### Bug Fixes
+
+- Fix some causes of potentially non-deterministic results.
+- Fix incorrect superfluous ignore comment results for protocol members.
+
+## 3.5.1 (2026-02-15)
+
+##### Breaking
+
+- None.
+
+##### Enhancements
+
+- None.
+
+##### Bug Fixes
+
+- Fix false positive redundant public accessibility for types used in same-type generic requirements on extensions, e.g. `extension SomeProtocol where Self == MyType`.
+- Exclude declarations ignored by a file-level `// periphery:ignore:all` comment from superfluous ignore comment detection.
+- Superfluous ignore comment results are now included in baselines.
+
+## 3.5.0 (2026-02-11)
+
+##### Breaking
+
 - The `--no-color` option has been replaced with `--color=never`.
 
 ##### Enhancements

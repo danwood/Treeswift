@@ -27,6 +27,7 @@ swift_library(
         "SyntaxAnalysis/DeclarationSyntaxVisitor.swift",
         "SyntaxAnalysis/ImportSyntaxVisitor.swift",
         "SyntaxAnalysis/MultiplexingSyntaxVisitor.swift",
+        "SyntaxAnalysis/SourceLOCCounter.swift",
         "SyntaxAnalysis/SourceLocationBuilder.swift",
         "SyntaxAnalysis/TypeSyntaxInspector.swift",
         "SyntaxAnalysis/UnusedParameterAnalyzer.swift",
@@ -46,6 +47,7 @@ swift_library(
     srcs = [
         "SourceGraph/Elements/Accessibility.swift",
         "SourceGraph/Elements/AssetReference.swift",
+        "SourceGraph/Elements/CommandIgnoreKind.swift",
         "SourceGraph/Elements/CommentCommand.swift",
         "SourceGraph/Elements/Declaration.swift",
         "SourceGraph/Elements/DeclarationAttribute.swift",
@@ -66,6 +68,7 @@ swift_library(
         "SourceGraph/Mutators/DynamicMemberRetainer.swift",
         "SourceGraph/Mutators/EntryPointAttributeRetainer.swift",
         "SourceGraph/Mutators/EnumCaseReferenceBuilder.swift",
+        "SourceGraph/Mutators/EquatableHashablePropertyRetainer.swift",
         "SourceGraph/Mutators/ExtensionReferenceBuilder.swift",
         "SourceGraph/Mutators/ExternalOverrideRetainer.swift",
         "SourceGraph/Mutators/ExternalTypeProtocolConformanceReferenceRemover.swift",
@@ -181,7 +184,7 @@ swift_library(
         "//Sources:SourceGraph",
         "@aexml//:AEXML",
         "@swift-filename-matcher//:FilenameMatcher",
-        "@swift-indexstore//:SwiftIndexStore",
+        "@swift-index-store//:IndexStore",
         "@swift-syntax//:SwiftParser",
         "@swift-syntax//:SwiftSyntax",
         "@swift-system//:SystemPackage",
@@ -216,7 +219,7 @@ swift_library(
         "//Sources:Shared",
         "//Sources:SyntaxAnalysis",
         "@aexml//:AEXML",
-        "@swift-indexstore//:SwiftIndexStore",
+        "@swift-index-store//:IndexStore",
     ],
 )
 
@@ -231,6 +234,7 @@ swift_binary(
         "Frontend/CommonSetupGuide.swift",
         "Frontend/GuidedSetup.swift",
         "Frontend/Logger+Extension.swift",
+        "Frontend/PlanSuggester.swift",
         "Frontend/Project.swift",
         "Frontend/SPMProjectSetupGuide.swift",
         "Frontend/Scan.swift",
@@ -239,6 +243,7 @@ swift_binary(
         "Frontend/main.swift",
     ],
     module_name = "Frontend",
+    visibility = ["@@+generated+periphery_generated//:__pkg__"],
     deps = [
         "//Sources:Configuration",
         "//Sources:PeripheryKit",
@@ -253,7 +258,10 @@ swift_binary(
 optimized_swift_binary(
     name = "Frontend_opt",
     target = ":Frontend",
-    visibility = ["//:__pkg__"],
+    visibility = [
+        "//:__pkg__",
+        "@@+generated+periphery_generated//:__pkg__",
+    ],
 )
 
 swift_library(

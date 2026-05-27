@@ -86,7 +86,7 @@ public final class BazelProjectDriver: ProjectDriver {
         let buildPath = outputPath.appending("BUILD.bazel")
         let deps = try queryTargets().joined(separator: ",\n")
         let globalIndexStoreValue = configuration.bazelIndexStore.map {
-            "\"\($0.makeAbsolute()))\""
+            "\"\($0.makeAbsolute())\""
         } ?? "None"
         let buildFileContents = """
         load("@periphery//bazel:rules.bzl", "scan")
@@ -110,10 +110,11 @@ public final class BazelProjectDriver: ProjectDriver {
             logger.info("\(asterisk) Building...")
         }
 
+        let checkVisibility = configuration.bazelCheckVisibility ? "true" : "false"
         var arguments = [
             "bazel",
             "run",
-            "--check_visibility=false",
+            "--check_visibility=\(checkVisibility)",
             "--ui_event_filters=-info,-debug,-warning",
         ]
         arguments.append(contentsOf: configuration.buildArguments)
@@ -135,6 +136,10 @@ public final class BazelProjectDriver: ProjectDriver {
     }
 
     private var query: String {
+        if let bazelQuery = configuration.bazelQuery {
+            return bazelQuery
+        }
+
         let kinds = Self.topLevelKinds.joined(separator: "|")
         let query = "filter('^//.*', kind('(\(kinds)) rule', deps(//...)))"
 

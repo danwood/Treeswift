@@ -39,8 +39,13 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
     private func validate(_ decl: Declaration) throws {
         if decl.accessibility.value == .internal {
             if !graph.isRetained(decl), !shouldSkipMarking(decl) {
+<<<<<<< HEAD
                 let isReferencedOutside = decl.isReferencedOutsideFileIncludingChildren(graph: graph)
                 if !isReferencedOutside, !isTransitivelyExposedOutsideFile(decl) {
+=======
+                let isReferencedOutside = decl.isReferencedOutsideFile(graph: graph)
+                if !isReferencedOutside {
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                     mark(decl)
                 }
             }
@@ -72,12 +77,17 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         // Unless explicitly requested, skip marking nested declarations when an ancestor is already marked.
         // This avoids redundant warnings since fixing the parent's accessibility fixes the children too.
         if !configuration.showNestedRedundantAccessibility,
+<<<<<<< HEAD
            decl.isAnyAncestorMarked(in: graph.redundantInternalAccessibility.keys)
+=======
+           decl.isAnyAncestorMarked(in: graph.redundantInternalAccessibility)
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         {
             return
         }
 
         // Determine the suggested accessibility level.
+<<<<<<< HEAD
         // If the declaration is referenced from different types in the same file,
         // it needs fileprivate. Otherwise, private is sufficient.
         // Also check transitive exposure: if the type is used as return/parameter type of a
@@ -97,12 +107,21 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         } else {
             needsFileprivate ? .fileprivate : .private
         }
+=======
+        // For top-level declarations, fileprivate is equivalent to private, so we pass nil
+        // to indicate the ambiguity in the output message.
+        // If the declaration is referenced from different types in the same file,
+        // it needs fileprivate. Otherwise, private is sufficient.
+        let isTopLevel = decl.parent == nil
+        let suggestedAccessibility: Accessibility? = isTopLevel ? nil : (isReferencedFromDifferentTypeInSameFile(decl) ? .fileprivate : .private)
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
 
         // Check if the parent's accessibility already constrains this member.
         // If the parent is `private`, the member is already effectively `private`.
         // If the parent is `fileprivate` and we would suggest `fileprivate`, it's already constrained.
         // Marking these would be misleading since changing them would actually increase visibility.
         if let maxAccessibility = effectiveMaximumAccessibility(for: decl),
+<<<<<<< HEAD
            let suggestedAccessibility,
            suggestedAccessibility >= maxAccessibility
         {
@@ -110,6 +129,20 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         }
 
         graph.markRedundantInternalAccessibility(decl, suggestedAccessibility: suggestedAccessibility)
+=======
+           let suggestedAccessibility
+        {
+            let accessibilityOrder: [Accessibility] = [.private, .fileprivate, .internal, .public, .open]
+            let maxIndex = accessibilityOrder.firstIndex(of: maxAccessibility) ?? 0
+            let suggestedIndex = accessibilityOrder.firstIndex(of: suggestedAccessibility) ?? 0
+
+            if suggestedIndex >= maxIndex {
+                return
+            }
+        }
+
+        graph.markRedundantInternalAccessibility(decl, file: decl.location.file, suggestedAccessibility: suggestedAccessibility)
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
     }
 
     private func markInternalDescendentDeclarations(from decl: Declaration) {
@@ -121,8 +154,13 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
 
         for descDecl in descendants {
             if !graph.isRetained(descDecl), !shouldSkipMarking(descDecl) {
+<<<<<<< HEAD
                 let isReferencedOutside = descDecl.isReferencedOutsideFileIncludingChildren(graph: graph)
                 if !isReferencedOutside, !isTransitivelyExposedOutsideFile(descDecl) {
+=======
+                let isReferencedOutside = descDecl.isReferencedOutsideFile(graph: graph)
+                if !isReferencedOutside {
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                     mark(descDecl)
                 }
             }
@@ -135,10 +173,15 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
     /// - They should be skipped from all accessibility analysis (generic type params, implicit decls)
     /// - They are protocol requirements (must maintain accessibility for protocol conformance)
     /// - They are part of a property wrapper's API (must be accessible to wrapper users)
+<<<<<<< HEAD
     /// - They are struct stored properties used in an implicit memberwise initializer
     /// - They are referenced by a `#Preview` macro expansion (when retainSwiftUIPreviews is enabled)
     private func shouldSkipMarking(_ decl: Declaration) -> Bool {
         if decl.shouldSkipAccessibilityAnalysis {
+=======
+    private func shouldSkipMarking(_ decl: Declaration) -> Bool {
+        if shouldSkipAccessibilityAnalysis(for: decl) {
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
             return true
         }
 
@@ -150,6 +193,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             return true
         }
 
+<<<<<<< HEAD
         if isStructMemberwiseInitProperty(decl) {
             return true
         }
@@ -168,6 +212,8 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             return true
         }
 
+=======
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         return false
     }
 
@@ -179,6 +225,36 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
 
     // MARK: - Internal Accessibility Analysis Helpers
 
+<<<<<<< HEAD
+=======
+    /// Determines if a declaration should be skipped from accessibility analysis entirely.
+    ///
+    /// This helper is specific to internal accessibility analysis, checking conditions
+    /// that make a declaration ineligible for redundant internal marking.
+    private func shouldSkipAccessibilityAnalysis(for decl: Declaration) -> Bool {
+        // Generic type parameters must match their container's accessibility.
+        if decl.kind == .genericTypeParam { return true }
+
+        // Skip implicit (compiler-generated) declarations.
+        if decl.isImplicit { return true }
+
+        // Deinitializers cannot have explicit access modifiers in Swift.
+        if decl.kind == .functionDestructor { return true }
+
+        // Override methods must be at least as accessible as what they override.
+        if decl.isOverride { return true }
+
+        // Declarations with @usableFromInline must remain internal (or package).
+        // This attribute allows internal declarations to be inlined into client code,
+        // requiring them to maintain internal visibility.
+        if decl.attributes.contains(where: { $0.name == "usableFromInline" }) {
+            return true
+        }
+
+        return false
+    }
+
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
     /// Checks if a declaration is a protocol requirement or protocol conformance.
     ///
     /// Protocol requirements must maintain sufficient accessibility to fulfill the protocol
@@ -196,7 +272,11 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         // from the conforming declaration to the protocol requirement. If this declaration
         // has any related references pointing to protocol members with matching names,
         // it's implementing a protocol requirement.
+<<<<<<< HEAD
         let relatedReferences = graph.references(to: decl).filter { $0.kind == .related }
+=======
+        let relatedReferences = graph.references(to: decl).filter(\.isRelated)
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         for ref in relatedReferences {
             if let protocolDecl = graph.declaration(withUsr: ref.usr),
                protocolDecl.kind.isProtocolMemberKind || protocolDecl.kind == .associatedtype
@@ -205,6 +285,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             }
         }
 
+<<<<<<< HEAD
         // Case 3: Check for .related references FROM this declaration to protocol members.
         // This covers both internal AND external protocol conformances.
         for ref in decl.related where ref.declarationKind.isProtocolMemberConformingKind {
@@ -220,6 +301,16 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
                 // but the indexer created a .related reference with a protocol member kind
                 // AND the names match. This means this declaration implements an external
                 // protocol requirement.
+=======
+        // Alternative check: Look for related references FROM this declaration
+        // to protocol members. The ProtocolConformanceReferenceBuilder inverts
+        // these relationships, so we might find them either direction.
+        for ref in decl.related where ref.kind.isProtocolMemberConformingKind {
+            if let referencedDecl = graph.declaration(withUsr: ref.usr),
+               let referencedParent = referencedDecl.parent,
+               referencedParent.kind == .protocol
+            {
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                 return true
             }
         }
@@ -257,7 +348,11 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
             let siblings = parent.declarations
             let hasFunctionReference = siblings.contains { sibling in
                 sibling.kind.isFunctionKind && sibling.references.contains { ref in
+<<<<<<< HEAD
                     ref.declarationKind == .typealias && decl.usrs.contains(ref.usr)
+=======
+                    ref.kind == .typealias && decl.usrs.contains(ref.usr)
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                 }
             }
             if hasFunctionReference {
@@ -268,6 +363,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         return false
     }
 
+<<<<<<< HEAD
     /// Checks if a declaration is a stored property that's part of a struct's implicit memberwise
     /// initializer AND that initializer is used (either from outside the file OR from within
     /// the same file when the struct must remain internal).
@@ -429,6 +525,8 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         return false
     }
 
+=======
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
     /// Determines the effective maximum accessibility a member can have based on its parent's accessibility.
     ///
     /// In Swift, a member's effective accessibility is constrained by its parent. This helper
@@ -438,6 +536,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         guard let parent = decl.parent else { return nil }
 
         let parentAccessibility = parent.accessibility.value
+<<<<<<< HEAD
         return parentAccessibility <= .internal ? parentAccessibility : nil
     }
 
@@ -683,5 +782,76 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         }
 
         return false
+=======
+
+        switch parentAccessibility {
+        case .private:
+            return .private
+        case .fileprivate:
+            return .fileprivate
+        case .internal:
+            return .internal
+        case .public, .open:
+            return nil
+        }
+    }
+
+    /// Checks if a declaration is referenced from a different type in the same file.
+    ///
+    /// For internal accessibility analysis, this determines whether to suggest `fileprivate`
+    /// versus `private` when a declaration is only used within its file.
+    private func isReferencedFromDifferentTypeInSameFile(_ decl: Declaration) -> Bool {
+        let file = decl.location.file
+        let sameFileReferences = graph.references(to: decl).filter { $0.location.file == file }
+
+        guard let declTopLevel = topLevelType(of: decl) else {
+            return false
+        }
+
+        let declLogicalType = logicalType(of: declTopLevel, inFile: file)
+
+        for ref in sameFileReferences {
+            guard let refParent = ref.parent,
+                  let refTopLevel = topLevelType(of: refParent)
+            else {
+                continue
+            }
+
+            let refLogicalType = logicalType(of: refTopLevel, inFile: file)
+
+            if declLogicalType !== refLogicalType {
+                return true
+            }
+        }
+        return false
+    }
+
+    // Finds the top-level type declaration by walking up the parent chain.
+    private func topLevelType(of decl: Declaration) -> Declaration? {
+        let baseTypeKinds: Set<Declaration.Kind> = [.class, .struct, .enum, .protocol]
+        let typeKinds = baseTypeKinds.union(Declaration.Kind.extensionKinds)
+        let ancestors = [decl] + Array(decl.ancestralDeclarations)
+        return ancestors.last { typeDecl in
+            guard typeKinds.contains(typeDecl.kind) else { return false }
+            guard let parent = typeDecl.parent else { return true }
+
+            return !typeKinds.contains(parent.kind)
+        }
+    }
+
+    // Gets the logical type for comparison purposes when analyzing internal accessibility.
+    // For extensions of types in the SAME FILE, treats the extension as the extended type.
+    // For extensions of types in DIFFERENT FILES, treats the extension as its own distinct type.
+    private func logicalType(of decl: Declaration, inFile file: SourceFile) -> Declaration? {
+        if decl.kind.isExtensionKind {
+            if let extendedDecl = try? graph.extendedDeclaration(forExtension: decl),
+               extendedDecl.location.file == file
+            {
+                return extendedDecl
+            }
+            return decl
+        }
+        return decl
+>>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
     }
 }
