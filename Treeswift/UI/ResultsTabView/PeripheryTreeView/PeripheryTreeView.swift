@@ -678,20 +678,60 @@ struct PeripheryTreeView: View {
 
 	/**
 	 Shows the strategy sheet before removing unused code for a file.
+	 Skips the sheet when all warnings are visibility-only (no cascading effects possible).
 	 */
 	private func requestRemoveUnusedCode(for file: FileNode) {
-		pendingRemovalTarget = .file(file)
-		pendingDependencyChains = buildChainsForTarget(.file(file))
-		showStrategySheet = true
+		let target = RemovalTarget.file(file)
+		pendingRemovalTarget = target
+		if allWarningsAreVisibilityOnly(for: target) {
+			executePendingRemoval(target: target, strategy: .skipReferenced)
+		} else {
+			pendingDependencyChains = buildChainsForTarget(target)
+			showStrategySheet = true
+		}
 	}
 
 	/**
 	 Shows the strategy sheet before removing unused code for a folder.
+	 Skips the sheet when all warnings are visibility-only (no cascading effects possible).
 	 */
 	private func requestRemoveUnusedCodeInFolder(folder: FolderNode) {
-		pendingRemovalTarget = .folder(folder)
-		pendingDependencyChains = buildChainsForTarget(.folder(folder))
-		showStrategySheet = true
+		let target = RemovalTarget.folder(folder)
+		pendingRemovalTarget = target
+		if allWarningsAreVisibilityOnly(for: target) {
+			executePendingRemoval(target: target, strategy: .skipReferenced)
+		} else {
+			pendingDependencyChains = buildChainsForTarget(target)
+			showStrategySheet = true
+		}
+	}
+
+	/**
+	 Returns true when every visible warning in the target has a visibility-only annotation.
+	 Visibility warnings (redundant accessibility modifiers) cannot cause cascading effects,
+	 so the strategy sheet can be skipped.
+	 */
+	private func allWarningsAreVisibilityOnly(for target: RemovalTarget) -> Bool {
+		var filePaths: Set<String>
+		switch target {
+		case let .file(file):
+			filePaths = [file.path]
+		case let .folder(folder):
+			var files: [FileNode] = []
+			collectFilesWithWarnings(from: .folder(folder), into: &files)
+			filePaths = Set(files.map(\.path))
+		}
+
+		let relevantResults = scanResults.filter { scanResult in
+			let location = ScanResultHelper.location(from: scanResult.declaration)
+			guard filePaths.contains(location.file.path.string) else { return false }
+			if let filterState {
+				return filterState.shouldShow(scanResult: scanResult, declaration: scanResult.declaration)
+			}
+			return true
+		}
+
+		return !relevantResults.isEmpty && relevantResults.allSatisfy(\.annotation.isVisibilityOnly)
 	}
 
 	private var pendingRemovalTargetName: String {
@@ -1584,7 +1624,7 @@ private struct TreeNodeView: View {
 				Divider()
 
 				Button("Open in Xcode") {
-					openFileInEditor(path: file.path)
+					openFileInEditor(path: file.path, line: firstWarningLine(for: file))
 				}
 
 				Divider()
@@ -1598,6 +1638,16 @@ private struct TreeNodeView: View {
 				}
 			}
 		}
+	}
+
+	private func firstWarningLine(for file: FileNode) -> Int? {
+		resultIndex.filteredResults(
+			forFile: file.path,
+			filterState: filterState,
+			hiddenWarningIDs: hiddenWarningIDs
+		)
+		.map { ScanResultHelper.location(from: $0.declaration).line }
+		.min()
 	}
 
 	func toggleWithDescendants(for node: TreeNode) {

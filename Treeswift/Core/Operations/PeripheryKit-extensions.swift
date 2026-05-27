@@ -84,3 +84,18 @@ extension ScanResult.Annotation: @retroactive RawRepresentable {
 		nil
 	}
 }
+
+extension ScanResult.Annotation {
+	/// True when this annotation is a visibility/accessibility change only (no code removal).
+	var isVisibilityOnly: Bool {
+		switch self {
+		case .redundantPublicAccessibility,
+		     .redundantInternalAccessibility,
+		     .redundantFilePrivateAccessibility,
+		     .redundantAccessibility:
+			true
+		default:
+			false
+		}
+	}
+}
