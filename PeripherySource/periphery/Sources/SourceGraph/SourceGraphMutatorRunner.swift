@@ -45,7 +45,6 @@ public final class SourceGraphMutatorRunner {
         SwiftTestingRetainer.self,
         SwiftUIRetainer.self,
         AppIntentsRetainer.self,
-        ObservableMacroRetainer.self,
         StringInterpolationAppendInterpolationRetainer.self,
         PropertyWrapperRetainer.self,
         ResultBuilderRetainer.self,

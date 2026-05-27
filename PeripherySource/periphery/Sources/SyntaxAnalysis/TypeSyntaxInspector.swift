@@ -55,8 +55,7 @@ struct TypeSyntaxInspector {
         } else if let funcType = typeSyntax.as(FunctionTypeSyntax.self) {
             // Function type.
             let argumentTypes = funcType.parameters.flatMapSet { types(for: $0.type) }
-            let throwTypes = funcType.effectSpecifiers?.throwsClause?.type.map { types(for: $0) } ?? []
-            return types(for: funcType.returnClause.type).union(argumentTypes).union(throwTypes)
+            return types(for: funcType.returnClause.type).union(argumentTypes)
         } else if let arrayType = typeSyntax.as(ArrayTypeSyntax.self) {
             // Array type.
             return types(for: arrayType.element)

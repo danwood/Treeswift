@@ -5,17 +5,13 @@ require 'json'
 PRODUCTS = {
     "ArgumentParser" => "@swift_argument_parser",
     "SystemPackage" => "@swift-system",
-    "IndexStore" => "@swift-index-store",
+    "SwiftIndexStore" => "@swift-indexstore",
     "FilenameMatcher" => "@swift-filename-matcher",
     "Yams" => "@yams",
     "SwiftParser" => "@swift-syntax",
     "SwiftSyntax" => "@swift-syntax",
     "XcodeProj" => "@xcodeproj",
     "AEXML" => "@aexml",
-}
-
-VISIBILITY = {
-    "Frontend" => "@@+generated+periphery_generated//:__pkg__",
 }
 
 MACOS_DEPS = [
@@ -60,7 +56,7 @@ def quote(deps)
     deps.map { |dep| "\"#{dep}\"" }
 end
 
-def generate_attrs(target, name, path, sources, deps, visibility)
+def generate_attrs(target, name, path, sources, deps)
     attrs = {
         "name" => "\"#{name}\"",
         "module_name" => "\"#{name}\"",
@@ -81,10 +77,6 @@ def generate_attrs(target, name, path, sources, deps, visibility)
         attrs["deps"] = "[#{quote(deps).sort.join(",")}]" unless deps.empty?
     end
 
-    if visibility
-        attrs["visibility"] = "[\"#{visibility}\"]"
-    end
-
     attrs
 end
 
@@ -99,10 +91,7 @@ def generate_bazel_rule(path, rule, name, attrs)
         optimized_swift_binary(
             name = "#{name}_opt",
             target = ":#{name}",
-            visibility = [
-                "//:__pkg__",
-                "@@+generated+periphery_generated//:__pkg__",
-            ],
+            visibility = ["//:__pkg__"],
         )
         EOS
     else
@@ -131,8 +120,7 @@ rules = json["targets"].map do |target|
             else "swift_library"
             end
 
-    visibility = VISIBILITY[name]
-    attrs = generate_attrs(target, name, path, sources, deps, visibility)
+    attrs = generate_attrs(target, name, path, sources, deps)
     generate_bazel_rule(path, rule, name, attrs)
 end
 

@@ -11,9 +11,8 @@ var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/jpsim/Yams", from: "6.0.0"),
     .package(url: "https://github.com/tadija/AEXML", from: "4.0.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
-    // Use tag once https://github.com/MobileNativeFoundation/swift-index-store/issues/27 is resolved.
-    .package(url: "https://github.com/ileitch/swift-index-store", revision: "ed1f232d33b8e03956af0f4206fbd30171a43138"),
-    .package(url: "https://github.com/apple/swift-syntax", from: "603.0.0"),
+    .package(url: "https://github.com/kateinoigakukun/swift-indexstore", from: "0.4.0"),
+    .package(url: "https://github.com/apple/swift-syntax", from: "602.0.0"),
     .package(url: "https://github.com/ileitch/swift-filename-matcher", from: "2.0.0"),
 ]
 
@@ -92,7 +91,7 @@ var targets: [PackageDescription.Target] = [
             .product(name: "AEXML", package: "AEXML"),
             .product(name: "SwiftSyntax", package: "swift-syntax"),
             .product(name: "SwiftParser", package: "swift-syntax"),
-            .product(name: "IndexStore", package: "swift-index-store"),
+            .product(name: "SwiftIndexStore", package: "swift-indexstore"),
             .product(name: "FilenameMatcher", package: "swift-filename-matcher"),
         ]
     ),
@@ -101,7 +100,7 @@ var targets: [PackageDescription.Target] = [
         dependencies: [
             .target(name: "SyntaxAnalysis"),
             .target(name: "Shared"),
-            .product(name: "IndexStore", package: "swift-index-store"),
+            .product(name: "SwiftIndexStore", package: "swift-indexstore"),
             .product(name: "AEXML", package: "AEXML"),
         ]
     ),

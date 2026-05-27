@@ -3,14 +3,6 @@
 """
 
 def _generated_repo_impl(repository_ctx):
-    repository_ctx.file(
-        "visibility/BUILD.bazel",
-        """package_group(
-    name = "package_group",
-    packages = ["//..."],
-)
-""",
-    )
     repository_ctx.symlink(
         "/var/tmp/periphery_bazel/BUILD.bazel",
         "BUILD.bazel",

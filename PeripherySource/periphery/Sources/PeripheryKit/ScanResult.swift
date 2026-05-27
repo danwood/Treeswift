@@ -10,8 +10,8 @@ public struct ScanResult {
         case redundantPublicAccessibility(modules: Set<String>)
         case redundantInternalAccessibility(suggestedAccessibility: Accessibility?)
         case redundantFilePrivateAccessibility(containingTypeName: String?)
-        case redundantAccessibility(files: Set<SourceFile>)
         case superfluousIgnoreCommand
+        case redundantAccessibility(files: Set<SourceFile>)
     }
 
     public
@@ -19,15 +19,21 @@ public struct ScanResult {
     public
     let annotation: Annotation
 
+    // 🌲 Explicit public init so external modules (Treeswift) can construct ScanResult.
     public init(declaration: Declaration, annotation: Annotation) {
         self.declaration = declaration
         self.annotation = annotation
     }
 
     public var usrs: Set<String> {
-        if case .superfluousIgnoreCommand = annotation {
-            return declaration.usrs.mapSet { "superfluous-ignore-\($0)" }
-        }
-        return declaration.usrs
+        declaration.usrs
+    }
+
+    /// Indicates whether this result should be included in baselines.
+    /// Superfluous ignore command results are excluded since they're warnings
+    /// about unnecessary comments, not unused code.
+    public var includeInBaseline: Bool {
+        if case .superfluousIgnoreCommand = annotation { return false }
+        return true
     }
 }

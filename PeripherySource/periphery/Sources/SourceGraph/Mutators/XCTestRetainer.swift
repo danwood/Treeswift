@@ -14,7 +14,9 @@ final class XCTestRetainer: SourceGraphMutator {
     func mutate() {
         let immediateTestCaseClasses = graph.declarations(ofKind: .class).filter {
             $0.related.contains {
-                $0.declarationKind == .class && self.testCaseClassNames.contains($0.name)
+                guard let name = $0.name else { return false }
+
+                return $0.declarationKind == .class && self.testCaseClassNames.contains(name)
             }
         }
 
@@ -26,7 +28,7 @@ final class XCTestRetainer: SourceGraphMutator {
             let methods = testCaseClass.declarations.filter { $0.kind == .functionMethodInstance }
 
             for method in methods {
-                let name = method.name
+                guard let name = method.name else { continue }
 
                 if name.hasPrefix("test"), name.hasSuffix("()") {
                     graph.markRetained(method)

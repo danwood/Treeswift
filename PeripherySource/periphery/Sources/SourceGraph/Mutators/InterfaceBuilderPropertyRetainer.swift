@@ -20,7 +20,7 @@ final class InterfaceBuilderPropertyRetainer {
             for decl in extDecl.declarations {
                 // IBInspectable properties in extensions: check if referenced
                 if decl.attributes.contains(where: { ibInspectableAttributes.contains($0.name) }) {
-                    if referencedAttributes.contains(decl.name) {
+                    if let name = decl.name, referencedAttributes.contains(name) {
                         graph.markRetained(decl)
                     }
                 }
@@ -41,9 +41,11 @@ final class InterfaceBuilderPropertyRetainer {
         let allDeclarations = declaration.declarations.union(descendentInheritedDeclarations)
 
         for decl in allDeclarations {
+            guard let declName = decl.name else { continue }
+
             // Check IBOutlet properties
             if decl.attributes.contains(where: { ibOutletAttributes.contains($0.name) }) {
-                if referencedOutlets.contains(decl.name) {
+                if referencedOutlets.contains(declName) {
                     graph.markRetained(decl)
                 }
                 continue
@@ -51,7 +53,7 @@ final class InterfaceBuilderPropertyRetainer {
 
             // Check IBAction/IBSegueAction methods
             if decl.attributes.contains(where: { ibActionAttributes.contains($0.name) }) {
-                let selectorName = Self.swiftNameToSelector(decl.name)
+                let selectorName = Self.swiftNameToSelector(declName)
                 if referencedActions.contains(selectorName) {
                     graph.markRetained(decl)
                 }
@@ -60,7 +62,7 @@ final class InterfaceBuilderPropertyRetainer {
 
             // Check IBInspectable properties
             if decl.attributes.contains(where: { ibInspectableAttributes.contains($0.name) }) {
-                if referencedAttributes.contains(decl.name) {
+                if referencedAttributes.contains(declName) {
                     graph.markRetained(decl)
                 }
                 continue

@@ -223,7 +223,7 @@ public final class Declaration: @unchecked Sendable {
     public var modifiers: Set<String> = []
     public var accessibility: DeclarationAccessibility = .init(value: .internal, isExplicit: false)
     public let kind: Kind
-    public let name: String
+    public var name: String?
     public let usrs: Set<String>
     public var unusedParameters: Set<Declaration> = []
     public var declarations: Set<Declaration> = []
@@ -235,7 +235,6 @@ public final class Declaration: @unchecked Sendable {
     public var related: Set<Reference> = []
     public var isImplicit: Bool = false
     public var isObjcAccessible: Bool = false
-    public var referencedFiles: Set<SourceFile>
 
     private let hashValueCache: Int
 
@@ -291,17 +290,10 @@ public final class Declaration: @unchecked Sendable {
         related.filter { $0.declarationKind == kind && $0.name == name }
     }
 
-    public init(
-        name: String,
-        kind: Kind,
-        usrs: Set<String>,
-        location: Location
-    ) {
-        self.name = name
+    public init(kind: Kind, usrs: Set<String>, location: Location) {
         self.kind = kind
         self.usrs = usrs
         self.location = location
-        self.referencedFiles = [location.file]
         hashValueCache = usrs.hashValue
     }
 
@@ -330,7 +322,7 @@ extension Declaration: CustomStringConvertible {
     }
 
     private var descriptionParts: [String] {
-        let formattedName = "'\(name)'"
+        let formattedName = name != nil ? "'\(name!)'" : "nil"
         let formattedAttributes = "[" + attributes.sorted().map(\.description).joined(separator: ", ") + "]"
         let formattedModifiers = "[" + modifiers.sorted().joined(separator: ", ") + "]"
         let formattedCommentCommands = "[" + commentCommands.map(\.description).sorted().joined(separator: ", ") + "]"

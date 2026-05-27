@@ -22,9 +22,8 @@ public final class SourceGraph {
     public private(set) var indexedSourceFiles: [SourceFile] = []
     public private(set) var unusedModuleImports: Set<Declaration> = []
     public private(set) var assignOnlyProperties: Set<Declaration> = []
-    public private(set) var suppressedAssignOnlyProperties: Set<Declaration> = []
     public private(set) var extensions: [Declaration: Set<Declaration>] = [:]
-    public private(set) var commandIgnoredDeclarations: [Declaration: CommandIgnoreKind] = [:]
+    public private(set) var explicitlyIgnoredDeclarations: Set<Declaration> = []
     public private(set) var functionsWithIgnoredParameters: Set<Declaration> = []
 
     private var indexedModules: Set<String> = []
@@ -96,7 +95,7 @@ public final class SourceGraph {
     }
 
     func unmarkRedundantInternalAccessibility(_ declaration: Declaration) {
-        _ = redundantInternalAccessibility.removeValue(forKey: declaration)
+        redundantInternalAccessibility.removeValue(forKey: declaration)
     }
 
     func markRedundantFilePrivateAccessibility(_ declaration: Declaration, containingTypeName: String?) {
@@ -111,8 +110,8 @@ public final class SourceGraph {
         _ = ignoredDeclarations.insert(declaration)
     }
 
-    public func markCommandIgnored(_ declaration: Declaration, kind: CommandIgnoreKind) {
-        commandIgnoredDeclarations[declaration] = kind
+    public func markExplicitlyIgnored(_ declaration: Declaration) {
+        _ = explicitlyIgnoredDeclarations.insert(declaration)
     }
 
     public func markHasIgnoredParameters(_ declaration: Declaration) {
@@ -123,12 +122,12 @@ public final class SourceGraph {
         if let parent = declaration.parent {
             for usr in declaration.usrs {
                 let reference = Reference(
-                    name: declaration.name,
                     kind: .retained,
                     declarationKind: declaration.kind,
                     usr: usr,
                     location: declaration.location
                 )
+                reference.name = declaration.name
                 reference.parent = parent
                 add(reference, from: parent)
             }
@@ -159,10 +158,6 @@ public final class SourceGraph {
         _ = assignOnlyProperties.insert(declaration)
     }
 
-    func markSuppressedAssignOnlyProperty(_ declaration: Declaration) {
-        _ = suppressedAssignOnlyProperties.insert(declaration)
-    }
-
     func markMainAttributed(_ declaration: Declaration) {
         _ = mainAttributedDeclarations.insert(declaration)
     }
@@ -183,14 +178,8 @@ public final class SourceGraph {
                 Conflicting declaration: \(declaration), declared in modules: \(declaration.location.file.modules.sorted())
                 To resolve this warning, make sure all build modules are uniquely named.
                 """)
-                // Keep the declaration that sorts first to ensure deterministic results
-                // regardless of indexing order.
-                if declaration < existingDecl {
-                    allDeclarationsByUsr[usr] = declaration
-                }
-            } else {
-                allDeclarationsByUsr[usr] = declaration
             }
+            allDeclarationsByUsr[usr] = declaration
         }
     }
 
@@ -205,7 +194,6 @@ public final class SourceGraph {
         rootDeclarations.remove(declaration)
         usedDeclarations.remove(declaration)
         assignOnlyProperties.remove(declaration)
-        suppressedAssignOnlyProperties.remove(declaration)
         declaration.usrs.forEach { allDeclarationsByUsr.removeValue(forKey: $0) }
     }
 
@@ -296,7 +284,8 @@ public final class SourceGraph {
     func markUnusedModuleImport(_ statement: ImportStatement) {
         let location = statement.location.relativeTo(configuration.projectRoot)
         let usr = "import-\(statement.module)-\(location)"
-        let decl = Declaration(name: statement.module, kind: .module, usrs: [usr], location: statement.location)
+        let decl = Declaration(kind: .module, usrs: [usr], location: statement.location)
+        decl.name = statement.module
         unusedModuleImports.insert(decl)
     }
 
@@ -346,9 +335,7 @@ public final class SourceGraph {
             throw PeripheryError.sourceGraphIntegrityError(message: "Unknown extended reference kind for extension '\(extensionDeclaration.kind.rawValue)'")
         }
 
-        return extensionDeclaration.references
-            .filter { $0.declarationKind == extendedKind && $0.name == extensionDeclaration.name }
-            .min()
+        return extensionDeclaration.references.first(where: { $0.declarationKind == extendedKind && $0.name == extensionDeclaration.name })
     }
 
     func extendedDeclaration(forExtension extensionDeclaration: Declaration) throws -> Declaration? {
@@ -367,7 +354,7 @@ public final class SourceGraph {
         let overridenDecl = decl.related
             .filter { $0.declarationKind == decl.kind && $0.name == decl.name }
             .compactMap { declaration(withUsr: $0.usr) }
-            .min()
+            .first
 
         guard let overridenDecl else {
             return []
@@ -386,7 +373,7 @@ public final class SourceGraph {
                     $0.name == decl.name
             }
             .compactMap(\.parent)
-            .min()
+            .first
 
         guard let baseDecl else {
             // Base reference is external, return the current function as it's the closest.
@@ -411,7 +398,9 @@ public final class SourceGraph {
         let codableTypes = ["Codable", "Decodable", "Encodable"] + configuration.externalEncodableProtocols + configuration.externalCodableProtocols
 
         return inheritedTypeReferences(of: decl).contains {
-            [.protocol, .typealias].contains($0.declarationKind) && codableTypes.contains($0.name)
+            guard let name = $0.name else { return false }
+
+            return [.protocol, .typealias].contains($0.declarationKind) && codableTypes.contains(name)
         }
     }
 
@@ -419,7 +408,9 @@ public final class SourceGraph {
         let encodableTypes = ["Encodable"] + configuration.externalEncodableProtocols + configuration.externalCodableProtocols
 
         return inheritedTypeReferences(of: decl).contains {
-            [.protocol, .typealias].contains($0.declarationKind) && encodableTypes.contains($0.name)
+            guard let name = $0.name else { return false }
+
+            return [.protocol, .typealias].contains($0.declarationKind) && encodableTypes.contains(name)
         }
     }
 
@@ -427,7 +418,8 @@ public final class SourceGraph {
         let equatableTypes = ["Equatable", "Hashable"]
 
         return inheritedTypeReferences(of: decl).contains {
-            [.protocol, .typealias].contains($0.declarationKind) && equatableTypes.contains($0.name)
+            guard let name = $0.name else { return false }
+            return [.protocol, .typealias].contains($0.declarationKind) && equatableTypes.contains(name)
         }
     }
 
