@@ -81,6 +81,35 @@ final class ScanResultIndex {
 	}
 
 	/**
+	 Returns removable scan results for a file, ignoring topLevelOnly.
+
+	 Used during batch removal to find all warnings that should be fixed,
+	 including nested declarations that topLevelOnly would hide from the UI.
+	 */
+	func filteredResultsForRemoval(
+		forFile path: String,
+		filterState: FilterState?,
+		hiddenWarningIDs: Set<String>
+	) -> [ScanResult] {
+		let fileResults = results(forFile: path)
+		return fileResults.filter { scanResult in
+			let declaration = scanResult.declaration
+
+			if let filterState, !filterState.shouldShowForRemoval(scanResult: scanResult, declaration: declaration) {
+				return false
+			}
+
+			let usr = declaration.usrs.first ?? ""
+			let warningID = "\(path):\(usr)"
+			if hiddenWarningIDs.contains(warningID) {
+				return false
+			}
+
+			return true
+		}
+	}
+
+	/**
 	 Invalidates the filtered results cache when filter state changes.
 
 	 - Parameter filterState: The new filter state

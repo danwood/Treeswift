@@ -276,6 +276,16 @@ final class FilterState {
 			return false
 		}
 
+		return shouldShowIgnoringTopLevel(scanResult: scanResult, declaration: declaration)
+	}
+
+	// Used during batch removal — respects annotation/type filters but ignores topLevelOnly,
+	// so nested declarations (properties inside types, etc.) are not silently skipped.
+	func shouldShowForRemoval(scanResult: ScanResult, declaration: Declaration) -> Bool {
+		shouldShowIgnoringTopLevel(scanResult: scanResult, declaration: declaration)
+	}
+
+	private func shouldShowIgnoringTopLevel(scanResult: ScanResult, declaration: Declaration) -> Bool {
 		// Check annotation filter
 		let annotationString = scanResult.annotation.warningType
 		if let keyPath = Self.annotationFilterMap[annotationString] {

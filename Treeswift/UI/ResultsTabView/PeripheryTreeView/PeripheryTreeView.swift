@@ -793,7 +793,7 @@ struct PeripheryTreeView: View {
 			guard filePathSet.contains(location.file.path.string) else { return nil }
 
 			if let filterState {
-				guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
+				guard filterState.shouldShowForRemoval(scanResult: scanResult, declaration: declaration) else {
 					return nil
 				}
 			}
@@ -1459,8 +1459,8 @@ struct PeripheryTreeView: View {
 	private func collectFilesWithWarnings(from node: TreeNode, into files: inout [FileNode]) {
 		switch node {
 		case let .file(file):
-			// Check if file has any visible warnings using the index
-			let filteredResults = resultIndex.filteredResults(
+			// Use removal-aware filter so files with only nested warnings are included.
+			let filteredResults = resultIndex.filteredResultsForRemoval(
 				forFile: file.path,
 				filterState: filterState,
 				hiddenWarningIDs: hiddenWarningIDs

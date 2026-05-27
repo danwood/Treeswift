@@ -55,7 +55,7 @@ extension FileNode {
 			let location = ScanResultHelper.location(from: declaration)
 			guard location.file.path.string == path else { return false }
 			if let filterState {
-				guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
+				guard filterState.shouldShowForRemoval(scanResult: scanResult, declaration: declaration) else {
 					return false
 				}
 			}
@@ -81,7 +81,7 @@ extension FileNode {
 				guard location.file.path.string == path else { return nil }
 
 				if let filterState {
-					guard filterState.shouldShow(scanResult: scanResult, declaration: declaration) else {
+					guard filterState.shouldShowForRemoval(scanResult: scanResult, declaration: declaration) else {
 						return nil
 					}
 				}
