@@ -120,11 +120,11 @@ struct ScanResultHelper {
 		nearColumn: Int,
 		backgroundColor: Color,
 		makeDeclarationBold: Bool = false
-	) -> AttributedString {
+	) -> AttributedString? {
 		var result = AttributedString()
 
 		guard nearColumn > 0, nearColumn <= line.count else {
-			return AttributedString(line)
+			return nil
 		}
 
 		if let range = findSymbolInLine(line: line, symbolName: text, nearColumn: nearColumn) {
@@ -179,7 +179,7 @@ struct ScanResultHelper {
 			return result
 		}
 
-		return AttributedString(line)
+		return nil
 	}
 
 	// Extract and highlight symbol in source line at specified column
@@ -256,28 +256,27 @@ struct ScanResultHelper {
 		let highlightColor = Color(nsColor: .selectedTextBackgroundColor).opacity(0.4)
 
 		// Try exact match first
-		let exactMatch = highlightTextInLine(
+		if let exactMatch = highlightTextInLine(
 			line: line,
 			text: symbolName,
 			nearColumn: column,
 			backgroundColor: highlightColor,
 			makeDeclarationBold: makeDeclarationBold
-		)
-		if exactMatch.characters.count > line.count {
-			// Highlighting was applied (attributed string has more content due to attributes)
+		) {
 			return exactMatch
 		}
 
 		// Fallback: try to find longest common prefix
 		// e.g., "matchesFilter(_:)" -> "matchesFilter"
-		if let baseSymbol = extractBaseSymbolName(from: symbolName) {
-			return highlightTextInLine(
-				line: line,
-				text: baseSymbol,
-				nearColumn: column,
-				backgroundColor: highlightColor,
-				makeDeclarationBold: makeDeclarationBold
-			)
+		if let baseSymbol = extractBaseSymbolName(from: symbolName),
+		   let fallback = highlightTextInLine(
+		   	line: line,
+		   	text: baseSymbol,
+		   	nearColumn: column,
+		   	backgroundColor: highlightColor,
+		   	makeDeclarationBold: makeDeclarationBold
+		   ) {
+			return fallback
 		}
 
 		// Apply semibold to entire line by default
