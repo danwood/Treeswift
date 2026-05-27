@@ -51,8 +51,8 @@ enum RemovalHandler {
 			return .error("configuration not found", status: 404)
 		}
 
-		let (scanResults, sourceGraph, treeNodes, isScanning) = await MainActor.run {
-			(state.scanResults, state.sourceGraph, state.treeNodes, state.isScanning)
+		let (scanResults, sourceGraph, treeNodes, isScanning, filterState) = await MainActor.run {
+			(state.scanResults, state.sourceGraph, state.treeNodes, state.isScanning, server.filterState)
 		}
 
 		if scanResults.isEmpty, !isScanning {
@@ -79,7 +79,7 @@ enum RemovalHandler {
 		for fileNode in targetFiles {
 			let result = fileNode.computeRemoval(
 				scanResults: filteredScanResults,
-				filterState: nil,
+				filterState: filterState,
 				sourceGraph: sourceGraph,
 				strategy: strategy,
 				allUnusedDeclarations: allUnused,
@@ -121,8 +121,8 @@ enum RemovalHandler {
 			return .error("configuration not found", status: 404)
 		}
 
-		let (scanResults, sourceGraph, treeNodes, isScanning) = await MainActor.run {
-			(state.scanResults, state.sourceGraph, state.treeNodes, state.isScanning)
+		let (scanResults, sourceGraph, treeNodes, isScanning, filterState) = await MainActor.run {
+			(state.scanResults, state.sourceGraph, state.treeNodes, state.isScanning, server.filterState)
 		}
 
 		if scanResults.isEmpty, !isScanning {
@@ -153,7 +153,7 @@ enum RemovalHandler {
 		for fileNode in targetFiles {
 			let result = fileNode.computeRemoval(
 				scanResults: filteredScanResults,
-				filterState: nil,
+				filterState: filterState,
 				sourceGraph: sourceGraph,
 				strategy: strategy,
 				allUnusedDeclarations: allUnused,

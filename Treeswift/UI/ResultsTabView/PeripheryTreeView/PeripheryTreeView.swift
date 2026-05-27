@@ -64,7 +64,7 @@ struct PeripheryTreeView: View {
 		let targetName: String
 	}
 
-	fileprivate static let removeUnusedCodeLabel = "Remove Unused Code…"
+	private static let removeUnusedCodeLabel = "Remove Unused Code…"
 
 	var body: some View {
 		// Force dependency on filterChangeCounter by accessing it in body
@@ -1656,7 +1656,7 @@ private struct TreeNodeView: View {
 		}
 	}
 
-	private func firstWarningLine(for file: FileNode) -> Int? {
+	func firstWarningLine(for file: FileNode) -> Int? {
 		resultIndex.filteredResults(
 			forFile: file.path,
 			filterState: filterState,

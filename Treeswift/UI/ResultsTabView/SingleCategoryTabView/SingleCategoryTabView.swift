@@ -405,11 +405,11 @@ struct SingleCategoryTabView: View {
 	var projectRootPath: String?
 	let indentLevel: Int
 
-	private var hasChildren: Bool {
+	var hasChildren: Bool {
 		node.outlineChildren != nil
 	}
 
-	private var isExpanded: Bool {
+	var isExpanded: Bool {
 		expandedIDs.contains(node.id)
 	}
 

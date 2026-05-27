@@ -11,7 +11,7 @@ import Foundation
 @Observable
 @MainActor
 final class TypeAheadState {
-	private(set) var typeBuffer: String = ""
+	private var typeBuffer: String = ""
 	private var resetTask: Task<Void, Never>?
 	private let resetDelay: Duration = .seconds(1.5)
 
