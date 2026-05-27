@@ -40,8 +40,13 @@ final class SwiftUIRetainer: SourceGraphMutator {
     }
 
     private func retainApplicationDelegateAdaptors() {
-        graph
-            .mainAttributedDeclarations
+        // SwiftUI App conformances don't carry a @main attribute in source (the compiler synthesizes
+        // the entry point), so mainAttributedDeclarations is empty for SwiftUI apps. Fall back to
+        // searching all class/struct declarations when no @main-attributed type is found.
+        let candidateParents: Set<Declaration> = graph.mainAttributedDeclarations.isEmpty
+            ? Set(graph.declarations(ofKinds: [.class, .struct]))
+            : graph.mainAttributedDeclarations
+        candidateParents
             .lazy
             .flatMap(\.declarations)
             .filter { $0.kind == .varInstance }
@@ -50,7 +55,19 @@ final class SwiftUIRetainer: SourceGraphMutator {
                     ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name ?? "")
                 }
             }
-            .forEach { graph.markRetained($0) }
+            .forEach { property in
+                graph.markRetained(property)
+                // The delegate class (e.g. AppDelegate) is passed as a metatype argument
+                // to the adaptor. It exists only within the same file, so Periphery may
+                // suggest downgrading it to fileprivate — but doing so causes a compiler
+                // error because the property referencing it must match its access level.
+                // Unmark it from redundant-internal analysis so no suggestion is emitted.
+                for ref in property.references where ref.declarationKind == .class {
+                    if let delegateDecl = graph.declaration(withUsr: ref.usr) {
+                        graph.unmarkRedundantInternalAccessibility(delegateDecl)
+                    }
+                }
+            }
     }
 
     private func unretainPreviewMacroExpansions() {
