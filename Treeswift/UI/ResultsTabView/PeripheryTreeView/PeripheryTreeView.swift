@@ -87,7 +87,8 @@ struct PeripheryTreeView: View {
 						onRemoveAllUnusedCodeInFolder: requestRemoveUnusedCodeInFolder,
 						copyMenuLabel: copyMenuLabel,
 						copyPathMenuLabel: copyPathMenuLabel,
-						copyFilePathsToClipboard: copyFilePathsToClipboard
+						copyFilePathsToClipboard: copyFilePathsToClipboard,
+						removeUnusedCodeMenuLabel: removeUnusedCodeMenuLabel
 					)
 					.frame(maxWidth: .infinity, alignment: .leading)
 				}
@@ -616,6 +617,19 @@ struct PeripheryTreeView: View {
 	private func copyPathMenuLabel(for node: TreeNode) -> String {
 		let fileCount = countFiles(in: node)
 		return fileCount == 1 ? "Copy File Path" : "Copy File Paths"
+	}
+
+	private func removeUnusedCodeMenuLabel(for node: TreeNode) -> String {
+		allWarningsAreVisibilityOnly(for: removalTarget(for: node))
+			? "Remove Unused Code"
+			: "Remove Unused Code…"
+	}
+
+	private func removalTarget(for node: TreeNode) -> RemovalTarget {
+		switch node {
+		case let .file(file): .file(file)
+		case let .folder(folder): .folder(folder)
+		}
 	}
 
 	/**
@@ -1481,6 +1495,7 @@ private struct TreeNodeView: View {
 	let copyMenuLabel: (TreeNode) -> String
 	let copyPathMenuLabel: (TreeNode) -> String
 	let copyFilePathsToClipboard: (TreeNode) -> Void
+	let removeUnusedCodeMenuLabel: (TreeNode) -> String
 
 	var body: some View {
 		switch node {
@@ -1505,7 +1520,8 @@ private struct TreeNodeView: View {
 						onRemoveAllUnusedCodeInFolder: onRemoveAllUnusedCodeInFolder,
 						copyMenuLabel: copyMenuLabel,
 						copyPathMenuLabel: copyPathMenuLabel,
-						copyFilePathsToClipboard: copyFilePathsToClipboard
+						copyFilePathsToClipboard: copyFilePathsToClipboard,
+						removeUnusedCodeMenuLabel: removeUnusedCodeMenuLabel
 					)
 				}
 			} label: {
@@ -1562,7 +1578,7 @@ private struct TreeNodeView: View {
 
 					Divider()
 
-					Button(PeripheryTreeView.removeUnusedCodeLabel) {
+					Button(removeUnusedCodeMenuLabel(.folder(folder))) {
 						onRemoveAllUnusedCodeInFolder(folder)
 					}
 
@@ -1629,7 +1645,7 @@ private struct TreeNodeView: View {
 
 				Divider()
 
-				Button(PeripheryTreeView.removeUnusedCodeLabel) {
+				Button(removeUnusedCodeMenuLabel(.file(file))) {
 					onRemoveAllUnusedCode(file)
 				}
 

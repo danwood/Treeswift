@@ -69,6 +69,22 @@ Place new helpers in the appropriate layer folder, not at the top level:
 - Back-end domain utilities (no SwiftUI/AppKit) → `Core/Utilities/`
 - UI-only helpers (SwiftUI/AppKit) → `UI/Helpers/`
 
+## Treeswift Analyzing Its Own Code — CRITICAL RULE
+
+Treeswift is regularly run against its own codebase. When Periphery flags something in Treeswift's own Swift files, **NEVER just patch the flagged code to silence the warning.** That is treating the symptom, not the cause.
+
+Every such warning is evidence of one of two problems:
+
+1. **Periphery analysis is wrong** — the detection logic has a bug or blind spot (e.g., it cannot see that a nested struct's `fileprivate` member is accessed from the outer type's method). The fix belongs in the Periphery analysis code — either in `PeripherySource/periphery/` (if Treeswift-specific) or in the upstream `danwood/periphery` repo (if a general analysis bug).
+
+2. **Treeswift's action is wrong** — the suggested fix or automated removal Treeswift would apply to the flagged code is incorrect. The fix belongs in Treeswift's analysis, suggestion, or code-modification logic.
+
+**When encountering a Periphery warning on Treeswift's own code:**
+- Stop and determine which of the two cases applies.
+- Ask the user if the correct course of action is unclear.
+- Never change the flagged code just to make the warning disappear.
+- A `periphery:ignore` suppression comment is acceptable only as a last resort, after confirming the analysis is a genuine false positive with no better fix available.
+
 ## Modifying PeripherySource/periphery Files
 
 **CRITICAL: Two categories of changes — different workflows.**
