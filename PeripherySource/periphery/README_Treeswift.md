@@ -24,7 +24,17 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 ### Upstream Branch Workflow (CRITICAL)
 
-`combine-master-redundant-nested-1062` is a **merge target** — it is built by merging the source branches together. **Never commit analysis changes directly to `combine-master-redundant-nested-1062`.** Doing so creates duplicate commits and breaks the merge topology.
+The `danwood/periphery` repo has several branches that exist solely to support Treeswift. They are not intended for general Periphery users.
+
+```
+master              ← SwiftUI/AppDelegate fixes, false positive fixes, general analysis improvements
+redundant-nested    ← Redundant nested access detection feature
+fix-1062            ← Fix for upstream issue #1062
+                         ↓ (all three merged into)
+combine-master-redundant-nested-1062   ← Treeswift pulls from this branch via git subtree
+```
+
+`combine-master-redundant-nested-1062` is a **merge target** — built by merging the source branches together. **Never commit analysis changes directly to `combine-master-redundant-nested-1062`.** Doing so creates duplicate commits and breaks the merge topology.
 
 The correct flow for any upstream analysis fix:
 
@@ -32,10 +42,17 @@ The correct flow for any upstream analysis fix:
    - General analysis fixes, SwiftUI retainer, false positive fixes → `master`
    - Redundant nested access changes → `redundant-nested`
    - Issue 1062 fix → `fix-1062`
-2. Then merge source branch(es) into `combine-master-redundant-nested-1062`
-3. Then pull into Treeswift via `git subtree pull`
-
-See `BRANCHES.md` in the `danwood/periphery` repo for the full branch map and merge commands.
+2. Merge source branch(es) into `combine-master-redundant-nested-1062`:
+   ```bash
+   git checkout combine-master-redundant-nested-1062
+   git merge master          # or redundant-nested / fix-1062 as appropriate
+   git push origin combine-master-redundant-nested-1062
+   ```
+3. Pull into Treeswift via `git subtree pull`:
+   ```bash
+   git fetch danwood-fork combine-master-redundant-nested-1062
+   git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
+   ```
 
 ## Modification Categories
 
