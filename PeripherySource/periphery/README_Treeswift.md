@@ -262,6 +262,40 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 8. Fix let-binding false positives in assignOnlyProperty detection (+14 lines across 4 files)
+
+**Purpose**: Prevent false positive `assignOnlyProperty` warnings on `let` stored properties.
+
+**Root cause**: SourceKit emits a `functionAccessorSetter` declaration for `let` stored properties (representing the init-time assignment). When a `let` property is only read via compiler-synthesized code (Codable `encode(to:)`, `Hashable`/`Equatable` synthesis, SwiftUI `@ViewBuilder`), no indexed getter references are produced. `AssignOnlyPropertyReferenceEliminator` incorrectly flags these as assign-only.
+
+**Note**: This is a general analysis fix that should eventually be contributed upstream to danwood/periphery.
+
+#### `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift` (+7 lines)
+
+**Changes**:
+1. Added `isLetBinding: Bool` to `Result` tuple
+2. Added `isLetBinding: Bool = false` parameter to `parse()`
+3. In `visitPost(_ node: VariableDeclSyntax)`: compute `isLetBinding` from `node.bindingSpecifier.tokenKind == .keyword(.let)` and pass it to `parse()`
+4. In `visitVariableTupleBinding()`: same — compute and pass `isLetBinding`
+5. In `results.append(...)`: include `isLetBinding: isLetBinding`
+
+#### `Sources/SourceGraph/Elements/Declaration.swift` (+1 line)
+
+**Changes**:
+1. Added `public var isLetBinding: Bool = false` property
+
+#### `Sources/Indexer/SwiftIndexer.swift` (+1 line)
+
+**Changes**:
+1. In `applyDeclarationMetadata`: added `decl.isLetBinding = result.isLetBinding`
+
+#### `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift` (+5 lines)
+
+**Changes**:
+1. Added `!property.isLetBinding` guard condition with explanatory comment
+
+---
+
 ## Critical Files for Future Updates
 
 Files that MUST preserve modifications:

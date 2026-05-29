@@ -25,6 +25,10 @@ final class AssignOnlyPropertyReferenceEliminator: SourceGraphMutator {
                   !graph.isRetained(property),
                   property.attributes.isEmpty,
                   !property.isComplexProperty,
+                  // Skip let-bound stored properties: their only "setter" is the implicit init accessor,
+                  // and reads via Codable synthesis, Hashable/Equatable synthesis, or SwiftUI body builders
+                  // do not produce indexed getter references. Flagging these produces false positives.
+                  !property.isLetBinding,
                   // A protocol property can technically be assigned and never used when the protocol is used as an existential
                   // type, however communicating that succinctly would be very tricky, and most likely just lead to confusion.
                   // Here we filter out protocol properties and thus restrict this analysis only to concrete properties.
