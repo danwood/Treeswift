@@ -22,6 +22,21 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 **General Periphery analysis changes** (new scan rules, bug fixes in mutators, new detection patterns) must NOT be applied here. They belong in the upstream repository (danwood/periphery) and should be pulled into Treeswift via `git subtree pull`. If a task requires such a change, stop and make a plan to apply it to the correct upstream branch first.
 
+### Upstream Branch Workflow (CRITICAL)
+
+`combine-master-redundant-nested-1062` is a **merge target** — it is built by merging the source branches together. **Never commit analysis changes directly to `combine-master-redundant-nested-1062`.** Doing so creates duplicate commits and breaks the merge topology.
+
+The correct flow for any upstream analysis fix:
+
+1. Commit to the appropriate source branch in `danwood/periphery`:
+   - General analysis fixes, SwiftUI retainer, false positive fixes → `master`
+   - Redundant nested access changes → `redundant-nested`
+   - Issue 1062 fix → `fix-1062`
+2. Then merge source branch(es) into `combine-master-redundant-nested-1062`
+3. Then pull into Treeswift via `git subtree pull`
+
+See `BRANCHES.md` in the `danwood/periphery` repo for the full branch map and merge commands.
+
 ## Modification Categories
 
 ### 1. Package Structure Changes (CRITICAL)
