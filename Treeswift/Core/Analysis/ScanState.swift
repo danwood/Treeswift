@@ -364,13 +364,6 @@ final class ScanState {
 		}
 	}
 
-	func restoreFromCache(_ cache: ScanCache) {
-		Task.detached(priority: .userInitiated) {
-			let pre = await PreRestoredCache(from: cache)
-			await MainActor.run { self.applyPreRestoredCache(pre) }
-		}
-	}
-
 	/// Apply a pre-deserialized cache that was prepared off the main actor.
 	/// All assignments here are cheap — the expensive work is done in PreRestoredCache.init.
 	func applyPreRestoredCache(_ pre: PreRestoredCache) {
