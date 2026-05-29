@@ -111,7 +111,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainObjcAnnotated: Bool = false,
 		retainUnusedProtocolFuncParams: Bool = false,
 		retainSwiftUIPreviews: Bool = false,
-		retainCodableProperties: Bool = false,
+		retainCodableProperties: Bool = true,
 		retainEncodableProperties: Bool = false,
 		externalEncodableProtocols: [String] = [],
 		externalCodableProtocols: [String] = [],
@@ -268,7 +268,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainObjcAnnotated = try container.decode(Bool.self, forKey: .retainObjcAnnotated)
 		retainUnusedProtocolFuncParams = try container.decode(Bool.self, forKey: .retainUnusedProtocolFuncParams)
 		retainSwiftUIPreviews = true // FIXME: try container.decode(Bool.self, forKey: .retainSwiftUIPreviews)
-		retainCodableProperties = try container.decode(Bool.self, forKey: .retainCodableProperties)
+		retainCodableProperties = try container.decodeIfPresent(Bool.self, forKey: .retainCodableProperties) ?? true
 		retainEncodableProperties = try container.decode(Bool.self, forKey: .retainEncodableProperties)
 		externalEncodableProtocols = try container.decode([String].self, forKey: .externalEncodableProtocols)
 		externalCodableProtocols = try container.decode([String].self, forKey: .externalCodableProtocols)

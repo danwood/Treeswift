@@ -1,3 +1,5 @@
 project: Treeswift.xcodeproj
 schemes:
 - Treeswift
+retain_unused_imported_modules:
+- SourceGraph
