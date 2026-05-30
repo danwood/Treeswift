@@ -236,6 +236,7 @@ public final class Declaration: @unchecked Sendable {
     public var isImplicit: Bool = false
     public var isObjcAccessible: Bool = false
     public var isLetBinding: Bool = false
+    public var inheritedTypeNames: Set<String> = []
 
     private let hashValueCache: Int
 

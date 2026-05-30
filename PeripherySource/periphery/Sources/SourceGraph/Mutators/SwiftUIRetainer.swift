@@ -28,12 +28,16 @@ final class SwiftUIRetainer: SourceGraphMutator {
             names.append("PreviewProvider")
         }
 
+        let nameSet = Set(names)
         graph
             .declarations(ofKinds: [.class, .struct, .enum])
             .lazy
-            .filter {
-                $0.related.contains {
-                    self.graph.isExternal($0) && $0.declarationKind == .protocol && names.contains($0.name ?? "")
+            .filter { decl in
+                // Primary: check syntactically-captured inheritance clause names (works for external protocols)
+                if !decl.inheritedTypeNames.isDisjoint(with: nameSet) { return true }
+                // Fallback: check related references (works for locally-defined protocols)
+                return decl.related.contains {
+                    self.graph.isExternal($0) && $0.declarationKind == .protocol && nameSet.contains($0.name ?? "")
                 }
             }
             .forEach { graph.markRetained($0) }

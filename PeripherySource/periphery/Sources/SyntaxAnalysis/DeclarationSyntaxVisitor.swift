@@ -22,7 +22,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         typeInitializerLocations: Set<Location>,
         variableInitExprLocations: Set<Location>,
         hasGenericFunctionReturnedMetatypeParameters: Bool,
-        isLetBinding: Bool
+        isLetBinding: Bool,
+        inheritedTypeNames: Set<String>
     )
 
     private let sourceLocationBuilder: SourceLocationBuilder
@@ -398,7 +399,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             typeInitializerLocations: typeLocations(for: typeInitializerClause?.value),
             variableInitExprLocations: memberBaseLocations(for: variableInitExpr),
             hasGenericFunctionReturnedMetatypeParameters: hasGenericFunctionReturnedMetatypeParameters,
-            isLetBinding: isLetBinding
+            isLetBinding: isLetBinding,
+            inheritedTypeNames: typeNames(for: inheritanceClause)
         ))
     }
 
@@ -527,6 +529,16 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
 
         return clause.inheritedTypes.reduce(into: .init()) { result, type in
             result.formUnion(typeSyntaxInspector.typeLocations(for: type.type))
+        }
+    }
+
+    private func typeNames(for clause: InheritanceClauseSyntax?) -> Set<String> {
+        guard let clause else { return [] }
+
+        return clause.inheritedTypes.reduce(into: .init()) { result, type in
+            if let identifier = type.type.as(IdentifierTypeSyntax.self) {
+                result.insert(identifier.name.text)
+            }
         }
     }
 

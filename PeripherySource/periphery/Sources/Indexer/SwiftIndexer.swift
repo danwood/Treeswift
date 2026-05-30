@@ -420,6 +420,7 @@ final class SwiftIndexer: Indexer {
 
                 decl.hasGenericFunctionReturnedMetatypeParameters = result.hasGenericFunctionReturnedMetatypeParameters
                 decl.isLetBinding = result.isLetBinding
+                decl.inheritedTypeNames = result.inheritedTypeNames
 
                 for ref in decl.references.union(decl.related) {
                     if result.inheritedTypeLocations.contains(ref.location) {
