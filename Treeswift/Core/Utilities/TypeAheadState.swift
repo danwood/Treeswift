@@ -33,9 +33,4 @@ final class TypeAheadState {
 			typeBuffer = ""
 		}
 	}
-
-	func clear() {
-		resetTask?.cancel()
-		typeBuffer = ""
-	}
 }
