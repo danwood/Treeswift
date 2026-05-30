@@ -22,7 +22,7 @@ struct CacheRestoreLiveView: View {
 	}
 }
 
-struct CacheRestoreProgressView: View {
+private struct CacheRestoreProgressView: View {
 	let status: String
 	let loaded: Int
 	let total: Int

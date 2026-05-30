@@ -222,6 +222,7 @@ extension PeripheryConfiguration {
 		config.retainSwiftUIPreviews = retainSwiftUIPreviews
 		config.retainCodableProperties = retainCodableProperties
 		config.retainEncodableProperties = retainEncodableProperties
+		config.retainUnusedImportedModules = retainUnusedImportedModules
 
 		// External Type Settings
 		config.externalEncodableProtocols = externalEncodableProtocols

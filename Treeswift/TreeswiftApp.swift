@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
 }
 
 struct TreeswiftApp: App {
-	@NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+	@NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 	@State private var configManager = ConfigurationManager()
 	@State private var scanStateManager = ScanStateManager(noCache: noCache)
 	@State private var filterState = FilterState()
@@ -145,7 +145,7 @@ struct TreeswiftApp: App {
 }
 
 /* folderprivate */
-struct CopyCommand: View {
+private struct CopyCommand: View {
 	@FocusedValue(\.copyMenuTitle) var copyMenuTitle: String?
 
 	var body: some View {

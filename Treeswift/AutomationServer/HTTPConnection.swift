@@ -17,7 +17,6 @@ final class HTTPConnection: @unchecked Sendable {
 	private let router: Router
 	private var buffer = Data()
 	private var handled = false
-	// Self-retain: keeps this instance alive for the duration of the connection.
 	private var selfRetain: HTTPConnection?
 
 	init(connection: NWConnection, router: Router) {

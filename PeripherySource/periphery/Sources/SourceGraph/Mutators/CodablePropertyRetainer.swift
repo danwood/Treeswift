@@ -20,6 +20,7 @@ final class CodablePropertyRetainer: SourceGraphMutator {
                     guard decl.kind == .varInstance else { continue }
 
                     graph.markRetained(decl)
+                    graph.unmarkRedundantInternalAccessibility(decl)
                 }
             }
         } else if configuration.retainEncodableProperties {
@@ -30,6 +31,7 @@ final class CodablePropertyRetainer: SourceGraphMutator {
                     guard decl.kind == .varInstance else { continue }
 
                     graph.markRetained(decl)
+                    graph.unmarkRedundantInternalAccessibility(decl)
                 }
             }
         }

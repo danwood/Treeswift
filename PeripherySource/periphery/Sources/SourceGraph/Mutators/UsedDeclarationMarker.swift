@@ -46,6 +46,11 @@ final class UsedDeclarationMarker: SourceGraphMutator {
 
             graph.markUsed(declaration)
 
+            // When an initializer is used, the containing type is also used.
+            if declaration.kind == .functionConstructor, let parent = declaration.parent {
+                markUsed([parent])
+            }
+
             for ref in declaration.references {
                 markUsed(declarationsReferenced(by: ref))
             }

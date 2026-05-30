@@ -55,6 +55,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 	var retainSwiftUIPreviews: Bool
 	var retainCodableProperties: Bool
 	var retainEncodableProperties: Bool
+	var retainUnusedImportedModules: [String]
 
 	// MARK: - External Type Settings
 
@@ -113,6 +114,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainSwiftUIPreviews: Bool = false,
 		retainCodableProperties: Bool = true,
 		retainEncodableProperties: Bool = false,
+		retainUnusedImportedModules: [String] = [],
 		externalEncodableProtocols: [String] = [],
 		externalCodableProtocols: [String] = [],
 		externalTestCaseClasses: [String] = [],
@@ -156,6 +158,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		self.retainSwiftUIPreviews = retainSwiftUIPreviews
 		self.retainCodableProperties = retainCodableProperties
 		self.retainEncodableProperties = retainEncodableProperties
+		self.retainUnusedImportedModules = retainUnusedImportedModules
 		self.externalEncodableProtocols = externalEncodableProtocols
 		self.externalCodableProtocols = externalCodableProtocols
 		self.externalTestCaseClasses = externalTestCaseClasses
@@ -219,6 +222,7 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		case retainSwiftUIPreviews
 		case retainCodableProperties
 		case retainEncodableProperties
+		case retainUnusedImportedModules
 		case externalEncodableProtocols
 		case externalCodableProtocols
 		case externalTestCaseClasses
@@ -270,6 +274,10 @@ struct PeripheryConfiguration: Identifiable, Codable, Equatable, Sendable {
 		retainSwiftUIPreviews = true // FIXME: try container.decode(Bool.self, forKey: .retainSwiftUIPreviews)
 		retainCodableProperties = try container.decodeIfPresent(Bool.self, forKey: .retainCodableProperties) ?? true
 		retainEncodableProperties = try container.decode(Bool.self, forKey: .retainEncodableProperties)
+		retainUnusedImportedModules = try container.decodeIfPresent(
+			[String].self,
+			forKey: .retainUnusedImportedModules
+		) ?? []
 		externalEncodableProtocols = try container.decode([String].self, forKey: .externalEncodableProtocols)
 		externalCodableProtocols = try container.decode([String].self, forKey: .externalCodableProtocols)
 		externalTestCaseClasses = try container.decode([String].self, forKey: .externalTestCaseClasses)
