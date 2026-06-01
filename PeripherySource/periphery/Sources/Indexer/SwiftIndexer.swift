@@ -210,9 +210,8 @@ final class SwiftIndexer: Indexer {
 
             for (key, values) in rawDeclsByKey {
                 let usrs = values.mapSet { $0.0.usr }
-                let decl = Declaration(kind: key.kind, usrs: usrs, location: key.location)
+                let decl = Declaration(name: key.name ?? "", kind: key.kind, usrs: usrs, location: key.location)
 
-                decl.name = key.name
                 decl.isImplicit = key.isImplicit
                 decl.isObjcAccessible = key.isObjcAccessible
 
@@ -387,9 +386,9 @@ final class SwiftIndexer: Indexer {
                     key.line == decl.location.line &&
                     key.column == decl.location.column
                 }?.value
-                 
-                guard let result = matchingResult else { 
-                    continue 
+
+                guard let result = matchingResult else {
+                    continue
                 }
 
                 applyDeclarationMetadata(to: decl, with: result)
