@@ -129,7 +129,7 @@ enum ResultsHandler {
 			return .error("no scan results available", status: 404)
 		}
 
-		nonisolated(unsafe) struct RawResult: Codable, Sendable {
+		nonisolated struct RawResult: Codable, Sendable {
 			let annotation: String
 			let name: String?
 			let kind: String

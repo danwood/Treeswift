@@ -393,11 +393,9 @@ struct SingleCategoryTabView: View {
 	}
 }
 
-/**
- Recursive row view that renders a CategoriesNode with a disclosure chevron
- for nodes with children, and indentation based on nesting level.
- Option-clicking the chevron expands/collapses all descendants.
- */
+// Recursive row view that renders a CategoriesNode with a disclosure chevron
+// for nodes with children, and indentation based on nesting level.
+// Option-clicking the chevron expands/collapses all descendants.
 /* folderprivate */ private struct RecursiveOutlineRow: View {
 	let node: CategoriesNode
 	@Binding var expandedIDs: Set<String>

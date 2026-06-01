@@ -411,7 +411,7 @@ struct PeripheryTreeView: View {
 		SourceFileReader.invalidateCache(for: file.path)
 
 		// Start removal animation
-		withAnimation(.easeInOut(duration: 0.3)) {
+		_ = withAnimation(.easeInOut(duration: 0.3)) {
 			removingFileIDs.insert(file.id)
 		}
 
@@ -883,7 +883,7 @@ struct PeripheryTreeView: View {
 
 			// Hide all removed warnings with animation
 			for warningID in removalResult.removedWarningIDs {
-				withAnimation(.easeInOut(duration: 0.3)) {
+				_ = withAnimation(.easeInOut(duration: 0.3)) {
 					hiddenWarningIDs.insert(warningID)
 				}
 			}

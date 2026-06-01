@@ -69,14 +69,10 @@ enum ScanHandler {
 			Task { await MainActor.run { server.removeWatcherTask(token: token) } }
 		}
 
-		do {
-			try await withTaskCancellationHandler {
-				await watcherTask.value
-			} onCancel: {
-				watcherTask.cancel()
-			}
-		} catch is CancellationError {
-			return .error("wait cancelled", status: 499)
+		await withTaskCancellationHandler {
+			await watcherTask.value
+		} onCancel: {
+			watcherTask.cancel()
 		}
 
 		let response = await MainActor.run {

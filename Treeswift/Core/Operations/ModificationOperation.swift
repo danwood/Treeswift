@@ -29,8 +29,7 @@ enum AccessControlFix {
 		case .removePrivate: "removed `private`"
 		case .removeFilePrivate: "removed `fileprivate`"
 		case let .removeAccessibility(current):
-			if let current { "removed `\(current)`" }
-			else { "removed access modifier" }
+			if let current { "removed `\(current)`" } else { "removed access modifier" }
 		case .insertPrivate: "inserted `private`"
 		case .insertFilePrivate: "inserted `fileprivate`"
 		}

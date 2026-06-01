@@ -36,8 +36,8 @@ final class LaunchArgumentsHandler {
 			return .list
 		}
 
-		var scanConfiguration: String? = nil
-		var automationPort: UInt16? = nil
+		var scanConfiguration: String?
+		var automationPort: UInt16?
 		var noCache = false
 		var i = 1
 		while i < arguments.count {

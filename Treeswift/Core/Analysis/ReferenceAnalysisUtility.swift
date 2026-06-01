@@ -186,7 +186,7 @@ nonisolated enum ReferenceAnalysisUtility {
 		}
 
 		// Sort by parent name for consistent ordering
-		let sortedParents = symbolsByParent.keys.sorted { ($0.name ?? "") < ($1.name ?? "") }
+		let sortedParents = symbolsByParent.keys.sorted { $0.name < $1.name }
 
 		for parent in sortedParents {
 			let symbolsInParent = symbolsByParent[parent] ?? []
@@ -200,7 +200,7 @@ nonisolated enum ReferenceAnalysisUtility {
 			}
 
 			// Format parent name
-			let parentName = (parent.name ?? "unknown").truncated(to: 40)
+			let parentName = parent.name.truncated(to: 40)
 
 			// Show file names for 1-2 references, count for 3+
 			if allRefFiles.count <= 2 {

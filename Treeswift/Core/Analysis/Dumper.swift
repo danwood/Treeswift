@@ -1292,7 +1292,6 @@ private extension Declaration {
 
 	/// Returns a debug string with info (kind name [file:line])
 	nonisolated var debugString: String {
-		let name = name ?? ""
 		let kind = kind.icon
 		return "\(kind) \(name) \(locString())"
 	}

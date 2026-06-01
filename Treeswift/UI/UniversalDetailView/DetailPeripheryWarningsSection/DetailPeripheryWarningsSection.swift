@@ -404,7 +404,7 @@ private struct PeripheryWarningRow: View {
 	// Delete declaration from source file
 	func deleteDeclaration() {
 		// Start fade-out animation
-		withAnimation(.easeInOut(duration: 0.3)) {
+		_ = withAnimation(.easeInOut(duration: 0.3)) {
 			removingWarnings.insert(warningID)
 		}
 
