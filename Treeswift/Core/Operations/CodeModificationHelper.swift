@@ -66,7 +66,7 @@ struct CodeModificationHelper {
 			// do not promote — the parent must stay even if all its explicit children are flagged.
 			if let sourceGraph, sourceGraph.isRetained(parent) {
 				fputs(
-					"DEBUG findHighestEmptyAncestor: parent \(parent.name ?? "?") is retained — not promoting \(declaration.name ?? "?")\n",
+					"DEBUG findHighestEmptyAncestor: parent \(parent.name) is retained — not promoting \(declaration.name)\n",
 					stderr
 				)
 				break
@@ -81,7 +81,7 @@ struct CodeModificationHelper {
 			}
 			if allChildrenDeleted {
 				fputs(
-					"DEBUG findHighestEmptyAncestor: ALL children of \(parent.name ?? "?") in allDeletingUSRs — promoting \(declaration.name ?? "?") → \(parent.name ?? "?")\n",
+					"DEBUG findHighestEmptyAncestor: ALL children of \(parent.name) in allDeletingUSRs — promoting \(declaration.name) → \(parent.name)\n",
 					stderr
 				)
 			}
@@ -470,7 +470,7 @@ struct CodeModificationHelper {
 		// Special handling for enum cases on the same line as other cases
 		if declaration.kind == .enumelement {
 			// Extract the case name from the declaration
-			let caseName = declaration.name ?? ""
+			let caseName = declaration.name
 			if !caseName.isEmpty,
 			   let modifiedLines = DeclarationDeletionHelper.handleInlineEnumCaseDeletion(
 			   	lines: lines,
@@ -1205,7 +1205,7 @@ struct CodeModificationHelper {
 
 				// Special handling for enum cases on the same line as other cases
 				if declaration.kind == .enumelement {
-					let caseName = declaration.name ?? ""
+					let caseName = declaration.name
 					if !caseName.isEmpty,
 					   let modifiedLines = DeclarationDeletionHelper.handleInlineEnumCaseDeletion(
 					   	lines: lines,

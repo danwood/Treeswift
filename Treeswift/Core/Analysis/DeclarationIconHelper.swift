@@ -54,7 +54,7 @@ enum DeclarationIconHelper {
 			return true
 		}
 
-		if let name = declaration.name, name.hasSuffix("App"),
+		if declaration.name.hasSuffix("App"),
 		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
 			return true
 		}

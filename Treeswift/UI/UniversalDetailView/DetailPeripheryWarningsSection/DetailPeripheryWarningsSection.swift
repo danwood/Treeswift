@@ -230,8 +230,7 @@ private struct PeripheryWarningRow: View {
 					// If declaration line has @ modifier BEFORE the symbol, format with secondary styling
 					let symbolAppearsAfterAt: Bool = {
 						guard let atIndex = declarationFullLine.firstIndex(of: "@"),
-						      let symbolName = declaration.name,
-						      let symbolRange = declarationFullLine.range(of: symbolName)
+						      let symbolRange = declarationFullLine.range(of: declaration.name)
 						else { return false }
 						return atIndex < symbolRange.lowerBound
 					}()
@@ -273,7 +272,8 @@ private struct PeripheryWarningRow: View {
 						result.append(modifierAttr)
 
 						// Declaration part - highlight symbol with semibold (don't trim, preserve spacing)
-						if let symbolName = declaration.name, !symbolName.isEmpty,
+						let symbolName = declaration.name
+						if !symbolName.isEmpty,
 						   let symbolRange = declarationPart.range(of: symbolName) {
 							let beforeSymbol = String(declarationPart[..<symbolRange.lowerBound])
 							let symbol = String(declarationPart[symbolRange])
@@ -1127,8 +1127,8 @@ private struct AssignmentLocationRow: View {
 			.help("Open in Xcode")
 
 			// Show containing function/method if available
-			if let parent = assignment.parent,
-			   let parentName = parent.name {
+			if let parent = assignment.parent {
+				let parentName = parent.name
 				// Truncate long initializer signatures
 				let displayName = truncateInitializer(parentName, maxLength: 60)
 				Text("in \(parent.kind.displayName) '\(displayName)'")
@@ -1191,8 +1191,8 @@ private struct ProtocolReferenceRow: View {
 			.help("Open in Xcode")
 
 			// Show containing type/function if available
-			if let parent = reference.parent,
-			   let parentName = parent.name {
+			if let parent = reference.parent {
+				let parentName = parent.name
 				Text("in \(parent.kind.displayName) '\(parentName)'")
 					.font(.caption2)
 					.foregroundStyle(.secondary)

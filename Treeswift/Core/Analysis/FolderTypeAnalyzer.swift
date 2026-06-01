@@ -319,19 +319,19 @@ final class FolderTypeAnalyzer: Sendable {
 		}
 
 		if !leakedSymbols.isEmpty {
-			let symbolNames = leakedSymbols.compactMap(\.name).sorted().joined(separator: ", ")
+			let symbolNames = leakedSymbols.map(\.name).sorted().joined(separator: ", ")
 
 			var details: [String] = []
 			details.append("Leaked support symbols (\(leakedSymbols.count)):")
-			for symbol in leakedSymbols.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
-				let symbolName = symbol.name ?? "unknown"
+			for symbol in leakedSymbols.sorted(by: { $0.name < $1.name }) {
+				let symbolName = symbol.name
 				let refFiles = referenceAnalysis.symbolReferences[symbol] ?? []
 				let refFolders = Set(refFiles.map { ReferenceAnalysisUtility.extractFolderPath(from: $0) })
 				details.append("• \(symbolName) → \(refFolders.count) folders, \(refFiles.count) files")
 			}
 
 			let symbolsToMove = leakedSymbols.map { symbol in
-				symbol.name ?? "unknown"
+				symbol.name
 			}
 
 			let actions: [SuggestedAction] = [
@@ -348,23 +348,23 @@ final class FolderTypeAnalyzer: Sendable {
 						with: ""
 					) ?? "",
 					mainSymbol: mainSymbolName,
-					leakedSymbols: leakedSymbols.compactMap(\.name)
+					leakedSymbols: leakedSymbols.map(\.name)
 				)
 			]
 
 			var symbolRefs: [SymbolReference] = []
 
 			symbolRefs.append(SymbolReference(
-				symbolName: mainSymbol.name ?? "unknown",
+				symbolName: mainSymbol.name,
 				icon: mainSymbol.kind.icon,
 				filePath: mainSymbol.location.file.path.string,
 				line: mainSymbol.location.line,
 				shouldBePublic: true
 			))
 
-			for symbol in leakedSymbols.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
+			for symbol in leakedSymbols.sorted(by: { $0.name < $1.name }) {
 				symbolRefs.append(SymbolReference(
-					symbolName: symbol.name ?? "unknown",
+					symbolName: symbol.name,
 					icon: symbol.kind.icon,
 					filePath: symbol.location.file.path.string,
 					line: symbol.location.line,
@@ -441,7 +441,7 @@ final class FolderTypeAnalyzer: Sendable {
 			// Shared folders should contain widely-reused utilities. Single-use code should live
 			// in the folder where it's used, not in a "shared" folder. Suggest moving the symbol.
 			if refCount == 1 {
-				let symbolName = symbol.name ?? "unknown"
+				let symbolName = symbol.name
 				let filePath = referencingFiles.first!
 				let fileName = (filePath as NSString).lastPathComponent
 				let targetFolderPath = ReferenceAnalysisUtility.extractFolderPath(from: filePath)
@@ -490,7 +490,7 @@ final class FolderTypeAnalyzer: Sendable {
 				// Even with multiple consumers, if they're all in one folder, the symbol belongs there.
 				// This reinforces the shared folder philosophy: only truly cross-cutting utilities belong here.
 				if folders.count == 1 {
-					let symbolName = symbol.name ?? "unknown"
+					let symbolName = symbol.name
 					let targetFolderPath = folders.first!
 					let targetFolderName = (targetFolderPath as NSString).lastPathComponent
 
@@ -577,7 +577,7 @@ final class FolderTypeAnalyzer: Sendable {
 			var symbolRefs: [SymbolReference] = []
 			if let mainSymbol {
 				symbolRefs.append(SymbolReference(
-					symbolName: mainSymbol.name ?? "unknown",
+					symbolName: mainSymbol.name,
 					icon: mainSymbol.kind.icon,
 					filePath: mainSymbol.location.file.path.string,
 					line: mainSymbol.location.line,
@@ -585,9 +585,9 @@ final class FolderTypeAnalyzer: Sendable {
 				))
 			}
 
-			for symbol in leakedSymbols.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
+			for symbol in leakedSymbols.sorted(by: { $0.name < $1.name }) {
 				symbolRefs.append(SymbolReference(
-					symbolName: symbol.name ?? "unknown",
+					symbolName: symbol.name,
 					icon: symbol.kind.icon,
 					filePath: symbol.location.file.path.string,
 					line: symbol.location.line,

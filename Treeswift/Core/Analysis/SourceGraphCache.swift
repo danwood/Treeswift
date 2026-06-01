@@ -252,8 +252,7 @@ enum SourceGraphSerializer {
 							endLine: snap.endLine,
 							endColumn: snap.endColumn
 						)
-						let decl = Declaration(kind: kind, usrs: Set(snap.usrs), location: loc)
-						decl.name = snap.name
+						let decl = Declaration(name: snap.name ?? "", kind: kind, usrs: Set(snap.usrs), location: loc)
 						decl.isImplicit = snap.isImplicit
 						decl.modifiers = Set(snap.modifiers)
 						decl

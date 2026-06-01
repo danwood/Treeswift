@@ -11,8 +11,7 @@ import SourceGraph
 extension Declaration {
 	/// Returns true if this declaration is a compiler-generated preview symbol
 	nonisolated var isPreviewSymbol: Bool {
-		guard let symbolName = name else { return false }
-		return symbolName.starts(with: "$s") || symbolName.contains("PreviewRegistryfMu_")
+		name.starts(with: "$s") || name.contains("PreviewRegistryfMu_")
 	}
 }
 

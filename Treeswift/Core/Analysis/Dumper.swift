@@ -54,10 +54,8 @@ final class Dumper: Sendable {
 			return true
 		}
 		// Name-based heuristics (covers e.g. property named @EnvironmentObject, etc.)
-		if let name = declaration.name {
-			return environmentAttributes.contains(where: { name.contains($0) })
-		}
-		return false
+		let name = declaration.name
+		return environmentAttributes.contains(where: { name.contains($0) })
 	}
 
 	private nonisolated func conformsToView(_ decl: Declaration) -> Bool {
@@ -75,7 +73,7 @@ final class Dumper: Sendable {
 	}
 
 	private nonisolated func isPreview(_ decl: Declaration) -> Bool {
-		guard let name = decl.name else { return false }
+		let name = decl.name
 		// Name-based heuristics
 		if name.contains("Preview") || name.contains("Playground") {
 			return true
@@ -377,29 +375,28 @@ final class Dumper: Sendable {
 							child: declaration,
 							parent: referencingType
 						)
-						referencers[referencingType.name ?? ""] = Relation(
+						referencers[referencingType.name] = Relation(
 							relationType: relationshipType,
 							location: ref.location,
 							declaration: referencingType
 						)
 					} else {
 						// Try to find the extended type and add it to referencers instead
-						if let extendedTypeName = referencingType.name {
-							let extendedTypeDeclarations = sourceGraph.allDeclarations.filter { decl in
-								decl.name == extendedTypeName && !decl.kind.isExtensionKind
-							}
-							for extDecl in extendedTypeDeclarations {
-								let relationshipType = getRelationshipType(
-									sourceGraph: sourceGraph,
-									child: declaration,
-									parent: extDecl
-								)
-								referencers[extDecl.name ?? ""] = Relation(
-									relationType: relationshipType,
-									location: ref.location,
-									declaration: extDecl
-								)
-							}
+						let extendedTypeName = referencingType.name
+						let extendedTypeDeclarations = sourceGraph.allDeclarations.filter { decl in
+							decl.name == extendedTypeName && !decl.kind.isExtensionKind
+						}
+						for extDecl in extendedTypeDeclarations {
+							let relationshipType = getRelationshipType(
+								sourceGraph: sourceGraph,
+								child: declaration,
+								parent: extDecl
+							)
+							referencers[extDecl.name] = Relation(
+								relationType: relationshipType,
+								location: ref.location,
+								declaration: extDecl
+							)
 						}
 					}
 				}
@@ -407,7 +404,8 @@ final class Dumper: Sendable {
 		}
 
 		return declarations.reduce(into: [Declaration: [String: Relation]]()) { typeToReferencers, declaration in
-			if let parent = declaration.parent, let name = parent.name {
+			if let parent = declaration.parent {
+				let name = parent.name
 				// we want where embedded type is actually defined, NOT where it's used.
 				let relation = Relation(relationType: .embed, location: declaration.location, declaration: parent)
 				typeToReferencers[declaration] = [name: relation]
@@ -591,7 +589,7 @@ final class Dumper: Sendable {
 		guard !filteredDeclarations.isEmpty else { return [] }
 
 		let rootDeclaration = filteredDeclarations.first(where: isMainApp) ?? filteredDeclarations.first!
-		log("rootDeclaration = \(rootDeclaration.name ?? "<nil>")")
+		log("rootDeclaration = \(rootDeclaration.name)")
 		var visited: Set<Declaration> = []
 		var displayedTypes: Set<Declaration> = []
 		let typeToReferencers = buildTypeToReferencers(from: filteredDeclarations, sourceGraph: sourceGraph)
@@ -778,7 +776,7 @@ final class Dumper: Sendable {
 			Declaration,
 			Location
 		)? in
-			if let relation = parentToRelation[rootDeclaration.name ?? ""] {
+			if let relation = parentToRelation[rootDeclaration.name] {
 				if !displayedTypes.contains(childDeclaration), !sharedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
 				}
@@ -819,7 +817,7 @@ final class Dumper: Sendable {
 
 			for child in children {
 				if !displayedTypes.contains(child) {
-					if let relation = typeToReferencers[child]?[rootDeclaration.name ?? ""] {
+					if let relation = typeToReferencers[child]?[rootDeclaration.name] {
 						// Recursively call buildHierarchyNodes() for each child.
 						// This allows further filtering decisions for each child.
 						let newChildrenNodes: [CategoriesNode] = buildHierarchyNodes(
@@ -912,7 +910,7 @@ final class Dumper: Sendable {
 									declaration: funcDecl
 								)
 								var parents = augmentedMapping[referencedDecl] ?? [:]
-								parents[funcDecl.name ?? "function"] = relation
+								parents[funcDecl.name.isEmpty ? "function" : funcDecl.name] = relation
 								augmentedMapping[referencedDecl] = parents
 							}
 						}
@@ -920,7 +918,7 @@ final class Dumper: Sendable {
 
 					for funcDecl in extensionFunctions {
 						let isViewModifierEmbedder = isViewModifierEmbeddingFunction(funcDecl, sourceGraph: sourceGraph)
-						let originalName = funcDecl.name ?? "unnamed"
+						let originalName = funcDecl.name.isEmpty ? "unnamed" : funcDecl.name
 						let displayName = isViewModifierEmbedder ? "\(originalName) [embeds ViewModifier]" :
 							originalName
 
@@ -965,7 +963,7 @@ final class Dumper: Sendable {
 	) -> SectionNode {
 		var children: [CategoriesNode] = []
 
-		for sharedType in sharedTypes.sorted(by: { $0.name ?? "" < $1.name ?? "" }) {
+		for sharedType in sharedTypes.sorted(by: { $0.name < $1.name }) {
 			var localVisited = Set<Declaration>()
 			var localDisplayed = Set<Declaration>()
 
@@ -1011,7 +1009,7 @@ final class Dumper: Sendable {
 			}
 
 			let typeIcon = getTypeIcon(for: type)
-			let name = type.name ?? "unnamed"
+			let name = type.name.isEmpty ? "unnamed" : type.name
 			let locationInfo = buildLocationInfo(
 				for: type,
 				relationToParent: nil,
@@ -1101,7 +1099,7 @@ final class Dumper: Sendable {
 			displayedTypes.insert(declaration)
 		}
 
-		let name = customDisplayName ?? (declaration.name ?? "")
+		let name = customDisplayName ?? (declaration.name)
 		let conforms: String = Array(Set(declaration.immediateInheritedTypeReferences.compactMap(\.name))).sorted()
 			.joined(separator: ", ")
 
@@ -1123,7 +1121,7 @@ final class Dumper: Sendable {
 			Declaration,
 			Location
 		)? in
-			if let relation = parentToRelation[declaration.name ?? ""] {
+			if let relation = parentToRelation[declaration.name] {
 				if !displayedTypes.contains(childDeclaration), !sharedTypes.contains(childDeclaration) {
 					return (childDeclaration, relation.location)
 				}
@@ -1157,7 +1155,7 @@ final class Dumper: Sendable {
 		var childNodes: [CategoriesNode] = []
 		for child in children {
 			if !displayedTypes.contains(child) {
-				if let relation = typeToReferencers[child]?[declaration.name ?? ""] {
+				if let relation = typeToReferencers[child]?[declaration.name] {
 					// Recursive call to build each child node and its descendants
 					if let childNode = buildDeclarationNode(
 						child,
@@ -1206,9 +1204,10 @@ final class Dumper: Sendable {
 	}
 
 	private nonisolated func isViewInOwnFolder(_ declaration: Declaration) -> Bool {
-		guard DeclarationIconHelper.conformsToView(declaration), let declName = declaration.name else {
+		guard DeclarationIconHelper.conformsToView(declaration) else {
 			return false
 		}
+		let declName = declaration.name
 		let filePath = declaration.location.file.path.string
 		let fileNameWithoutExt = ((filePath as NSString).lastPathComponent as NSString).deletingPathExtension
 		let folderName = ((filePath as NSString).deletingLastPathComponent as NSString).lastPathComponent
@@ -1277,7 +1276,7 @@ final class Dumper: Sendable {
 
 private extension Declaration {
 	nonisolated var firstNameComponent: String {
-		name?.components(separatedBy: ".").first ?? ""
+		name.components(separatedBy: ".").first ?? ""
 	}
 }
 

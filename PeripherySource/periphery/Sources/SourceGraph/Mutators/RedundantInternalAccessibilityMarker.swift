@@ -245,7 +245,7 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         // wrappedValue and projectedValue are part of the API.
         if decl.kind == .varInstance {
             let propertyWrapperSpecialProperties = ["wrappedValue", "projectedValue"]
-            if propertyWrapperSpecialProperties.contains(decl.name ?? "") {
+            if propertyWrapperSpecialProperties.contains(decl.name) {
                 return true
             }
         }
@@ -280,9 +280,8 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         let implicitInits = parent.declarations.filter { $0.kind == .functionConstructor && $0.isImplicit }
 
         for implicitInit in implicitInits {
-            guard let initName = implicitInit.name,
-                  let propertyName = decl.name
-            else { continue }
+            let initName = implicitInit.name
+            let propertyName = decl.name
 
             let parameterNames = initName
                 .dropFirst("init(".count)

@@ -22,6 +22,7 @@ public final class SourceGraph {
     public private(set) var indexedSourceFiles: [SourceFile] = []
     public private(set) var unusedModuleImports: Set<Declaration> = []
     public private(set) var assignOnlyProperties: Set<Declaration> = []
+    public private(set) var suppressedAssignOnlyProperties: Set<Declaration> = []
     public private(set) var extensions: [Declaration: Set<Declaration>] = [:]
     public private(set) var explicitlyIgnoredDeclarations: Set<Declaration> = []
     public private(set) var functionsWithIgnoredParameters: Set<Declaration> = []
@@ -158,6 +159,10 @@ public final class SourceGraph {
         _ = assignOnlyProperties.insert(declaration)
     }
 
+    func markSuppressedAssignOnlyProperty(_ declaration: Declaration) {
+        _ = suppressedAssignOnlyProperties.insert(declaration)
+    }
+
     func markMainAttributed(_ declaration: Declaration) {
         _ = mainAttributedDeclarations.insert(declaration)
     }
@@ -194,6 +199,7 @@ public final class SourceGraph {
         rootDeclarations.remove(declaration)
         usedDeclarations.remove(declaration)
         assignOnlyProperties.remove(declaration)
+        suppressedAssignOnlyProperties.remove(declaration)
         declaration.usrs.forEach { allDeclarationsByUsr.removeValue(forKey: $0) }
     }
 
@@ -284,8 +290,7 @@ public final class SourceGraph {
     func markUnusedModuleImport(_ statement: ImportStatement) {
         let location = statement.location.relativeTo(configuration.projectRoot)
         let usr = "import-\(statement.module)-\(location)"
-        let decl = Declaration(kind: .module, usrs: [usr], location: statement.location)
-        decl.name = statement.module
+        let decl = Declaration(name: statement.module, kind: .module, usrs: [usr], location: statement.location)
         unusedModuleImports.insert(decl)
     }
 

@@ -201,10 +201,9 @@ final class FileWarningAnalyzer: Sendable {
 		// Build per-symbol reference map (symbol name -> file names)
 		var symbolReferences: [String: [String]] = [:]
 		for (declaration, filePaths) in allReferencesAnalysis.symbolReferences {
-			if let name = declaration.name {
-				let fileNames = filePaths.map { ($0 as NSString).lastPathComponent }
-				symbolReferences[name] = fileNames.sorted()
-			}
+			let name = declaration.name
+			let fileNames = filePaths.map { ($0 as NSString).lastPathComponent }
+			symbolReferences[name] = fileNames.sorted()
 		}
 
 		// Calculate same-folder references: files in allReferences but not in crossFolder
@@ -358,7 +357,7 @@ final class FileWarningAnalyzer: Sendable {
 					continue
 				}
 
-				let symbolName = symbol.name ?? "unknown"
+				let symbolName = symbol.name
 				warnings.append(AnalysisWarning(
 					severity: .info,
 					message: "\(symbolName) could be private (only used in this file)",

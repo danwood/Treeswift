@@ -361,7 +361,7 @@ enum UnusedDependencyAnalyzer {
 			let links = chain.map { decl -> ChainLink in
 				let loc = ScanResultHelper.location(from: decl)
 				let filePath = loc.file.path.string
-				let name = decl.name ?? decl.kind.displayName
+				let name = decl.name.isEmpty ? decl.kind.displayName : decl.name
 				let hasExtRefs = hasExternalReferences(
 					decl,
 					deletionSet: inScopeDeclSet,

@@ -26,16 +26,16 @@ final class ObservableMacroRetainer: SourceGraphMutator {
         let observableTypes = graph.declarations(ofKinds: [.class, .struct])
             .filter { decl in
                 let implicitBackingNames = decl.declarations
-                    .filter { $0.kind == .varInstance && $0.isImplicit && ($0.name?.hasPrefix("_") ?? false) }
-                    .compactMap(\.name)
+                    .filter { $0.kind == .varInstance && $0.isImplicit && $0.name.hasPrefix("_") }
+                    .map(\.name)
                 guard !implicitBackingNames.isEmpty else { return false }
                 let nonImplicitNames = Set(decl.declarations
                     .filter { $0.kind == .varInstance && !$0.isImplicit }
-                    .compactMap(\.name))
+                    .map(\.name))
                 return implicitBackingNames.contains { nonImplicitNames.contains(String($0.dropFirst())) }
             }
 
-        fputs("DEBUG ObservableMacroRetainer: found \(observableTypes.count) @Observable types: \(observableTypes.compactMap(\.name).sorted().joined(separator: ", "))\n", stderr)
+        fputs("DEBUG ObservableMacroRetainer: found \(observableTypes.count) @Observable types: \(observableTypes.map(\.name).sorted().joined(separator: ", "))\n", stderr)
         guard !observableTypes.isEmpty else { return }
 
         // Type declaration kinds that can legitimately appear as property types.
@@ -43,7 +43,7 @@ final class ObservableMacroRetainer: SourceGraphMutator {
 
         for observableType in observableTypes {
             let props = observableType.declarations.filter { $0.kind == .varInstance && !$0.isImplicit }
-            fputs("DEBUG  \(observableType.name ?? "?"): \(props.count) non-implicit varInstance props\n", stderr)
+            fputs("DEBUG  \(observableType.name): \(props.count) non-implicit varInstance props\n", stderr)
             for property in props {
                 // For every stored property of an @Observable type, suppress redundant-internal-
                 // accessibility warnings. The @Observable macro synthesizes accessor boilerplate
@@ -52,13 +52,13 @@ final class ObservableMacroRetainer: SourceGraphMutator {
                 // the same file and suggest downgrading to `private` — even when they are accessed
                 // from other files in the module. Unmarking prevents that incorrect downgrade.
                 graph.unmarkRedundantInternalAccessibility(property)
-                fputs("DEBUG    prop \(property.name ?? "?"): unmarked redundantInternalAccessibility\n", stderr)
+                fputs("DEBUG    prop \(property.name): unmarked redundantInternalAccessibility\n", stderr)
 
                 for ref in property.references {
                     fputs("DEBUG      ref kind=\(ref.declarationKind) name=\(ref.name ?? "?") usr=\(ref.usr)\n", stderr)
                     guard typeKinds.contains(ref.declarationKind),
                           let targetDecl = graph.declaration(withUsr: ref.usr) else { continue }
-                    fputs("DEBUG      -> RETAINING \(targetDecl.name ?? "?")\n", stderr)
+                    fputs("DEBUG      -> RETAINING \(targetDecl.name)\n", stderr)
                     graph.markRetained(targetDecl)
                     graph.unmarkRedundantPublicAccessibility(targetDecl)
                     graph.unmarkRedundantInternalAccessibility(targetDecl)

@@ -67,7 +67,8 @@ struct ScanResultHelper {
 
 		var result = AttributedString()
 
-		if let name = declaration.name {
+		do {
+			let name = declaration.name
 			// Kind prefix (e.g., "Function ")
 			let prefix = AttributedString("\(kindDisplayName.first?.uppercased() ?? "")\(kindDisplayName.dropFirst()) ")
 			result.append(prefix)
@@ -100,8 +101,6 @@ struct ScanResultHelper {
 				suffix = " has redundant \(accessLevel) accessibility"
 			}
 			result.append(AttributedString(suffix))
-		} else {
-			result = AttributedString("unused")
 		}
 
 		return result

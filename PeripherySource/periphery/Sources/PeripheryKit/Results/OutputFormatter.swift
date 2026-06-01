@@ -50,10 +50,10 @@ extension OutputFormatter {
         let location = declarationLocation(from: result.declaration)
         let kindDisplayName = declarationKindDisplayName(from: result.declaration)
 
-        if var name = result.declaration.name {
-            name = colored ? logger.colorize(name, .lightBlue) : name
+        var name = result.declaration.name
+        name = colored ? logger.colorize(name, .lightBlue) : name
 
-            switch result.annotation {
+        switch result.annotation {
             case .unused:
                 description += "Unused \(kindDisplayName) '\(name)'"
             case .assignOnlyProperty:
@@ -92,9 +92,6 @@ extension OutputFormatter {
             case .superfluousIgnoreCommand:
                 description += "Superfluous ignore comment for \(kindDisplayName) '\(name)' (declaration is referenced and should not be ignored)"
             }
-        } else {
-            description += "Unused"
-        }
 
         return [(location, description)] + secondaryResults
     }

@@ -82,7 +82,7 @@ final class TypeWarningCache: Sendable {
 
 		for result in scanResults {
 			let decl = result.declaration
-			guard let typeName = decl.name else { continue }
+			let typeName = decl.name
 
 			let filePath = decl.location.file.path.string
 			let key = TypeWarningKey(typeName: typeName, filePath: filePath)

@@ -156,7 +156,7 @@ final class FileTypeAnalyzer: Sendable {
 			// Get all parent types defined in this file (top-level types with no parent)
 			let typesDefinedInFile = Set(fileDeclarations.filter {
 				$0.parent == nil && $0.kind.isTypeKind && !$0.kind.isExtensionKind
-			}.compactMap(\.name))
+			}.map(\.name))
 
 			// Get all parent names of declarations in this file
 			let parentNames = Set(fileDeclarations.compactMap { $0.parent?.name })
@@ -188,7 +188,7 @@ final class FileTypeAnalyzer: Sendable {
 				continue
 			}
 
-			let symbolName = decl.name ?? "unknown"
+			let symbolName = decl.name
 
 			// Skip if already processed (handles macro-generated duplicates like @Observable)
 			if processedSymbolNames.contains(symbolName) {

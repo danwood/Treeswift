@@ -130,15 +130,14 @@ public enum ScanResultBuilder {
 
         for decl in graph.functionsWithIgnoredParameters {
             let ignoredParamNames = decl.commentCommands.ignoredParameterNames
-            let unusedParamNames = Set(decl.unusedParameters.compactMap(\.name))
+            let unusedParamNames = Set(decl.unusedParameters.map(\.name))
 
             for ignoredParamName in ignoredParamNames {
                 if !unusedParamNames.contains(ignoredParamName) {
                     // The ignored parameter is actually used - create a result for it
                     let parentUsrs = decl.usrs.sorted().joined(separator: "-")
-                    let usr = "param-\(ignoredParamName)-\(decl.name ?? "unknown-function")-\(parentUsrs)"
-                    let paramDecl = Declaration(kind: .varParameter, usrs: [usr], location: decl.location)
-                    paramDecl.name = ignoredParamName
+                    let usr = "param-\(ignoredParamName)-\(decl.name)-\(parentUsrs)"
+                    let paramDecl = Declaration(name: ignoredParamName, kind: .varParameter, usrs: [usr], location: decl.location)
                     paramDecl.parent = decl
                     results.append(.init(declaration: paramDecl, annotation: .superfluousIgnoreCommand))
                 }

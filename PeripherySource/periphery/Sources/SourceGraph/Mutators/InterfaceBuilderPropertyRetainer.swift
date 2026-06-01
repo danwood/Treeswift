@@ -20,7 +20,7 @@ final class InterfaceBuilderPropertyRetainer {
             for decl in extDecl.declarations {
                 // IBInspectable properties in extensions: check if referenced
                 if decl.attributes.contains(where: { ibInspectableAttributes.contains($0.name) }) {
-                    if let name = decl.name, referencedAttributes.contains(name) {
+                    if referencedAttributes.contains(decl.name) {
                         graph.markRetained(decl)
                     }
                 }
@@ -41,7 +41,7 @@ final class InterfaceBuilderPropertyRetainer {
         let allDeclarations = declaration.declarations.union(descendentInheritedDeclarations)
 
         for decl in allDeclarations {
-            guard let declName = decl.name else { continue }
+            let declName = decl.name
 
             // Check IBOutlet properties
             if decl.attributes.contains(where: { ibOutletAttributes.contains($0.name) }) {

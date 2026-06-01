@@ -37,7 +37,7 @@ final class SwiftUIRetainer: SourceGraphMutator {
                 if !decl.inheritedTypeNames.isDisjoint(with: nameSet) { return true }
                 // Fallback: check related references (works for locally-defined protocols)
                 return decl.related.contains {
-                    self.graph.isExternal($0) && $0.declarationKind == .protocol && nameSet.contains($0.name)
+                    self.graph.isExternal($0) && $0.declarationKind == .protocol && nameSet.contains($0.name ?? "")
                 }
             }
             .forEach { graph.markRetained($0) }
@@ -56,7 +56,7 @@ final class SwiftUIRetainer: SourceGraphMutator {
                     .filter { $0.kind == .varInstance }
                     .filter {
                         $0.references.contains {
-                            ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name)
+                            ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name ?? "")
                         }
                     }
                 guard !adaptorProperties.isEmpty else { return }
