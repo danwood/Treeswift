@@ -104,21 +104,6 @@ public enum ScanResultBuilder {
     /// Checks if a declaration has references from code that is not part of the explicitly ignored set.
     /// This indicates that the declaration would have been marked as used even without the ignore command.
     private static func hasReferencesFromNonIgnoredCode(_ decl: Declaration, graph: SourceGraph) -> Bool {
-        // For var properties, check if this is an assign-only pattern: setter has real (non-retained)
-        // references but getter does not. Such properties would still be flagged even without the ignore,
-        // so the ignore is valid and should not be reported as superfluous.
-        if decl.kind.isVariableKind, !decl.isLetBinding, !decl.isComplexProperty {
-            let getter = decl.declarations.first(where: { $0.kind == .functionAccessorGetter })
-            let setter = decl.declarations.first(where: { $0.kind == .functionAccessorSetter })
-            if let setter, let getter {
-                let setterHasRealRefs = graph.references(to: setter).contains { $0.kind != .retained }
-                let getterHasRealRefs = graph.references(to: getter).contains { $0.kind != .retained }
-                if setterHasRealRefs, !getterHasRealRefs {
-                    return false
-                }
-            }
-        }
-
         let references = graph.references(to: decl)
 
         for ref in references {
