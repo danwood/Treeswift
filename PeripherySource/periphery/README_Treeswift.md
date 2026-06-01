@@ -54,6 +54,25 @@ The correct flow for any upstream analysis fix:
    git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
    ```
 
+### Resolving Subtree Merge Conflicts (CRITICAL)
+
+When `git subtree pull` produces merge conflicts, the **only correct resolution** is:
+
+- **Take the upstream version** for any code not listed in the "Modification Categories" section below as a Treeswift-specific change
+- **Preserve Treeswift additions** only for changes explicitly documented in this file
+
+**Do NOT keep old Treeswift code just because it was there before.** If the conflict is between an old Treeswift version of something and an upstream refactor/rename, take the upstream version. The Treeswift-specific additions are a small, documented set — everything else should match upstream exactly.
+
+After resolving conflicts, always verify by diffing against the upstream combine branch:
+```bash
+# Compare a specific file against upstream
+git -C /Users/dwood/code/periphery-dan-private show combine-master-redundant-nested-1062:Sources/Path/To/File.swift > /tmp/upstream.swift
+diff /tmp/upstream.swift PeripherySource/periphery/Sources/Path/To/File.swift
+# Differences should ONLY be Treeswift additions documented below
+```
+
+Then build: `xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build 2>&1 | grep -E "error:|BUILD"`
+
 ## Modification Categories
 
 ### 1. Package Structure Changes (CRITICAL)

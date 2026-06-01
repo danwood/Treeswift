@@ -105,4 +105,8 @@ Changes to Periphery's core analysis logic (e.g., new scan rules, bug fixes in e
 
 This ensures analysis improvements are properly tracked upstream and avoids divergence that complicates future subtree pulls.
 
-See [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md) for complete details on diff minimization patterns, current modifications, update workflow, and git subtree management.
+### Resolving subtree merge conflicts
+
+When `git subtree pull` produces conflicts, **take the upstream version** for everything not explicitly documented as a Treeswift-specific addition in README_Treeswift.md. Do NOT keep old subtree code just because it was there — if upstream renamed or refactored something, adopt the upstream version. The set of legitimate Treeswift additions is small and fully documented.
+
+See [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md) for the complete list of Treeswift-specific modifications, conflict resolution rules, and git subtree management.
