@@ -284,9 +284,10 @@ final class ScanState {
 				}
 				backgroundTasks.removeAll()
 
-				print("\(error)")
-				errorMessage = error.localizedDescription
-				scanLogBuffer.append("* ✗ Error: \(error.localizedDescription)")
+				let fullError = String(describing: error)
+				print(fullError)
+				errorMessage = fullError
+				scanLogBuffer.append("* ✗ Error: \(fullError)")
 				isScanning = false
 				scanTask = nil
 				streamCompleted = false

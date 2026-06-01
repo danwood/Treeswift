@@ -66,13 +66,7 @@ struct ContentColumnView: View {
 				}
 
 				if let error = scanState.errorMessage {
-					Text("Error: \(error)")
-						.foregroundStyle(.red)
-						.textSelection(.enabled)
-						.padding()
-						.background(Color.red.opacity(0.1))
-						.clipShape(.rect(cornerRadius: 8))
-						.padding()
+					ScanErrorView(errorMessage: error)
 				}
 
 				if !scanState.scanResults.isEmpty || scanState.sourceGraph != nil || scanState.isRestoredFromCache {
@@ -103,7 +97,7 @@ struct ContentColumnView: View {
 						unattachedTabSelectedID: $unattachedTabSelectedID
 					)
 					.environment(\.refreshFileTree) { scanState.refreshFileTree() }
-				} else if !scanState.isScanning {
+				} else if !scanState.isScanning, scanState.errorMessage == nil {
 					Text("Run a scan to see results")
 						.frame(maxWidth: .infinity, maxHeight: .infinity)
 						.foregroundStyle(.secondary)
