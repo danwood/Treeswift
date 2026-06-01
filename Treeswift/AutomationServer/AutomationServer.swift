@@ -22,6 +22,7 @@ final class AutomationServer {
 	private let errorFilePath = "/tmp/treeswift-control.error"
 	private let serverQueue = DispatchQueue(label: "com.treeswift.automation", qos: .utility)
 	private(set) var isReady = false
+	private var startContinuation: UnsafeContinuation<Void, Never>?
 
 	init(
 		port: UInt16,
@@ -102,10 +103,22 @@ final class AutomationServer {
 
 		newListener.start(queue: serverQueue)
 
-		// Keep the async context alive so the listener stays running
-		await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in
-			// Never resumes — listener runs until stop() is called
+		// Keep the async context alive until stop() is called or the Task is cancelled.
+		await withTaskCancellationHandler {
+			await withUnsafeContinuation { continuation in
+				startContinuation = continuation
+			}
+		} onCancel: {
+			Task { @MainActor [weak self] in
+				self?.resumeStartContinuation()
+			}
 		}
+	}
+
+	@MainActor
+	private func resumeStartContinuation() {
+		startContinuation?.resume()
+		startContinuation = nil
 	}
 
 	/**
@@ -203,6 +216,7 @@ final class AutomationServer {
 		watcherTasks.removeAll()
 		listener?.cancel()
 		listener = nil
+		resumeStartContinuation()
 		try? FileManager.default.removeItem(atPath: statusFilePath)
 		try? FileManager.default.removeItem(atPath: errorFilePath)
 		fputs("Automation server stopped\n", stderr)
