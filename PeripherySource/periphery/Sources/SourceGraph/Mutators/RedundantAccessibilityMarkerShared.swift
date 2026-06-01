@@ -11,6 +11,8 @@ struct RecursionGuard {
     }
 }
 
+
+
 extension Declaration {
     /// Checks if this declaration is referenced outside its defining file.
     /// This is a common check used by multiple accessibility markers to determine

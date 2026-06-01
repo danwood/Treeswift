@@ -117,8 +117,7 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
     private func containingTypeName(for decl: Declaration) -> String? {
         guard let containingType = graph.immediateContainingType(of: decl) else { return nil }
         guard containingType !== decl else { return nil }
-        let name = containingType.name
 
-        return "\(containingType.kind.displayName) \(name)"
+        return "\(containingType.kind.displayName) \(containingType.name)"
     }
 }

@@ -82,6 +82,13 @@ inlinableFunction()
 _ = PublicInheritedAssociatedTypeClass().items
 _ = PublicInheritedAssociatedTypeDefaultTypeClass().items
 
+// Extension with same-type generic requirement
+takeExtensionSameTypeGenericRequirement(.defaultInstance)
+
+// Typed throws
+try? PublicTypeUsedAsPublicFunctionThrowTypeRetainer().retain()
+
+
 // Redundant accessibility tests
 TrulyRedundantFilePrivateMembersRetainer().retain()
 ProtocolRequirementAccessibilityRetainer().retain()

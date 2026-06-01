@@ -237,7 +237,7 @@ public final class Declaration: @unchecked Sendable {
     public var isObjcAccessible: Bool = false
     public var isLetBinding: Bool = false
     public var inheritedTypeNames: Set<String> = []
-    public var referencedFiles: Set<SourceFile>
+    public var referencedFiles: Set<SourceFile> = []
 
     private let hashValueCache: Int
 
@@ -303,7 +303,6 @@ public final class Declaration: @unchecked Sendable {
         self.kind = kind
         self.usrs = usrs
         self.location = location
-        self.referencedFiles = [location.file]
         hashValueCache = usrs.hashValue
     }
 
