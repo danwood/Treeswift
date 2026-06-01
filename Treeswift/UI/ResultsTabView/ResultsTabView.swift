@@ -69,17 +69,19 @@ struct ResultsTabView: View {
 			Tab("Periphery", systemImage: "list.bullet.indent", value: ResultsTab.periphery) {
 				// Periphery Tab - Results Tree
 				VStack(alignment: .leading, spacing: 12) {
-					if !scanResults.isEmpty {
+					if !isScanning, sourceGraph != nil {
 						FilterBarView(filterState: filterState, scanResults: scanResults)
 							.padding(.horizontal)
 					}
 
 					Group {
-						if treeNodes.isEmpty, !scanResults.isEmpty {
+						if isScanning {
+							EmptyView()
+						} else if treeNodes.isEmpty, !scanResults.isEmpty {
 							ProgressView("Building tree view…")
 								.frame(maxWidth: .infinity)
 								.padding()
-						} else {
+						} else if !treeNodes.isEmpty {
 							PeripheryTreeView(
 								rootNodes: treeNodes,
 								scanResults: scanResults,
@@ -89,6 +91,11 @@ struct ResultsTabView: View {
 								searchNavState: searchNavState
 							)
 							.padding()
+						} else if sourceGraph != nil, scanResults.isEmpty {
+							Text("No issues")
+								.foregroundStyle(.secondary)
+								.frame(maxWidth: .infinity)
+								.padding()
 						}
 					}
 				}

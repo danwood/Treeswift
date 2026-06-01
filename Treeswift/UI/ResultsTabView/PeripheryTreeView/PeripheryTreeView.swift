@@ -212,6 +212,14 @@ struct PeripheryTreeView: View {
 				handleNavigationRequest(scrollProxy: scrollProxy)
 			}
 		} // ScrollViewReader
+		.overlay {
+			if filteredNodesCache.isEmpty, !rootNodes.isEmpty {
+				Text("No issues")
+					.foregroundStyle(.secondary)
+					.frame(maxWidth: .infinity)
+					.padding()
+			}
+		}
 	}
 
 	private func recomputeFilteredNodes() {
