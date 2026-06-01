@@ -12,7 +12,7 @@ import Network
 
 // Explicitly nonisolated — this class lives on connection-specific queues, not @MainActor.
 // All @MainActor state access goes through the Router via async dispatch.
-final class HTTPConnection: @unchecked Sendable {
+final nonisolated class HTTPConnection: @unchecked Sendable {
 	private let connection: NWConnection
 	private let router: Router
 	private var buffer = Data()

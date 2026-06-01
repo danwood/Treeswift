@@ -8,12 +8,12 @@
 //
 
 import Foundation
-import PeripheryKit
-import SourceGraph
+@preconcurrency import PeripheryKit
+@preconcurrency import SourceGraph
 
 /// Pre-computed, fully deserialized cache ready to be applied to a ScanState.
 /// All construction happens off the main actor; applying to ScanState is cheap.
-nonisolated struct PreRestoredCache: Sendable {
+nonisolated struct PreRestoredCache: @unchecked Sendable {
 	let projectPath: String?
 	let cachedAt: Date
 	let treeNodes: [TreeNode]

@@ -164,7 +164,12 @@ final class AutomationServer {
 	private nonisolated func checkPortInUse(port: UInt16) -> Bool {
 		// Attempt a synchronous TCP connection to detect if port is in use.
 		// Times out after 1 second to avoid blocking startup.
-		var result = false
+		// Box the result so it can be safely captured by the state-update closure;
+		// the semaphore ensures the closure's write happens-before the read below.
+		final class ResultBox: @unchecked Sendable {
+			var value = false
+		}
+		let resultBox = ResultBox()
 		let semaphore = DispatchSemaphore(value: 0)
 		let connection = NWConnection(
 			host: "127.0.0.1",
@@ -174,7 +179,7 @@ final class AutomationServer {
 		connection.stateUpdateHandler = { state in
 			switch state {
 			case .ready:
-				result = true
+				resultBox.value = true
 				connection.cancel()
 				semaphore.signal()
 			case .failed, .cancelled:
@@ -188,7 +193,7 @@ final class AutomationServer {
 		if timedOut {
 			connection.cancel()
 		}
-		return result
+		return resultBox.value
 	}
 
 	/**

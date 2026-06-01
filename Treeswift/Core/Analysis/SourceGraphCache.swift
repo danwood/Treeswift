@@ -223,7 +223,7 @@ enum SourceGraphSerializer {
 		// process all chunks concurrently. This spreads the object-construction work
 		// across all 10 logical cores instead of running on a single thread.
 		let coreCount = ProcessInfo.processInfo.activeProcessorCount
-		func chunked<T>(_ array: [T], into n: Int) -> [[T]] {
+		@Sendable func chunked<T>(_ array: [T], into n: Int) -> [[T]] {
 			guard n > 1, array.count > n else { return [array] }
 			let size = (array.count + n - 1) / n
 			return stride(from: 0, to: array.count, by: size).map {
@@ -374,7 +374,7 @@ enum SourceGraphSerializer {
 		return (graph, scanResults)
 	}
 
-	private static func restoreAnnotation(
+	private nonisolated static func restoreAnnotation(
 		_ snap: ScanResultSnapshot,
 		usrToDecl: [String: Declaration],
 		allReferencesByUsr: [String: Set<Reference>]
@@ -414,7 +414,7 @@ enum SourceGraphSerializer {
  Conforms to SourceGraphProtocol so all removal code works identically
  whether using a live or cached graph.
  */
-final class RestoredSourceGraph: SourceGraphProtocol {
+final nonisolated class RestoredSourceGraph: SourceGraphProtocol {
 	let allDeclarations: Set<Declaration>
 	let unusedDeclarations: Set<Declaration>
 	private let allReferencesByUsr: [String: Set<Reference>]

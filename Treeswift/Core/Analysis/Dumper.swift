@@ -17,7 +17,7 @@ import SystemPackage
 import XcodeProj
 
 final class Dumper: Sendable {
-	private let highLevelKinds: Set<Declaration.Kind> = [
+	private nonisolated let highLevelKinds: Set<Declaration.Kind> = [
 		.class,
 		.struct,
 		.enum,

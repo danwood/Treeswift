@@ -18,7 +18,7 @@ import SourceGraph
 struct PreviewDetectionHelper {
 	/// USR (Unified Symbol Resolution) for the PreviewRegistry protocol from DeveloperToolsSupport framework.
 	/// All #Preview macro expansions create implicit code that references this protocol.
-	private static let previewRegistryUsr = "s:21DeveloperToolsSupport15PreviewRegistryP"
+	private nonisolated static let previewRegistryUsr = "s:21DeveloperToolsSupport15PreviewRegistryP"
 
 	/**
 	 Finds all #Preview macro declarations that reference the given View.

@@ -16,11 +16,11 @@ import SourceGraph
  protocol, allowing all removal code to work identically in both cases.
  */
 protocol SourceGraphProtocol: AnyObject {
-	func references(to declaration: Declaration) -> Set<Reference>
-	func references(to usr: String) -> Set<Reference>
-	func isRetained(_ declaration: Declaration) -> Bool
-	var allDeclarations: Set<Declaration> { get }
-	var unusedDeclarations: Set<Declaration> { get }
+	nonisolated func references(to declaration: Declaration) -> Set<Reference>
+	nonisolated func references(to usr: String) -> Set<Reference>
+	nonisolated func isRetained(_ declaration: Declaration) -> Bool
+	nonisolated var allDeclarations: Set<Declaration> { get }
+	nonisolated var unusedDeclarations: Set<Declaration> { get }
 }
 
 extension SourceGraph: SourceGraphProtocol {}
