@@ -97,7 +97,7 @@ extension TreeIcon {
 
 // Explicit nonisolated Hashable conformance to prevent main-actor isolation
 // from @MainActor methods affecting equality checks in Sendable contexts
-extension TreeIcon: Hashable {
+extension TreeIcon: nonisolated Hashable {
 	nonisolated func hash(into hasher: inout Hasher) {
 		switch self {
 		case let .systemImage(name, color):

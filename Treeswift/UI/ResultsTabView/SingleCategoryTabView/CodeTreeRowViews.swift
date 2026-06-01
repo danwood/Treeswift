@@ -306,7 +306,7 @@ struct DeclarationRowView: View {
 
 			if let referencerInfo = declaration.referencerInfo {
 				VStack(alignment: .leading, spacing: 2) {
-					ForEach(referencerInfo.enumerated(), id: \.offset) { index, info in
+					ForEach(Array(referencerInfo.enumerated()), id: \.offset) { index, info in
 						Text(index == 0 ? "     ← \(info)" : "       \(info)")
 							.font(.system(.caption, design: .monospaced))
 							.foregroundStyle(.secondary)

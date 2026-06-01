@@ -843,7 +843,7 @@ private struct PeripheryWarningRow: View {
 								if let setter = declaration.declarations
 									.first(where: { $0.kind == .functionAccessorSetter }) {
 									let assignments = sourceGraph.references(to: setter).sorted()
-									ForEach(assignments.enumerated(), id: \.offset) { _, assignment in
+									ForEach(Array(assignments.enumerated()), id: \.offset) { _, assignment in
 										AssignmentLocationRow(assignment: assignment)
 									}
 								}
@@ -879,7 +879,7 @@ private struct PeripheryWarningRow: View {
 										.foregroundStyle(.secondary)
 
 										let sortedReferences = references.sorted()
-										ForEach(sortedReferences.enumerated(), id: \.offset) { _, reference in
+										ForEach(Array(sortedReferences.enumerated()), id: \.offset) { _, reference in
 											ProtocolReferenceRow(reference: reference)
 										}
 									}
