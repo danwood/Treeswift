@@ -362,13 +362,19 @@ By maintaining a local modified copy of the package, we can:
 
 The `PeripherySource/periphery` directory is managed as a **git subtree** tracking danwood/periphery changes.
 
+**IMPORTANT — Keep subtree up to date**: When analysis fixes or improvements are committed to `danwood/periphery` master (e.g., false positive fixes, new detection rules), the subtree here must be updated to pick them up. The fix workflow is:
+
+1. Commit fix to correct source branch in `danwood/periphery` (usually `master`)
+2. Merge that branch into `combine-master-redundant-nested-1062` in `danwood/periphery`
+3. Pull subtree into Treeswift (see command below)
+4. Resolve any merge conflicts, preserving Treeswift-specific modifications (see sections above)
+5. Build and verify: `xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build`
+
 **Current Setup:**
 ```bash
 # Configured remotes
 git remote add periphery-upstream https://github.com/peripheryapp/periphery.git  # Original upstream
 git remote add danwood-fork https://github.com/danwood/periphery                 # Current source
-
-# Current baseline: 8ebf4a42 from danwood/periphery combine-master-redundant-nested-1062 branch
 ```
 
 **To update to the latest combine-master-redundant-nested-1062 branch:**
@@ -378,12 +384,9 @@ git remote add danwood-fork https://github.com/danwood/periphery                
 git fetch danwood-fork combine-master-redundant-nested-1062
 git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
 
-# After the merge, verify local modifications are still present
-# Resolve any conflicts, prioritizing Treeswift modifications
-
-# Stage changes
-git add PeripherySource/periphery/
-git commit -m "Update subtree to latest danwood/periphery combine-master-redundant-nested-1062"
+# Resolve any conflicts, preserving Treeswift-specific modifications documented above
+# Then build to verify:
+xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build 2>&1 | grep -E "error:|BUILD"
 ```
 
 **To switch back to upstream peripheryapp/periphery:**
