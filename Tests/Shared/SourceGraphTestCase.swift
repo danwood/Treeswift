@@ -185,15 +185,9 @@ open class SourceGraphTestCase: XCTestCase {
         }
 
         if let suggestedAccessibility {
-<<<<<<< HEAD
             if let actual = Self.graph.redundantInternalAccessibility[declaration] {
                 if actual != suggestedAccessibility {
                     let actualText = actual?.rawValue ?? "nil"
-=======
-            if let info = Self.graph.redundantInternalAccessibility[declaration] {
-                if info.suggestedAccessibility != suggestedAccessibility {
-                    let actualText = info.suggestedAccessibility?.rawValue ?? "nil"
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                     XCTFail("Expected suggested accessibility to be '\(suggestedAccessibility.rawValue)', but got '\(actualText)': \(declaration)", file: file, line: line)
                 }
             }
@@ -224,15 +218,9 @@ open class SourceGraphTestCase: XCTestCase {
         }
 
         if let containingTypeName {
-<<<<<<< HEAD
             if let actual = Self.graph.redundantFilePrivateAccessibility[declaration] {
                 if actual != containingTypeName {
                     XCTFail("Expected containing type name to be '\(containingTypeName)', but got '\(actual ?? "nil")': \(declaration)", file: file, line: line)
-=======
-            if let info = Self.graph.redundantFilePrivateAccessibility[declaration] {
-                if info.containingTypeName != containingTypeName {
-                    XCTFail("Expected containing type name to be '\(containingTypeName)', but got '\(info.containingTypeName ?? "nil")': \(declaration)", file: file, line: line)
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
                 }
             }
         }

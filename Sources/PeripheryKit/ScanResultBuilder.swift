@@ -45,17 +45,10 @@ public enum ScanResultBuilder {
             .init(declaration: $0.0, annotation: .redundantPublicAccessibility(modules: $0.1))
         }
         let annotatedRedundantInternalAccessibility: [ScanResult] = redundantInternalAccessibility.map {
-<<<<<<< HEAD
             .init(declaration: $0.key, annotation: .redundantInternalAccessibility(suggestedAccessibility: $0.value))
         }
         let annotatedRedundantFilePrivateAccessibility: [ScanResult] = redundantFilePrivateAccessibility.map {
             .init(declaration: $0.key, annotation: .redundantFilePrivateAccessibility(containingTypeName: $0.value))
-=======
-            .init(declaration: $0.0, annotation: .redundantInternalAccessibility(files: $0.1.files, suggestedAccessibility: $0.1.suggestedAccessibility))
-        }
-        let annotatedRedundantFilePrivateAccessibility: [ScanResult] = redundantFilePrivateAccessibility.map {
-            .init(declaration: $0.0, annotation: .redundantFilePrivateAccessibility(files: $0.1.files, containingTypeName: $0.1.containingTypeName))
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         }
 
         let annotatedSuperfluousIgnoreCommands: [ScanResult] = {

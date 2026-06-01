@@ -10,10 +10,6 @@ import Shared
 /// This mutator is more complex than RedundantInternalAccessibilityMarker because it must:
 /// - Distinguish between access from the same type vs. different types in the same file
 /// - Handle extensions of types (both same-file and cross-file extensions)
-<<<<<<< HEAD
-=======
-/// - Walk the type hierarchy to find the top-level containing type for comparison
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
 ///
 /// The key insight: `private` and `fileprivate` differ in that `private` is accessible only within
 /// the declaration and its extensions in the same file, while `fileprivate` is accessible from
@@ -46,16 +42,10 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
 
     private func validate(_ decl: Declaration) throws {
         if decl.accessibility.isExplicitly(.fileprivate) {
-<<<<<<< HEAD
             if !decl.shouldSkipAccessibilityAnalysis,
                !graph.isRetained(decl),
                !decl.isReferencedOutsideFileIncludingChildren(graph: graph),
                !graph.isReferencedFromDifferentTypeInSameFile(decl)
-=======
-            if !graph.isRetained(decl),
-               !decl.isReferencedOutsideFile(graph: graph),
-               !isReferencedFromDifferentTypeInSameFile(decl)
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
             {
                 mark(decl)
             }
@@ -87,21 +77,13 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
         // Unless explicitly requested, skip marking nested declarations when an ancestor is already marked.
         // This avoids redundant warnings since fixing the parent's accessibility fixes the children too.
         if !configuration.showNestedRedundantAccessibility,
-<<<<<<< HEAD
            decl.isAnyAncestorMarked(in: graph.redundantFilePrivateAccessibility.keys)
-=======
-           decl.isAnyAncestorMarked(in: graph.redundantFilePrivateAccessibility)
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
         {
             return
         }
 
         let containingTypeName = containingTypeName(for: decl)
-<<<<<<< HEAD
         graph.markRedundantFilePrivateAccessibility(decl, containingTypeName: containingTypeName)
-=======
-        graph.markRedundantFilePrivateAccessibility(decl, file: decl.location.file, containingTypeName: containingTypeName)
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
     }
 
     private func markExplicitFilePrivateDescendentDeclarations(from decl: Declaration) {
@@ -112,16 +94,10 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
         }
 
         for descDecl in descendants {
-<<<<<<< HEAD
             if !descDecl.shouldSkipAccessibilityAnalysis,
                !graph.isRetained(descDecl),
                !descDecl.isReferencedOutsideFileIncludingChildren(graph: graph),
                !graph.isReferencedFromDifferentTypeInSameFile(descDecl)
-=======
-            if !graph.isRetained(descDecl),
-               !descDecl.isReferencedOutsideFile(graph: graph),
-               !isReferencedFromDifferentTypeInSameFile(descDecl)
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
             {
                 mark(descDecl)
             }
@@ -134,7 +110,6 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
         })
     }
 
-<<<<<<< HEAD
     /// Extracts a display name for the immediate containing type of a declaration.
     ///
     /// Returns a string like "class Foo" or "struct Bar" that identifies the type
@@ -142,82 +117,7 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
     private func containingTypeName(for decl: Declaration) -> String? {
         guard let containingType = graph.immediateContainingType(of: decl) else { return nil }
         guard containingType !== decl else { return nil }
-        guard let name = containingType.name else { return nil }
 
-        return "\(containingType.kind.displayName) \(name)"
-=======
-    /// Finds the top-level type declaration by walking up the parent chain.
-    /// Returns the outermost type that contains the given declaration.
-    private func topLevelType(of decl: Declaration) -> Declaration? {
-        let baseTypeKinds: Set<Declaration.Kind> = [.class, .struct, .enum, .protocol]
-        let typeKinds = baseTypeKinds.union(Declaration.Kind.extensionKinds)
-        let ancestors = [decl] + Array(decl.ancestralDeclarations)
-        return ancestors.last { typeDecl in
-            guard typeKinds.contains(typeDecl.kind) else { return false }
-            guard let parent = typeDecl.parent else { return true }
-
-            return !typeKinds.contains(parent.kind)
-        }
-    }
-
-    /// Gets the logical type for comparison purposes.
-    /// For extensions of types in the SAME FILE, treats the extension as the extended type.
-    /// For extensions of types in DIFFERENT FILES (like extending external types),
-    /// treats the extension as its own distinct type for the purpose of this file.
-    private func logicalType(of decl: Declaration, inFile file: SourceFile) -> Declaration? {
-        if decl.kind.isExtensionKind {
-            if let extendedDecl = try? graph.extendedDeclaration(forExtension: decl),
-               extendedDecl.location.file == file
-            {
-                return extendedDecl
-            }
-            return decl
-        }
-        return decl
-    }
-
-    /// Extracts a display name for the containing type of a declaration.
-    ///
-    /// Returns a string like "class Foo" or "struct Bar" that identifies the type
-    /// containing the declaration. Returns nil for top-level declarations.
-    private func containingTypeName(for decl: Declaration) -> String? {
-        guard let topLevel = topLevelType(of: decl) else { return nil }
-        guard let name = topLevel.name else { return nil }
-
-        return "\(topLevel.kind.displayName) \(name)"
-    }
-
-    /// Checks if a declaration is referenced from a different type in the same file.
-    /// Returns true if any same-file reference comes from a different logical type,
-    /// indicating that fileprivate access is necessary.
-    ///
-    /// Even for top-level declarations, private and fileprivate are different:
-    /// - private: only accessible within the declaration itself and its extensions in the same file
-    /// - fileprivate: accessible from anywhere in the same file
-    private func isReferencedFromDifferentTypeInSameFile(_ decl: Declaration) -> Bool {
-        let file = decl.location.file
-        let sameFileReferences = graph.references(to: decl).filter { $0.location.file == file }
-
-        guard let declTopLevel = topLevelType(of: decl) else {
-            return false
-        }
-
-        let declLogicalType = logicalType(of: declTopLevel, inFile: file)
-
-        for ref in sameFileReferences {
-            guard let refParent = ref.parent,
-                  let refTopLevel = topLevelType(of: refParent)
-            else {
-                continue
-            }
-
-            let refLogicalType = logicalType(of: refTopLevel, inFile: file)
-
-            if declLogicalType !== refLogicalType {
-                return true
-            }
-        }
-        return false
->>>>>>> d4483b0 (Handle implicit internal, fix false positives and false negatives, refactor checking)
+        return "\(containingType.kind.displayName) \(containingType.name)"
     }
 }
