@@ -38,21 +38,32 @@ combine-master-redundant-nested-1062   ← Treeswift pulls from this branch via 
 
 The correct flow for any upstream analysis fix:
 
-1. Commit to the appropriate source branch in `danwood/periphery`:
+**Local checkout of `danwood/periphery` is at `~/code/periphery-dan-private`** (remote `origin` = `git@github.com:danwood/periphery.git`).
+
+1. Apply the fix on the appropriate source branch:
    - General analysis fixes, SwiftUI retainer, false positive fixes → `master`
    - Redundant nested access changes → `redundant-nested`
    - Issue 1062 fix → `fix-1062`
-2. Merge source branch(es) into `combine-master-redundant-nested-1062`:
+   ```bash
+   cd ~/code/periphery-dan-private
+   git checkout master          # (or redundant-nested / fix-1062)
+   # ... make and commit the change ...
+   git push origin master
+   ```
+2. Rebuild `combine-master-redundant-nested-1062` by merging all source branches:
    ```bash
    git checkout combine-master-redundant-nested-1062
-   git merge master          # or redundant-nested / fix-1062 as appropriate
+   git merge master
+   git merge redundant-nested
+   git merge fix-1062
    git push origin combine-master-redundant-nested-1062
    ```
-3. Pull into Treeswift via `git subtree pull`:
+   Resolve any conflicts — take upstream for anything not in this document's Modification Categories.
+3. Pull into Treeswift via `git subtree pull` (run from the Treeswift repo root):
    ```bash
-   git fetch danwood-fork combine-master-redundant-nested-1062
    git subtree pull --prefix=PeripherySource/periphery danwood-fork combine-master-redundant-nested-1062 --squash
    ```
+4. Build to verify: `xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build 2>&1 | grep -E "error:|BUILD"`
 
 ### Resolving Subtree Merge Conflicts (CRITICAL)
 
