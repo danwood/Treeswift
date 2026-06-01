@@ -56,9 +56,12 @@ public enum ScanResultBuilder {
 
             // Detect superfluous ignore commands
             // 1. Declarations with ignore comments that have references from non-ignored code
-            let superfluousDeclarations = graph.explicitlyIgnoredDeclarations
+            let superfluousDeclarations = graph.commandIgnoredDeclarations
+                .filter { _, kind in kind == .declaration }
+                .keys
                 .filter { decl in
                     hasReferencesFromNonIgnoredCode(decl, graph: graph)
+                        && !graph.suppressedAssignOnlyProperties.contains(decl)
                 }
 
             // 2. Parameters with ignore comments that are actually used (not in unusedParameters)
@@ -101,19 +104,21 @@ public enum ScanResultBuilder {
             }
     }
 
-    /// Checks if a declaration has references from code that is not part of the explicitly ignored set.
+    /// Checks if a declaration has references from code that is not part of the command ignored set.
     /// This indicates that the declaration would have been marked as used even without the ignore command.
     private static func hasReferencesFromNonIgnoredCode(_ decl: Declaration, graph: SourceGraph) -> Bool {
         let references = graph.references(to: decl)
+        let isProtocolMember = decl.parent?.kind == .protocol
 
         for ref in references {
             guard ref.kind != .retained, let parent = ref.parent else { continue }
 
-            // Check if the parent is not in the explicitly ignored set.
-            // This covers deeply nested declarations because retainHierarchy marks
-            // the entire descendant tree as explicitly ignored, not just the root.
-            if !graph.explicitlyIgnoredDeclarations.contains(parent) {
-                // Also check that the parent is actually used (not itself unused)
+            // Protocol members naturally accumulate related references from conformances and
+            // default implementations even when genuinely unused. Only normal references indicate
+            // actual usage.
+            if isProtocolMember, ref.kind != .normal { continue }
+
+            if graph.commandIgnoredDeclarations[parent] == nil {
                 if graph.usedDeclarations.contains(parent) {
                     return true
                 }
