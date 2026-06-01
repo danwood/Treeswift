@@ -25,9 +25,13 @@ nonisolated struct FileBrowserDirectory: Identifiable, Hashable, Sendable {
 	let id: String
 	let name: String
 	var children: [FileBrowserNode]
+	// periphery:ignore
 	var folderType: FolderType?
+	// periphery:ignore
 	var analysisWarnings: [AnalysisWarning]
+	// periphery:ignore
 	var statistics: FolderStatistics?
+	// periphery:ignore
 	var hasFolderPrivateFiles: Bool
 	var containsSwiftFiles: Bool
 
