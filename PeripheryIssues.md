@@ -19,6 +19,8 @@ This file documents observed problems with Periphery scan results that cause fal
 
 **Workaround applied in Treeswift:** `insertAccessKeyword` now returns the line unchanged when the expected declaration keyword (e.g., `var`, `let`) is not found on that line. This prevents corruption but means the access-control fix is silently skipped for these properties.
 
+**Partial fix applied:** `ObservableMacroRetainer` now suppresses `redundantInternalAccessibility` on implicit backing storage properties (`_propName`), so those warnings are no longer emitted. The `insertAccessKeyword` guard remains as a safety net for any remaining edge cases.
+
 **Affected declaration kinds:** `varInstance` properties inside `@Observable` classes — specifically the synthesized storage (`_propName`) entries.
 
 ---
@@ -33,24 +35,3 @@ This file documents observed problems with Periphery scan results that cause fal
 
 **Broader issue:** The `skipReferenced` guarantee (removing items will not break a build) assumes Periphery's reference analysis is complete. Any gap in the reference analysis (macro expansions, conditional compilation, etc.) can cause false "safe" removals.
 
----
-
-## 3. Scan Cache Positions Valid Only for Exact Source State at Scan Time
-
-**Symptom:** After running an integration test cycle that modifies source (via removal execution) and then restores it (via `git reset`), a subsequent removal operation using the cached scan results produces wrong edits.
-
-**Root cause:** The scan cache records declaration positions (line/column) at the time of the scan. Even if the source appears identical after `git reset` (same content), the scan positions are only guaranteed valid for the source state when the scan was run. If the scan ran against a modified version of the source (e.g., during a prior test execution before a git reset), the positions reflect that modified state.
-
-**Rule:** Never use `--skip-scan` across test runs that modify and restore source. Always run a fresh scan with the source at the intended state before performing removal operations.
-
----
-
-## 4. `build_prodcore_for_index` Does Not Update Periphery's Indexstore
-
-**Symptom:** Running `xcodebuild clean build` against the target project before scanning does NOT update the indexstore Periphery reads.
-
-**Root cause:** Periphery uses its own DerivedData directory (under `~/Library/Caches/com.github.peripheryapp/`) and passes `-derivedDataPath` to `xcodebuild` when it runs its own build during scanning. An external `xcodebuild` invocation writes to the standard Xcode DerivedData path, which Periphery never reads.
-
-**Impact:** The `build_prodcore_for_index` step in the integration test script is effectively a no-op for indexstore freshness. The indexstore is only updated when Periphery itself builds the project during a scan.
-
-**Conclusion:** To get fresh, accurate positions, the only reliable method is to trigger a fresh scan through Treeswift. Pre-scan builds via `xcodebuild` are only useful for verifying that the source compiles (not for refreshing positions).
