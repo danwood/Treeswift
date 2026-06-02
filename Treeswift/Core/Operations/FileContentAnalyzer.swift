@@ -155,8 +155,13 @@ enum FileContentAnalyzer {
 				continue
 			}
 
-			// Skip imports
-			if trimmed.starts(with: "import ") { continue }
+			// Skip imports (all valid Swift import forms)
+			if trimmed.starts(with: "import ") ||
+				trimmed.starts(with: "@preconcurrency import ") ||
+				trimmed.starts(with: "public import ") ||
+				trimmed.starts(with: "private import ") ||
+				trimmed.starts(with: "internal import ") ||
+				trimmed.starts(with: "package import ") { continue }
 
 			// Skip compiler directives
 			if trimmed.starts(with: "#if") ||
@@ -237,8 +242,14 @@ enum FileContentAnalyzer {
 
 		for line in lines {
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
-			// Skip lines that start with "import "
-			if !trimmed.starts(with: "import ") {
+			// Skip all valid Swift import forms
+			let isImport = trimmed.starts(with: "import ") ||
+				trimmed.starts(with: "@preconcurrency import ") ||
+				trimmed.starts(with: "public import ") ||
+				trimmed.starts(with: "private import ") ||
+				trimmed.starts(with: "internal import ") ||
+				trimmed.starts(with: "package import ")
+			if !isImport {
 				result.append(line)
 			}
 		}
