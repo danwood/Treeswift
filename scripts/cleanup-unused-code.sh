@@ -10,7 +10,6 @@
 #
 #   --skip-launch      Don't launch Treeswift; assume it's already running
 #   --skip-scan        Skip Periphery scan; reuse cached results
-#   --skip-build       Skip the pre-scan Prodcore build
 #   --folder NAME      Only process this folder (repeatable)
 #   --commit           Auto-commit after each successful folder (requires branch=dancleanup)
 #   --dry-run          Preview what would be deleted without making changes
@@ -39,7 +38,6 @@ REQUIRED_BRANCH="dancleanup"
 
 SKIP_LAUNCH=false
 SKIP_SCAN=false
-SKIP_BUILD=false
 AUTO_COMMIT=false
 DRY_RUN=false
 RESET_PROGRESS=false
@@ -49,7 +47,6 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--skip-launch)    SKIP_LAUNCH=true;    shift ;;
 		--skip-scan)      SKIP_SCAN=true;      shift ;;
-		--skip-build)     SKIP_BUILD=true;     shift ;;
 		--commit)         AUTO_COMMIT=true;    shift ;;
 		--dry-run)        DRY_RUN=true;        shift ;;
 		--reset-progress) RESET_PROGRESS=true; shift ;;
@@ -68,7 +65,7 @@ done
 # SOURCE HELPERS FROM INTEGRATION SCRIPT
 # Strips the final `main "$@"` invocation to avoid running it.
 # Imports: curl_post, curl_get, wait_for_server, launch_treeswift,
-#   get_or_create_config, build_prodcore_for_index, start_scan,
+#   get_or_create_config, start_scan,
 #   wait_for_scan, get_periphery_tree, collect_file_ids,
 #   curl_post_resilient, preview_removal, execute_removal,
 #   build_prodcore, git_reset_prodcore, wait_for_scan_with_heartbeat
@@ -83,7 +80,6 @@ grep -v '^main ' "$SCRIPT_DIR/integration-test-removal.sh" > "$_HELPERS_TMP"
 # during source and would clobber the values we parsed from our args.
 _SAVED_SKIP_LAUNCH="$SKIP_LAUNCH"
 _SAVED_SKIP_SCAN="$SKIP_SCAN"
-_SAVED_SKIP_BUILD="$SKIP_BUILD"
 _SAVED_AUTO_COMMIT="$AUTO_COMMIT"
 _SAVED_DRY_RUN="$DRY_RUN"
 _SAVED_RESET_PROGRESS="$RESET_PROGRESS"
@@ -95,7 +91,6 @@ rm -f "$_HELPERS_TMP"
 # Restore our flag variables after sourcing.
 SKIP_LAUNCH="$_SAVED_SKIP_LAUNCH"
 SKIP_SCAN="$_SAVED_SKIP_SCAN"
-SKIP_BUILD="$_SAVED_SKIP_BUILD"
 AUTO_COMMIT="$_SAVED_AUTO_COMMIT"
 DRY_RUN="$_SAVED_DRY_RUN"
 RESET_PROGRESS="$_SAVED_RESET_PROGRESS"
@@ -611,11 +606,6 @@ main() {
 	if [[ "$SKIP_SCAN" == true ]]; then
 		tlog "Skipping scan (--skip-scan). Using existing results."
 	else
-		if [[ "$SKIP_BUILD" == true ]]; then
-			tlog "Skipping pre-scan build (--skip-build)."
-		else
-			build_prodcore_for_index
-		fi
 		log_section "Starting Prodcore scan (this may take several minutes)..."
 		start_scan "$CONFIG_ID"
 		tlog "Scan started."

@@ -28,19 +28,24 @@ final nonisolated class ScanCacheManager: Sendable {
 
 	/**
 	 Saves a scan cache to disk for the given configuration.
+	 Computes a source fingerprint from the project path before encoding so that
+	 load(for:) can detect stale caches after source modifications (e.g. git reset).
 	 Uses atomic write to prevent partial files on crash.
 	 */
 	func save(_ cache: ScanCache) throws {
+		let fingerprint = cache.projectPath.flatMap { SourceFingerprint.compute(for: $0) }
+		let stampedCache = cache.withSourceFingerprint(fingerprint)
 		let encoder = JSONEncoder()
 		encoder.dateEncodingStrategy = .iso8601
-		let data = try encoder.encode(cache)
-		try data.write(to: cacheFileURL(for: cache.configurationID), options: .atomic)
+		let data = try encoder.encode(stampedCache)
+		try data.write(to: cacheFileURL(for: stampedCache.configurationID), options: .atomic)
 		"* ✓ Scan results cached to disk (\(data.count) bytes)".logToConsole()
 	}
 
 	/**
 	 Loads the cached scan results for the given configuration ID.
-	 Returns nil if no cache exists, the file is unreadable, or the schema version is outdated.
+	 Returns nil if no cache exists, the file is unreadable, the schema version is
+	 outdated, or the source fingerprint does not match the current source state.
 	 */
 	func load(for configurationID: UUID) -> ScanCache? {
 		let url = cacheFileURL(for: configurationID)
@@ -51,6 +56,11 @@ final nonisolated class ScanCacheManager: Sendable {
 			decoder.dateDecodingStrategy = .iso8601
 			let cache = try decoder.decode(ScanCache.self, from: data)
 			guard cache.schemaVersion == ScanCache.currentSchemaVersion else {
+				try? FileManager.default.removeItem(at: url)
+				return nil
+			}
+			let currentFingerprint = cache.projectPath.flatMap { SourceFingerprint.compute(for: $0) }
+			guard let stored = cache.sourceFingerprint, stored == currentFingerprint else {
 				try? FileManager.default.removeItem(at: url)
 				return nil
 			}

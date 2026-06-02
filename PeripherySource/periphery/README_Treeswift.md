@@ -367,6 +367,21 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 10. ObservableMacroRetainer: Suppress implicit backing storage warnings ⟶ [Pending Upstream P3]
+
+**Purpose**: Prevent spurious `redundantInternalAccessibility` warnings on `@Observable` synthesized backing storage properties (`_propName`).
+
+**Root cause**: `@Observable` synthesizes implicit `varInstance` declarations (`_propName`) whose indexstore positions point into macro expansion files, not the actual source file. Periphery assigns wrong line numbers to these declarations and may emit `redundantInternalAccessibility` warnings pointing at the wrong lines. The existing retainer loop skipped implicit properties entirely (filtered by `!$0.isImplicit`).
+
+**Fix**: Before processing explicit properties, iterate the implicit backing storage properties of each detected `@Observable` type and call `graph.unmarkRedundantInternalAccessibility` on each.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift`: Added loop over implicit `varInstance` declarations to unmark `redundantInternalAccessibility` before the existing explicit-property loop.
+
+**Status**: Pending upstream — see [P3](#p3-observablemacroretainer-suppress-implicit-backing-storage-warnings).
+
+---
+
 ---
 
 ## Pending Upstream Contributions
@@ -401,6 +416,15 @@ When contributing one of these upstream:
 
 ---
 
+### P3. ObservableMacroRetainer: Suppress implicit backing storage warnings
+
+**File**: `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift`
+**Change**: Added loop over implicit `varInstance` declarations (`_propName`) in detected `@Observable` types to call `graph.unmarkRedundantInternalAccessibility` before the existing explicit-property loop.
+**Why general-purpose**: Any codebase using `@Observable` can receive spurious `redundantInternalAccessibility` warnings on synthesized backing storage properties whose source positions point into macro expansion files. Not Treeswift-specific.
+**Upstream branch**: `master`
+
+---
+
 ## Critical Files for Future Updates
 
 Files that MUST preserve modifications:
@@ -415,6 +439,7 @@ Files likely to conflict on update:
 - ⚠️ `Sources/Indexer/SwiftIndexer.swift` - Location lookup logic
 - ⚠️ `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift` - Many small additions
 - ⚠️ `Sources/SourceGraph/SourceGraphMutatorRunner.swift` - ObservableMacroRetainer pipeline entry
+- ⚠️ `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift` - Implicit backing storage suppression (section 10)
 
 ---
 

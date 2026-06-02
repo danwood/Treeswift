@@ -360,6 +360,7 @@ final class ScanState {
 			schemaVersion: ScanCache.currentSchemaVersion,
 			cachedAt: Date(),
 			projectPath: projectPath,
+			sourceFingerprint: nil,
 			treeNodes: treeNodes.map { TreeNodeResponse(from: $0) },
 			treeSection: treeSection.map { CategoriesNodeResponse(from: $0) },
 			viewExtensionsSection: viewExtensionsSection.map { CategoriesNodeResponse(from: $0) },

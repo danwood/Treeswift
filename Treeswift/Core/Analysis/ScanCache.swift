@@ -9,12 +9,13 @@
 import Foundation
 
 nonisolated struct ScanCache: Codable, Sendable {
-	static let currentSchemaVersion = 2
+	static let currentSchemaVersion = 3
 
 	let configurationID: UUID
 	let schemaVersion: Int
 	let cachedAt: Date
 	let projectPath: String?
+	let sourceFingerprint: String?
 	let treeNodes: [TreeNodeResponse]
 	let treeSection: CategoriesNodeResponse?
 	let viewExtensionsSection: CategoriesNodeResponse?
@@ -28,6 +29,34 @@ nonisolated struct ScanCache: Codable, Sendable {
 	let declarationSnapshots: [DeclarationSnapshot]
 	let referenceSnapshots: [ReferenceSnapshot]
 	let scanResultSnapshots: [ScanResultSnapshot]
+
+	// MARK: - Fingerprint
+
+	/**
+	 Returns a copy of this cache with the given source fingerprint applied.
+	 Used by ScanCacheManager to stamp the fingerprint at save time.
+	 */
+	nonisolated func withSourceFingerprint(_ fingerprint: String?) -> ScanCache {
+		ScanCache(
+			configurationID: configurationID,
+			schemaVersion: schemaVersion,
+			cachedAt: cachedAt,
+			projectPath: projectPath,
+			sourceFingerprint: fingerprint,
+			treeNodes: treeNodes,
+			treeSection: treeSection,
+			viewExtensionsSection: viewExtensionsSection,
+			sharedSection: sharedSection,
+			orphansSection: orphansSection,
+			previewOrphansSection: previewOrphansSection,
+			bodyGetterSection: bodyGetterSection,
+			unattachedSection: unattachedSection,
+			fileTreeNodes: fileTreeNodes,
+			declarationSnapshots: declarationSnapshots,
+			referenceSnapshots: referenceSnapshots,
+			scanResultSnapshots: scanResultSnapshots
+		)
+	}
 
 	// MARK: - Response → Live Model Conversions
 

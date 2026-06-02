@@ -8,11 +8,9 @@
 #   cascade         — may or may not break the build
 #
 # Usage:
-#   bash scripts/integration-test-removal.sh [--skip-launch] [--skip-build] [--folder FOLDERNAME]
+#   bash scripts/integration-test-removal.sh [--skip-launch] [--folder FOLDERNAME]
 #
 #   --skip-launch     Don't try to launch Treeswift; assume it's already running
-#   --skip-build      Skip the pre-scan Prodcore build (indexstore may be stale — use only
-#                     when you know the source files haven't changed since the last build)
 #   --skip-scan       Skip the Periphery scan entirely; reuse cached results
 #   --folder NAME     Only test the named top-level folder (can repeat)
 #
@@ -40,7 +38,6 @@ RESULTS_CACHE="/tmp/treeswift-integration-results.cache"
 
 SKIP_LAUNCH=false
 SKIP_SCAN=false
-SKIP_BUILD=false
 RESET_CACHE=false
 FOLDER_FILTER=()
 
@@ -52,10 +49,6 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--skip-scan)
 			SKIP_SCAN=true
-			shift
-			;;
-		--skip-build)
-			SKIP_BUILD=true
 			shift
 			;;
 		--folder)
@@ -213,34 +206,6 @@ get_or_create_config() {
 	new_id=$(echo "$resp" | jq -r '.id')
 	tlog "Created configuration: $new_id"
 	echo "$new_id"
-}
-
-build_prodcore_for_index() {
-	# Builds Prodcore to verify it compiles before scanning.
-	# NOTE: This does NOT update the indexstore that Periphery reads. Periphery uses its
-	# own DerivedData path (~/.../com.github.peripheryapp/) and builds the project itself
-	# during scanning. This step is only useful to confirm the source compiles.
-	tlog "Building Prodcore to verify it compiles (does not update Periphery's indexstore)..."
-	local build_log
-	build_log=$(mktemp /tmp/xcodebuild-index-XXXXXX)
-	xcodebuild \
-		-project "$PRODCORE_PROJECT" \
-		-scheme "$PRODCORE_SCHEME" \
-		-destination "platform=macOS,arch=arm64" \
-		-configuration Debug \
-		-quiet \
-		clean build \
-		CODE_SIGN_IDENTITY="" \
-		CODE_SIGNING_REQUIRED=NO \
-		2>&1 | tee "$build_log"
-	local exit_code="${PIPESTATUS[0]}"
-	if [[ "$exit_code" -ne 0 ]]; then
-		tlog "  WARNING: Pre-scan build failed (exit $exit_code). Source may have issues."
-		tlog "  Build tlog: $build_log"
-	else
-		rm -f "$build_log"
-		tlog "  Build complete."
-	fi
 }
 
 start_scan() {
@@ -489,11 +454,6 @@ main() {
 	if [[ "$SKIP_SCAN" == true ]]; then
 		tlog "Skipping scan (--skip-scan). Using existing results."
 	else
-		if [[ "$SKIP_BUILD" == true ]]; then
-			tlog "Skipping pre-scan build (--skip-build). Indexstore may be stale."
-		else
-			build_prodcore_for_index
-		fi
 		log_section "Starting Prodcore scan (this may take several minutes)..."
 		start_scan "$CONFIG_ID"
 		tlog "Scan started."

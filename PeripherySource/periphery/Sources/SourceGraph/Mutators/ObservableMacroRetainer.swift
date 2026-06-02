@@ -41,6 +41,15 @@ final class ObservableMacroRetainer: SourceGraphMutator {
         let typeKinds: Set<Declaration.Kind> = [.enum, .struct, .class, .typealias, .associatedtype]
 
         for observableType in observableTypes {
+            // Suppress redundantInternalAccessibility on implicit backing storage properties
+            // (_propName synthesized by @Observable). Their indexstore positions point into
+            // macro expansion files, so Periphery assigns wrong line numbers and flags them
+            // with spurious redundantInternalAccessibility warnings.
+            let implicitProps = observableType.declarations.filter { $0.kind == .varInstance && $0.isImplicit }
+            for implicitProp in implicitProps {
+                graph.unmarkRedundantInternalAccessibility(implicitProp)
+            }
+
             let props = observableType.declarations.filter { $0.kind == .varInstance && !$0.isImplicit }
             for property in props {
                 // For every stored property of an @Observable type, suppress redundant-internal-
