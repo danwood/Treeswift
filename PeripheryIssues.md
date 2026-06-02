@@ -50,4 +50,50 @@ File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
 
 ---
 
+## 3. Protocol Declarations Flagged as Unused When Used Only via Conformance
+
+**Symptom:** Periphery flags a `protocol` declaration as unused and Treeswift removes it, even though multiple types conform to it. The protocol body is deleted, leaving conformance declarations (`SomeType: TheProtocol`) that now fail to compile.
+
+**Example:**
+```swift
+// Removed by Treeswift:
+public protocol StatusRepresentable: RawRepresentable, CaseIterable, ... { ... }
+
+// Still present — now broken:
+public enum ProgramStatus: String, StatusRepresentable { ... }
+public enum DealStatus: String, StatusRepresentable { ... }
+```
+File: `CoreData/Common/StatusProtocol.swift`
+
+**Root cause:** Periphery considers a protocol "unused" if no code calls its methods or reads its associated types directly. Conformance declarations (`: TheProtocol`) are not counted as usage of the protocol itself.
+
+**Impact:** Build failure. All types conforming to the removed protocol fail to compile.
+
+**Workaround:** Skip `CoreData/Common/StatusProtocol.swift` and similar pure-protocol files from bulk removal. Add `// periphery:ignore` to protocol declarations that are used only via conformance, or exclude such files from the nodeIds list.
+
+---
+
+## 4. Protocol Conformance Extensions Removed (`extension Type: Protocol`)
+
+**Symptom:** Periphery flags an `extension SomeType: SomeProtocol { ... }` block as unused and Treeswift removes it. Callers that pass `SomeType` where `SomeProtocol` is expected then fail with "does not conform to expected type".
+
+**Example:**
+```swift
+// Removed by Treeswift:
+extension Project: Shareable { ... }
+
+// Now fails:
+func someFunc(_ item: some Shareable) { ... }
+someFunc(project)   // error: 'Project' does not conform to 'Shareable'
+```
+File: `CoreData/Common/` (various extension files)
+
+**Root cause:** Periphery sees the conformance extension body as unreferenced if no code explicitly calls the protocol's methods through that conformance. Protocol-typed parameters that accept the conforming type are not tracked as "using" the conformance.
+
+**Impact:** Build failure anywhere the conforming type is passed as the protocol type.
+
+**Workaround:** Do not apply bulk removal to extension files that declare protocol conformances. Inspect these manually and skip. Add `// periphery:ignore` to conformance extensions if they must remain.
+
+---
+
 
