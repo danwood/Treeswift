@@ -22,6 +22,8 @@ This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's loc
 
 **General Periphery analysis changes** (new scan rules, bug fixes in mutators, new detection patterns) must NOT be applied here. They belong in the upstream repository (danwood/periphery) and should be pulled into Treeswift via `git subtree pull`. If a task requires such a change, stop and make a plan to apply it to the correct upstream branch first.
 
+**Exception — "pending upstream" fixes**: Analysis fixes that are clearly correct and general-purpose, but have not yet been contributed upstream, may be applied directly here temporarily. They MUST be documented in the [Pending Upstream Contributions](#pending-upstream-contributions) section below so they are not forgotten and can be migrated when convenient.
+
 ### Upstream Branch Workflow (CRITICAL)
 
 The `danwood/periphery` repo has several branches that exist solely to support Treeswift. They are not intended for general Periphery users.
@@ -324,37 +326,78 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
-### 8. Fix let-binding false positives in assignOnlyProperty detection (+14 lines across 4 files)
+### 8. ObservableMacroRetainer: Fix @Observable false positives ⟶ [Pending Upstream P1]
+
+**Purpose**: Prevent false-positive `.unused` and `redundantInternalAccessibility` warnings on types and properties inside `@Observable` classes/structs.
+
+**Root cause**: The `@Observable` macro synthesizes backing storage and accessor boilerplate in macro-expansion files (`@__swiftmacro_*.swift`). Periphery does not walk these expansion files, so property types appear unused and properties appear file-local.
+
+**Fix**: Wire `ObservableMacroRetainer.swift` (already present in SourceGraph/Mutators/) into the mutator pipeline.
+
+**Change**:
+- `Sources/SourceGraph/SourceGraphMutatorRunner.swift`: Added `ObservableMacroRetainer.self` after `ExternalOverrideRetainer.self`.
+
+**Status**: Pending upstream — see [P1](#p1-observablemacroretainer-wire-into-mutator-pipeline).
+
+---
+
+### 9. Fix let-binding false positives in assignOnlyProperty detection ⟶ [Pending Upstream P2]
 
 **Purpose**: Prevent false positive `assignOnlyProperty` warnings on `let` stored properties.
 
-**Root cause**: SourceKit emits a `functionAccessorSetter` declaration for `let` stored properties (representing the init-time assignment). When a `let` property is only read via compiler-synthesized code (Codable `encode(to:)`, `Hashable`/`Equatable` synthesis, SwiftUI `@ViewBuilder`), no indexed getter references are produced. `AssignOnlyPropertyReferenceEliminator` incorrectly flags these as assign-only.
+**Root cause**: SourceKit emits a `functionAccessorSetter` for `let` stored properties. When the property is only read via compiler-synthesized code (Codable, Hashable/Equatable, SwiftUI `@ViewBuilder`), `AssignOnlyPropertyReferenceEliminator` incorrectly flags it.
 
-**Note**: This is a general analysis fix that should eventually be contributed upstream to danwood/periphery.
+**Changes** (+14 lines across 4 files):
 
 #### `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift` (+7 lines)
-
-**Changes**:
 1. Added `isLetBinding: Bool` to `Result` tuple
 2. Added `isLetBinding: Bool = false` parameter to `parse()`
-3. In `visitPost(_ node: VariableDeclSyntax)`: compute `isLetBinding` from `node.bindingSpecifier.tokenKind == .keyword(.let)` and pass it to `parse()`
-4. In `visitVariableTupleBinding()`: same — compute and pass `isLetBinding`
-5. In `results.append(...)`: include `isLetBinding: isLetBinding`
+3. Compute and pass `isLetBinding` in `visitPost(_ node: VariableDeclSyntax)` and `visitVariableTupleBinding()`
 
 #### `Sources/SourceGraph/Elements/Declaration.swift` (+1 line)
-
-**Changes**:
 1. Added `public var isLetBinding: Bool = false` property
 
 #### `Sources/Indexer/SwiftIndexer.swift` (+1 line)
-
-**Changes**:
 1. In `applyDeclarationMetadata`: added `decl.isLetBinding = result.isLetBinding`
 
 #### `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift` (+5 lines)
+1. Added `!property.isLetBinding` guard condition
 
-**Changes**:
-1. Added `!property.isLetBinding` guard condition with explanatory comment
+**Status**: Pending upstream — see [P2](#p2-fix-let-binding-false-positives-in-assignonlyproperty-detection).
+
+---
+
+---
+
+## Pending Upstream Contributions
+
+Fixes applied here that should eventually be migrated to `danwood/periphery` `master` branch and pulled back via subtree. Each entry notes what was changed, why it's general-purpose (not Treeswift-specific), and what upstream branch it belongs on.
+
+When contributing one of these upstream:
+1. Apply the change on `master` in `~/code/periphery-dan-private`
+2. Rebuild `combine-master-redundant-nested-1062` (merge master + redundant-nested + fix-1062)
+3. `git subtree pull` into Treeswift
+4. Remove the entry from this section (the fix now lives upstream)
+5. Move the Modification Category entry to note "now upstream, preserved via subtree pull"
+
+---
+
+### P1. ObservableMacroRetainer: wire into mutator pipeline
+
+**File**: `Sources/SourceGraph/SourceGraphMutatorRunner.swift`
+**Change**: Added `ObservableMacroRetainer.self` after `ExternalOverrideRetainer.self`
+**Why general-purpose**: Any codebase using `@Observable` will get false `.unused` and `redundantInternalAccessibility` warnings. Not Treeswift-specific.
+**Upstream branch**: `master`
+**Also involves**: `ObservableMacroRetainer.swift` itself (the file) — already exists in the subtree; if upstream doesn't have it, it must be added there too.
+
+---
+
+### P2. Fix let-binding false positives in assignOnlyProperty detection
+
+**Files**: `DeclarationSyntaxVisitor.swift`, `Declaration.swift`, `SwiftIndexer.swift`, `AssignOnlyPropertyReferenceEliminator.swift`
+**Change**: Track `isLetBinding` flag through indexing pipeline; skip assign-only elimination for `let` properties.
+**Why general-purpose**: `let` stored properties should never be flagged as assign-only. Affects any codebase with Codable/Hashable/Equatable synthesis.
+**Upstream branch**: `master`
 
 ---
 
@@ -371,6 +414,7 @@ Files likely to conflict on update:
 - ⚠️ `Sources/ProjectDrivers/XcodeProjectDriver.swift` - Build process changes
 - ⚠️ `Sources/Indexer/SwiftIndexer.swift` - Location lookup logic
 - ⚠️ `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift` - Many small additions
+- ⚠️ `Sources/SourceGraph/SourceGraphMutatorRunner.swift` - ObservableMacroRetainer pipeline entry
 
 ---
 
@@ -556,4 +600,4 @@ git diff --stat danwood-fork/combine-master-redundant-nested-1062 HEAD -- Periph
 
 *Periphery base: 3.4.0+ (commit 5a4ac8b)*
 *Baseline commit: 4dd2a038*
-*Last updated: 2026-01-17*
+*Last updated: 2026-06-01*
