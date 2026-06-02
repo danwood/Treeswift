@@ -59,6 +59,16 @@ final class UsedDeclarationMarker: SourceGraphMutator {
                 markUsed([parent])
             }
 
+            // When any method or function member is used, the containing type is also used.
+            // The Swift index store sometimes records only a reference to the member (e.g. the
+            // static method USR) without a separate reference to the enclosing type at the call
+            // site. Propagating upward ensures the containing type — and by extension the Issue 7
+            // child-function returnType/parameterType walk — fires reliably, preventing nested
+            // types that appear only in sibling method signatures from being falsely flagged.
+            if declaration.kind.isFunctionKind, let parent = declaration.parent {
+                markUsed([parent])
+            }
+
             for ref in declaration.references {
                 markUsed(declarationsReferenced(by: ref))
             }

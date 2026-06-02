@@ -430,6 +430,21 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 15. UsedDeclarationMarker: propagate used status from method/function to containing type ⟶ [Pending Upstream P8]
+
+**Purpose**: Fix edge cases where a type is not marked used even though one of its methods is used, causing Issue 7's child-function type walk to not fire.
+
+**Root cause**: When a static method (or any method) is called, the Swift index store sometimes records only a reference to the method USR at the call site, without a separate reference occurrence for the enclosing type. In that case the type itself is never added to `usedDeclarations` via the normal reference chain. The Issue 7 fix (section 14) walks child function returnType/parameterType refs only when the parent type is marked used — so if the parent type is not marked used, nested types referenced only in method signatures remain falsely flagged.
+
+**Fix**: In `UsedDeclarationMarker.markUsed(_:)`, added a propagation case for all function kinds: when any method or function member is marked used, its parent declaration is also marked used. This mirrors the existing `functionConstructor → parent` and `accessor → parent property` propagation patterns.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`: Added `if declaration.kind.isFunctionKind, let parent = declaration.parent { markUsed([parent]) }` block inside `markUsed(_:)`, after the accessor → property propagation.
+
+**Status**: Pending upstream — see [P8](#p8-useddeclarationmarker-propagate-used-status-from-methodfunction-to-containing-type).
+
+---
+
 ### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
 
 **Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
@@ -535,6 +550,20 @@ When contributing one of these upstream:
 **Why needed**: A nested enum or struct used only as a return/parameter type has no external references of its own. Without this walk, it falls out of `usedDeclarations` and is falsely flagged as `.unused`. The existing `varType` walk for child property declarations addresses the same problem for properties; this extends the pattern to functions.
 
 **Why general-purpose**: Any codebase with a nested type used only within its parent's method signatures can trigger this false positive. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P8. UsedDeclarationMarker: propagate used status from method/function to containing type
+
+**File**: `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`
+
+**Change**: In `markUsed(_:)`, when any function-kind declaration (instance method, static method, class method, free function, constructor, etc.) is marked used, also mark its parent declaration as used. Mirrors the existing constructor → containing-type and accessor → property propagation patterns.
+
+**Why needed**: The Swift index store sometimes records only a reference to the method USR at a call site, without emitting a separate type-reference occurrence for the enclosing type. When that happens, the type is not added to `usedDeclarations` through the normal reference chain. Because the Issue 7 (P7) child-function walk fires only when the parent type is already marked used, a type reachable only through its static-method call sites could silently bypass the walk, leaving nested types falsely unused.
+
+**Why general-purpose**: Any codebase with an enum or struct that is accessed exclusively through static-method call sites (no explicit type-annotation usage) could encounter this if the index store omits the enclosing-type reference. Not Treeswift-specific.
 
 **Upstream branch**: `master`
 
