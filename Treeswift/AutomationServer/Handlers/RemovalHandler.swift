@@ -278,18 +278,22 @@ enum RemovalHandler {
 	private static func collectFileNodesRecursive(
 		from nodes: [TreeNode],
 		idSet: Set<String>?,
-		into result: inout [FileNode]
+		into result: inout [FileNode],
+		collectAll: Bool = false
 	) {
 		for node in nodes {
 			switch node {
 			case let .folder(folder):
-				collectFileNodesRecursive(from: folder.children, idSet: idSet, into: &result)
+				// If this folder's ID is in the requested set, collect all files beneath it.
+				let folderSelected = idSet?.contains(folder.id) ?? false
+				collectFileNodesRecursive(
+					from: folder.children,
+					idSet: idSet,
+					into: &result,
+					collectAll: collectAll || folderSelected
+				)
 			case let .file(file):
-				if let idSet {
-					if idSet.contains(file.id) {
-						result.append(file)
-					}
-				} else {
+				if collectAll || idSet == nil || (idSet?.contains(file.id) ?? false) {
 					result.append(file)
 				}
 			}
