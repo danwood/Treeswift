@@ -96,4 +96,32 @@ File: `CoreData/Common/` (various extension files)
 
 ---
 
+## 5. `unused`: Private Methods Called Only Within Same Type Incorrectly Removed
+
+**Symptom:** Periphery flags a `private` or `private(set)` method/property as `unused` and Treeswift removes it — but the method is called by other methods within the same type. The caller compiles fine until runtime, when it crashes, or fails to compile if the method is referenced by name.
+
+**Example:**
+```swift
+// Removed by Treeswift — flagged as unused:
+private func purge(assetID: UUID) throws { ... }
+private let logger = Logger(...)
+
+// Still present — now broken:
+func cleanupOrphans() throws {
+    try purge(assetID: orphanID)     // error: cannot find 'purge' in scope
+    logger.info("cleaned up")        // error: 'logger' inaccessible
+}
+```
+Files: `Engine/EngineCacheManager.swift`, `Core/DeepLinkHandler.swift`
+
+**Root cause:** Periphery tracks references across the module's source graph but misses or undercounts intra-type references in some cases — particularly for `private` members called only from within the same `class`/`struct`/`actor`. The member appears unreachable from Periphery's perspective.
+
+**Impact:** Build failure or silent runtime breakage.
+
+**Workaround:** Do not apply bulk `unused` annotation removals without manual review of each declaration. `redundantAccessibility` and `redundantInternalAccessibility` removals are much safer for bulk operation — they only adjust access modifiers, never remove code.
+
+**Recommended safe bulk strategy:** Filter to `annotationFilter: ["redundantAccessibility", "redundantInternalAccessibility", "redundantPublicAccessibility"]` only. Review `unused` and `assignOnlyProperty` removals manually.
+
+---
+
 
