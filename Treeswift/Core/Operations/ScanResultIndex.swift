@@ -1,6 +1,7 @@
 import Foundation
 import PeripheryKit
 import SourceGraph
+import SwiftUI
 import SystemPackage
 
 /**
@@ -15,7 +16,20 @@ import SystemPackage
 final class ScanResultIndex {
 	private var filePathIndex: [String: [ScanResult]] = [:]
 	private var cachedFilteredResults: [String: [ScanResult]] = [:]
+	private var cachedBadges: [String: [Badge]] = [:]
 	private var lastFilterStateHash: Int = 0
+
+	private static let badgeOrderIndex: [SwiftType: Int] = [
+		.struct: 0,
+		.class: 1,
+		.enum: 2,
+		.typealias: 3,
+		.extension: 4,
+		.parameter: 5,
+		.property: 6,
+		.initializer: 7,
+		.function: 8
+	]
 
 	/**
 	 Rebuilds the index from a new set of scan results.
@@ -35,6 +49,7 @@ final class ScanResultIndex {
 
 		filePathIndex = newIndex
 		cachedFilteredResults.removeAll()
+		cachedBadges.removeAll()
 	}
 
 	/**
@@ -118,6 +133,7 @@ final class ScanResultIndex {
 		let newHash = computeFilterHash(filterState: filterState, hiddenIDs: [])
 		if newHash != lastFilterStateHash {
 			cachedFilteredResults.removeAll()
+			cachedBadges.removeAll()
 			lastFilterStateHash = newHash
 		}
 	}
@@ -153,6 +169,69 @@ final class ScanResultIndex {
 	}
 
 	/**
+	 Returns a snapshot of the raw file-path index for use off the main actor.
+	 The snapshot is a value-type copy safe to pass across concurrency boundaries.
+	 */
+	func snapshotIndex() -> [String: [ScanResult]] {
+		filePathIndex
+	}
+
+	/**
+	 Returns cached badge array for a file, computing and caching on first call per filter state.
+	 Avoids per-render badge recomputation in FileRowView.
+	 */
+	func visibleBadges(
+		forFile path: String,
+		filterState: FilterState?,
+		hiddenWarningIDs: Set<String>
+	) -> [Badge] {
+		let filterHash = computeFilterHash(filterState: filterState, hiddenIDs: hiddenWarningIDs)
+		let cacheKey = "\(path):\(filterHash)"
+
+		if let cached = cachedBadges[cacheKey] {
+			return cached
+		}
+
+		struct CounterKey: Hashable {
+			let swiftType: SwiftType
+			let isUnused: Bool
+		}
+
+		let visibleResults = filteredResults(
+			forFile: path,
+			filterState: filterState,
+			hiddenWarningIDs: hiddenWarningIDs
+		)
+
+		var counts: [CounterKey: Int] = [:]
+		counts.reserveCapacity(visibleResults.count)
+		for result in visibleResults {
+			let swiftType = SwiftType.from(declarationKind: result.declaration.kind)
+			let key = CounterKey(swiftType: swiftType, isUnused: result.annotation == .unused)
+			counts[key, default: 0] += 1
+		}
+
+		var badges: [Badge] = []
+		badges.reserveCapacity(counts.count)
+		for swiftType in SwiftType.allCases {
+			if let c = counts[CounterKey(swiftType: swiftType, isUnused: true)], c > 0 {
+				badges.append(Badge(letter: swiftType.rawValue, count: c, swiftType: swiftType, isUnused: true))
+			}
+			if let c = counts[CounterKey(swiftType: swiftType, isUnused: false)], c > 0 {
+				badges.append(Badge(letter: swiftType.rawValue, count: c, swiftType: swiftType, isUnused: false))
+			}
+		}
+		badges.sort {
+			let l = Self.badgeOrderIndex[$0.swiftType] ?? Int.max
+			let r = Self.badgeOrderIndex[$1.swiftType] ?? Int.max
+			return l < r
+		}
+
+		cachedBadges[cacheKey] = badges
+		return badges
+	}
+
+	/**
 	 Computes a hash for filter state to use in cache keys.
 	 */
 	private func computeFilterHash(filterState: FilterState?, hiddenIDs: Set<String>) -> Int {
@@ -178,7 +257,7 @@ final class ScanResultIndex {
 			hasher.combine(filterState.showImport)
 		}
 
-		hasher.combine(hiddenIDs.count)
+		hasher.combine(hiddenIDs.hashValue)
 
 		return hasher.finalize()
 	}

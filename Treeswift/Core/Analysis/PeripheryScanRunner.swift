@@ -253,7 +253,7 @@ final class PeripheryScanRunner: Sendable {
 					// Phase 2: Post-processing with streaming
 					// Categories: Sequential streaming (7 sections)
 					let categoriesTask = Task {
-						_ = Dumper()
+						_ = await Dumper()
 							.buildCategoriesStreaming(
 								sourceGraph: sourceGraph,
 								projectRootPath: projectRootPath

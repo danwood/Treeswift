@@ -196,16 +196,29 @@ final class ScanState {
 
 									// Capture current scan results and designation manager for type analysis
 									let scanResults = await MainActor.run { self.scanResults }
-									let typeEnrichedNodes = await fileAnalyzer.enrichFilesWithTypeInfo(
+									// Run FileTypeAnalyzer and FileWarningAnalyzer.precomputeAnalysis in parallel.
+									// FileWarningAnalyzer's graph traversal doesn't depend on typeInfos,
+									// so both can proceed concurrently after the filesystem scan.
+									async let typeEnrichedNodesTask = fileAnalyzer.enrichFilesWithTypeInfo(
 										fileNodes: fileNodes,
 										sourceGraph: graph,
 										scanResults: scanResults
 									)
+									async let warningPrecomputeTask = fileWarningAnalyzer.precomputeAnalysis(
+										nodes: fileNodes,
+										sourceGraph: graph
+									)
+									let (typeEnrichedNodes, warningPrecomputed) = await (
+										typeEnrichedNodesTask,
+										warningPrecomputeTask
+									)
 									"* ✓ Type analysis complete".logToConsole()
 
-									// Analyze file-level warnings for shared code
-									let fileWarningEnrichedNodes = await fileWarningAnalyzer.analyzeFiles(
-										nodes: typeEnrichedNodes,
+									// Apply precomputed warning data to type-enriched nodes (fast pass,
+									// requires typeInfos to be populated by FileTypeAnalyzer).
+									let fileWarningEnrichedNodes = fileWarningAnalyzer.applyAnalysis(
+										warningPrecomputed,
+										to: typeEnrichedNodes,
 										sourceGraph: graph
 									)
 									"* ✓ File warning analysis complete".logToConsole()

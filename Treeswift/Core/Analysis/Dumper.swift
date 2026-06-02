@@ -575,8 +575,8 @@ final class Dumper: Sendable {
 	nonisolated func buildCategoriesStreaming(
 		sourceGraph: SourceGraph,
 		projectRootPath: String? = nil,
-		onSectionBuilt: @Sendable (CategoriesNode) -> Void
-	) -> [CategoriesNode] {
+		onSectionBuilt: @escaping @Sendable (CategoriesNode) -> Void
+	) async -> [CategoriesNode] {
 		let t0 = Date()
 		func elapsed() -> String { String(format: "%.2fs", Date().timeIntervalSince(t0)) }
 		func log(_ msg: String) {
@@ -650,68 +650,165 @@ final class Dumper: Sendable {
 		filteredDeclarations.removeAll { sharedTypes.contains($0) }
 		log("After section 3 removal → \(filteredDeclarations.count) decls remain")
 
-		// Section 4: Orphaned Types
-		let orphanedTypes = extractOrphanedTypes(from: &filteredDeclarations, sourceGraph: sourceGraph)
-		let section4: SectionNode = buildDeclarationListSection(
-			orphanedTypes,
-			sourceGraph: nil,
-			title: "ORPHANED TYPES (NO REFERENCES AT ALL). CAN DELETE.",
-			section: .orphaned,
-			projectRootPath: projectRootPath
+		// Sections 4-7: Parallel classification then parallel section building.
+		// After S3, the pool is immutable for classification purposes — all three
+		// predicates (orphaned, previewOnly, bodyGetter) perform read-only sourceGraph
+		// lookups with no inter-dependencies, so they can run concurrently.
+		let pool = filteredDeclarations // immutable snapshot for parallel classification
+		let capturedDisplayedTypes = displayedTypes // value capture for Sendable closure
+
+		// Phase A: Classify S4/S5/S6 in parallel using immutable pool snapshot.
+		// Each task returns the Set of declarations matching its predicate.
+		enum ClassifyResult {
+			case orphaned(Set<Declaration>)
+			case previewOnly(Set<Declaration>)
+			case bodyGetter(Set<Declaration>)
+		}
+
+		let (orphanedSet, previewOnlySet, bodyGetterSet): (Set<Declaration>, Set<Declaration>, Set<Declaration>) =
+			await withTaskGroup(of: ClassifyResult.self) { group in
+				group.addTask {
+					let matched = pool.filter { type in
+						!self.isMainApp(type) && sourceGraph.references(to: type).isEmpty
+					}
+					return .orphaned(Set(matched))
+				}
+				group.addTask {
+					let matched = pool.filter { type in
+						guard !capturedDisplayedTypes.contains(type), !self.isMainApp(type) else { return false }
+						let referencingDecls = self.referencingDeclarations(for: type, in: sourceGraph)
+						guard !referencingDecls.isEmpty else { return false }
+						return referencingDecls.allSatisfy {
+							$0.kind.rawValue.contains("static") && $0.name == "makePreview()"
+						}
+					}
+					return .previewOnly(Set(matched))
+				}
+				group.addTask {
+					let matched = pool.filter { type in
+						guard !capturedDisplayedTypes.contains(type), !self.isMainApp(type) else { return false }
+						let referencingDecls = self.referencingDeclarations(for: type, in: sourceGraph)
+						return !self.isMainApp(type) &&
+							!referencingDecls.isEmpty &&
+							referencingDecls.allSatisfy {
+								$0.kind == .functionAccessorGetter && $0.name == "getter:body"
+							}
+					}
+					return .bodyGetter(Set(matched))
+				}
+
+				var o = Set<Declaration>()
+				var p = Set<Declaration>()
+				var b = Set<Declaration>()
+				for await result in group {
+					switch result {
+					case let .orphaned(s): o = s
+					case let .previewOnly(s): p = s
+					case let .bodyGetter(s): b = s
+					}
+				}
+				return (o, p, b)
+			}
+
+		// Serial partition: apply classification sets in priority order to filteredDeclarations.
+		let orphanedTypes = filteredDeclarations.filter { orphanedSet.contains($0) }
+		filteredDeclarations.removeAll { orphanedSet.contains($0) }
+
+		// previewOnly and bodyGetter operate on what remains after orphaned removal.
+		let previewOnlyTypes = filteredDeclarations.filter { previewOnlySet.contains($0) }
+		filteredDeclarations.removeAll { previewOnlySet.contains($0) }
+
+		let onlyBodyGetterTypes = filteredDeclarations.filter { bodyGetterSet.contains($0) }
+		filteredDeclarations.removeAll { bodyGetterSet.contains($0) }
+
+		// S7 is everything remaining.
+		let usedButNotAttachedTypes = filteredDeclarations.filter {
+			!capturedDisplayedTypes.contains($0) && !isMainApp($0)
+		}
+
+		log(
+			"S4 orphaned=\(orphanedTypes.count) S5 previewOnly=\(previewOnlyTypes.count) S6 bodyGetter=\(onlyBodyGetterTypes.count) S7 unattached=\(usedButNotAttachedTypes.count)"
 		)
+
+		// Phase B: Build all four SectionNodes concurrently. Each task calls onSectionBuilt
+		// as soon as its section is ready, preserving streaming behavior.
+		enum SectionResult {
+			case s4(SectionNode)
+			case s5(SectionNode)
+			case s6(SectionNode)
+			case s7(SectionNode)
+		}
+
+		let capturedProjectRootPath = projectRootPath
+		var sectionMap: [Int: SectionNode] = [:]
+
+		await withTaskGroup(of: SectionResult.self) { group in
+			group.addTask {
+				let s = self.buildDeclarationListSection(
+					orphanedTypes,
+					sourceGraph: nil,
+					title: "ORPHANED TYPES (NO REFERENCES AT ALL). CAN DELETE.",
+					section: .orphaned,
+					projectRootPath: capturedProjectRootPath
+				)
+				onSectionBuilt(.section(s))
+				return .s4(s)
+			}
+			group.addTask {
+				let s = self.buildDeclarationListSection(
+					previewOnlyTypes,
+					sourceGraph: nil,
+					title: "PREVIEW-ORPHANED TYPES, ONLY REFERENCED BY PREVIEW. CAN DELETE.",
+					section: .previewOrphaned,
+					projectRootPath: capturedProjectRootPath
+				)
+				onSectionBuilt(.section(s))
+				return .s5(s)
+			}
+			group.addTask {
+				let s = self.buildDeclarationListSection(
+					onlyBodyGetterTypes,
+					sourceGraph: nil,
+					title: "ONLY REFERENCED BY BODY:GETTER, NOT IN HIERARCHY. HOPEFULLY EMPTY.",
+					section: .bodyGetter,
+					projectRootPath: capturedProjectRootPath
+				)
+				onSectionBuilt(.section(s))
+				return .s6(s)
+			}
+			group.addTask {
+				let s = self.buildDeclarationListSection(
+					usedButNotAttachedTypes,
+					sourceGraph: sourceGraph,
+					title: "USED BUT NOT ATTACHED TO OUR TYPES. PROBABLY KEEP, BUT CHECK THESE.",
+					section: .unattached,
+					projectRootPath: capturedProjectRootPath
+				)
+				onSectionBuilt(.section(s))
+				return .s7(s)
+			}
+
+			for await result in group {
+				switch result {
+				case let .s4(s): sectionMap[4] = s
+				case let .s5(s): sectionMap[5] = s
+				case let .s6(s): sectionMap[6] = s
+				case let .s7(s): sectionMap[7] = s
+				}
+			}
+		}
+
+		// Append sections in canonical order regardless of completion order.
+		for idx in [4, 5, 6, 7] {
+			if let s = sectionMap[idx] {
+				sections.append(.section(s))
+			}
+		}
+
 		log("Section 4 (orphaned) built → \(orphanedTypes.count) types")
-		sections.append(.section(section4))
-		onSectionBuilt(.section(section4))
-
-		// Section 5: Preview-Only Types
-		let previewOnlyTypes = extractPreviewOnlyTypes(
-			from: &filteredDeclarations,
-			sourceGraph: sourceGraph,
-			displayedTypes: Set<Declaration>()
-		)
-		let section5: SectionNode = buildDeclarationListSection(
-			previewOnlyTypes,
-			sourceGraph: nil,
-			title: "PREVIEW-ORPHANED TYPES, ONLY REFERENCED BY PREVIEW. CAN DELETE.",
-			section: .previewOrphaned,
-			projectRootPath: projectRootPath
-		)
 		log("Section 5 (previewOrphaned) built → \(previewOnlyTypes.count) types")
-		sections.append(.section(section5))
-		onSectionBuilt(.section(section5))
-
-		// Section 6: Body-Getter Referenced Types
-		let onlyBodyGetterTypes = extractOnlyBodyGetterReferencedTypes(
-			from: &filteredDeclarations,
-			sourceGraph: sourceGraph,
-			displayedTypes: displayedTypes
-		)
-		let section6: SectionNode = buildDeclarationListSection(
-			onlyBodyGetterTypes,
-			sourceGraph: nil,
-			title: "ONLY REFERENCED BY BODY:GETTER, NOT IN HIERARCHY. HOPEFULLY EMPTY.",
-			section: .bodyGetter,
-			projectRootPath: projectRootPath
-		)
 		log("Section 6 (bodyGetter) built → \(onlyBodyGetterTypes.count) types")
-		sections.append(.section(section6))
-		onSectionBuilt(.section(section6))
-
-		// Section 7: Used But Not Attached Types
-		let usedButNotAttachedTypes = extractUsedButNotAttachedTypes(
-			from: &filteredDeclarations,
-			displayedTypes: displayedTypes
-		)
-		let section7 = buildDeclarationListSection(
-			usedButNotAttachedTypes,
-			sourceGraph: sourceGraph,
-			title: "USED BUT NOT ATTACHED TO OUR TYPES. PROBABLY KEEP, BUT CHECK THESE.",
-			section: .unattached,
-			projectRootPath: projectRootPath
-		)
 		log("Section 7 (unattached) built → \(usedButNotAttachedTypes.count) types")
-		sections.append(.section(section7))
-		onSectionBuilt(.section(section7))
 
 		log("ALL SECTIONS COMPLETE")
 		return sections

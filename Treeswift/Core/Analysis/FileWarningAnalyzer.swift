@@ -75,13 +75,31 @@ final class FileWarningAnalyzer: Sendable {
 		return ("\(statistics.symbolCount) \(symbolText)", false, false)
 	}
 
+	// Precomputed per-file analysis data that does not require typeInfos.
+	// Produced by precomputeAnalysis() and consumed by applyAnalysis(_:to:sourceGraph:).
+	struct PrecomputedData: Sendable {
+		// Keyed by file path
+		var results: [String: FileAnalysisResult]
+	}
+
 	nonisolated init() {}
 
 	nonisolated func analyzeFiles(
 		nodes: [FileBrowserNode],
 		sourceGraph: SourceGraph
 	) async -> [FileBrowserNode] {
-		// Precompute declarations grouped by file to avoid scanning the whole graph per file
+		let precomputed = await precomputeAnalysis(nodes: nodes, sourceGraph: sourceGraph)
+		return applyAnalysis(precomputed, to: nodes, sourceGraph: sourceGraph)
+	}
+
+	/**
+	 Performs all graph-traversal work that does NOT require typeInfos.
+	 Safe to run in parallel with FileTypeAnalyzer.enrichFilesWithTypeInfo.
+	 */
+	nonisolated func precomputeAnalysis(
+		nodes: [FileBrowserNode],
+		sourceGraph: SourceGraph
+	) async -> PrecomputedData {
 		let declarationsByFile: [String: [Declaration]] = {
 			var dict: [String: [Declaration]] = [:]
 			for decl in sourceGraph.allDeclarations {
@@ -91,40 +109,58 @@ final class FileWarningAnalyzer: Sendable {
 			return dict
 		}()
 		let context = AnalysisContext(declarationsByFile: declarationsByFile)
-		return await analyzeFilesRecursive(nodes: nodes, sourceGraph: sourceGraph, context: context)
+		var results: [String: FileAnalysisResult] = [:]
+		collectFileResults(from: nodes, sourceGraph: sourceGraph, context: context, into: &results)
+		return PrecomputedData(results: results)
 	}
 
-	private nonisolated func analyzeFilesRecursive(
-		nodes: [FileBrowserNode],
+	private nonisolated func collectFileResults(
+		from nodes: [FileBrowserNode],
 		sourceGraph: SourceGraph,
-		context: AnalysisContext
-	) async -> [FileBrowserNode] {
-		var analyzedNodes: [FileBrowserNode] = []
-
+		context: AnalysisContext,
+		into results: inout [String: FileAnalysisResult]
+	) {
 		for node in nodes {
 			switch node {
 			case let .directory(dir):
-				let enrichedChildren = await analyzeFilesRecursive(
-					nodes: dir.children,
-					sourceGraph: sourceGraph,
-					context: context
-				)
-
-				var mutableDir = dir
-				mutableDir.children = enrichedChildren
-
-				analyzedNodes.append(.directory(mutableDir))
-
+				collectFileResults(from: dir.children, sourceGraph: sourceGraph, context: context, into: &results)
 			case let .file(file):
-				var mutableFile = file
-				let analysisResult = analyzeFile(file: file, sourceGraph: sourceGraph, context: context)
-				mutableFile.analysisWarnings = analysisResult.warnings
-				mutableFile.statistics = analysisResult.statistics
+				results[file.path] = analyzeFile(file: file, sourceGraph: sourceGraph, context: context)
+			}
+		}
+	}
 
-				// Enrich typeInfos with per-symbol reference data
+	/**
+	 Applies precomputed analysis data to type-enriched nodes.
+	 Must run after FileTypeAnalyzer so typeInfos is populated for enrichment + mismatch check.
+	 */
+	nonisolated func applyAnalysis(
+		_ precomputed: PrecomputedData,
+		to nodes: [FileBrowserNode],
+		sourceGraph: SourceGraph
+	) -> [FileBrowserNode] {
+		applyAnalysisRecursive(precomputed, to: nodes)
+	}
+
+	private nonisolated func applyAnalysisRecursive(
+		_ precomputed: PrecomputedData,
+		to nodes: [FileBrowserNode]
+	) -> [FileBrowserNode] {
+		nodes.map { node in
+			switch node {
+			case var .directory(dir):
+				dir.children = applyAnalysisRecursive(precomputed, to: dir.children)
+				return .directory(dir)
+			case var .file(file):
+				guard let result = precomputed.results[file.path] else { return .file(file) }
+
+				var warnings = result.warnings
+				file.statistics = result.statistics
+
+				// Enrich typeInfos with per-symbol reference data (requires typeInfos from FileTypeAnalyzer)
 				if let typeInfos = file.typeInfos {
-					mutableFile.typeInfos = typeInfos.map { typeInfo in
-						let refs = analysisResult.symbolReferences[typeInfo.name] ?? []
+					file.typeInfos = typeInfos.map { typeInfo in
+						let refs = result.symbolReferences[typeInfo.name] ?? []
 						return FileTypeInfo(
 							name: typeInfo.name,
 							icon: typeInfo.icon,
@@ -135,22 +171,45 @@ final class FileWarningAnalyzer: Sendable {
 							startLine: typeInfo.startLine
 						)
 					}
+
+					// File name mismatch check (requires typeInfos from FileTypeAnalyzer)
+					let fileName = (file.path as NSString).lastPathComponent
+					if typeInfos.count == 1, let singleType = typeInfos.first, !singleType.matchesFileName {
+						let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
+						let isExtensionPattern = fileNameWithoutExtension.hasPrefix(singleType.name + "+")
+						if !isExtensionPattern {
+							warnings.append(AnalysisWarning(
+								severity: .warning,
+								message: "File name '\(fileName)' doesn't match symbol '\(singleType.name)'",
+								suggestedActions: [
+									.renameFileToMatchSymbol(
+										currentPath: file.path,
+										currentName: fileName,
+										suggestedName: "\(singleType.name).swift"
+									)
+								],
+								details: [
+									"This file contains a single symbol '\(singleType.name)'",
+									"The filename should match: \(singleType.name).swift"
+								]
+							))
+						}
+					}
 				}
 
-				// Compute usage badge only if NO analysis warnings exist
-				if analysisResult.warnings.isEmpty, let stats = analysisResult.statistics {
+				file.analysisWarnings = warnings
+
+				if warnings.isEmpty, let stats = result.statistics {
 					let (badgeText, isWarning, isPositive) = Self.computeUsageBadge(statistics: stats)
-					mutableFile.usageBadge = UsageBadge(text: badgeText, isWarning: isWarning, isPositive: isPositive)
+					file.usageBadge = UsageBadge(text: badgeText, isWarning: isWarning, isPositive: isPositive)
 				}
 
-				analyzedNodes.append(.file(mutableFile))
+				return .file(file)
 			}
 		}
-
-		return analyzedNodes
 	}
 
-	private struct FileAnalysisResult {
+	struct FileAnalysisResult {
 		let warnings: [AnalysisWarning]
 		let statistics: FileStatistics?
 		let symbolReferences: [String: [String]] // symbol name -> referencing file names
@@ -240,36 +299,6 @@ final class FileWarningAnalyzer: Sendable {
 			symbols: fileSymbols,
 			referenceAnalysis: crossFolderAnalysis
 		)
-
-		// Check for file name mismatch (single symbol with different name)
-		if let types = file.typeInfos, types.count == 1,
-		   let singleType = types.first,
-		   !singleType.matchesFileName {
-			let fileNameWithoutExtension = (fileName as NSString).deletingPathExtension
-
-			// Check if file follows "SymbolName+Extension.swift" pattern (common for extensions)
-			let isExtensionPattern = fileNameWithoutExtension.hasPrefix(singleType.name + "+")
-
-			if !isExtensionPattern {
-				let suggestedFileName = "\(singleType.name).swift"
-
-				warnings.append(AnalysisWarning(
-					severity: .warning,
-					message: "File name '\(fileName)' doesn't match symbol '\(singleType.name)'",
-					suggestedActions: [
-						.renameFileToMatchSymbol(
-							currentPath: file.path,
-							currentName: fileName,
-							suggestedName: suggestedFileName
-						)
-					],
-					details: [
-						"This file contains a single symbol '\(singleType.name)'",
-						"The filename should match: \(suggestedFileName)"
-					]
-				))
-			}
-		}
 
 		// Check for View naming warnings
 		let hasViewSymbol = fileSymbols.contains { DeclarationIconHelper.conformsToView($0) }

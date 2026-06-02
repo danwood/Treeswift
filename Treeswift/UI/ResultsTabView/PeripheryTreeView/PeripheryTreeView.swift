@@ -34,6 +34,7 @@ struct PeripheryTreeView: View {
 	@State private var showProgressSheet = false
 	@State private var resultIndex = ScanResultIndex()
 	@State private var cachedVisibleItems: [String] = []
+	@State private var flatNodes: [FlatNode] = []
 	@State private var removalSummary: RemovalSummary?
 	@State private var operationError: OperationError?
 	@State private var showStrategySheet = false
@@ -41,6 +42,7 @@ struct PeripheryTreeView: View {
 	@State private var pendingDependencyChains: [DependencyChain] = []
 	@State private var typeAheadState = TypeAheadState()
 	@AppStorage("typeAheadSearchAllNodes") private var typeAheadSearchAllNodes: Bool = false
+	@State private var filterTask: Task<Void, Never>?
 	@Environment(\.undoManager) private var undoManager
 
 	/**
@@ -71,15 +73,16 @@ struct PeripheryTreeView: View {
 
 		ScrollViewReader { scrollProxy in
 			LazyVStack(alignment: .leading, spacing: 0) {
-				ForEach(filteredNodesCache, id: \.id) { node in
+				ForEach(flatNodes) { flatNode in
 					TreeNodeView(
-						node: node,
+						node: flatNode.node,
 						filterState: filterState,
 						scanResults: scanResults,
 						expandedIDs: $expandedIDs,
 						selectedID: $selectedID,
 						removingFileIDs: $removingFileIDs,
 						hiddenWarningIDs: hiddenWarningIDs,
+						indentLevel: flatNode.indentLevel,
 						resultIndex: resultIndex,
 						onIgnoreAllWarnings: ignoreAllWarnings,
 						onRemoveAllUnusedCode: requestRemoveUnusedCode,
@@ -109,8 +112,7 @@ struct PeripheryTreeView: View {
 			}
 			.onAppear {
 				resultIndex.rebuild(from: scanResults)
-				recomputeFilteredNodes()
-				rebuildVisibleItemsCache()
+				scheduleFilterRecompute()
 				// Only expand on first appearance to avoid re-expanding when switching tabs
 				if expandedIDs.isEmpty {
 					expandToFileLevel(using: rootNodes)
@@ -123,21 +125,21 @@ struct PeripheryTreeView: View {
 				claimFocusTrigger.toggle()
 			}
 			.onChange(of: rootNodes) {
-				recomputeFilteredNodes()
+				scheduleFilterRecompute()
 			}
 			.onChange(of: filterState?.filterChangeCounter) { _, _ in
 				resultIndex.invalidateCache(for: filterState)
-				recomputeFilteredNodes()
+				scheduleFilterRecompute()
 			}
 			.onChange(of: scanResults) {
 				resultIndex.rebuild(from: scanResults)
-				recomputeFilteredNodes()
+				scheduleFilterRecompute()
 			}
 			.onChange(of: hiddenFileIDs) {
-				recomputeFilteredNodes()
+				scheduleFilterRecompute()
 			}
 			.onChange(of: hiddenWarningIDs) {
-				recomputeFilteredNodes()
+				scheduleFilterRecompute()
 			}
 			.onChange(of: filteredNodesCache) {
 				rebuildVisibleItemsCache()
@@ -222,21 +224,70 @@ struct PeripheryTreeView: View {
 		}
 	}
 
-	private func recomputeFilteredNodes() {
-		let newFiltered: [TreeNode] = if let filterState {
-			rootNodes.compactMap { filterNode($0, with: filterState) }
-		} else {
-			rootNodes
+	private func scheduleFilterRecompute() {
+		// Cancel any in-flight filter computation — inputs changed again.
+		filterTask?.cancel()
+
+		// Snapshot all MainActor state before leaving the main actor.
+		let nodes = rootNodes
+		let hiddenFiles = hiddenFileIDs
+		let hiddenWarnings = hiddenWarningIDs
+		let indexSnap = resultIndex.snapshotIndex()
+		let resultsEmpty = scanResults.isEmpty
+		let snapshot: FilterSnapshot? = filterState.map { FilterSnapshot(from: $0) }
+
+		filterTask = Task {
+			let newFiltered: [TreeNode] = await Task.detached(priority: .userInitiated) {
+				if let snapshot {
+					return nodes.compactMap {
+						filterTreeNode(
+							$0,
+							filterSnapshot: snapshot,
+							hiddenFileIDs: hiddenFiles,
+							hiddenWarningIDs: hiddenWarnings,
+							indexSnapshot: indexSnap,
+							scanResultsEmpty: resultsEmpty
+						)
+					}
+				}
+				return nodes
+			}.value
+
+			guard !Task.isCancelled else { return }
+			filteredNodesCache = newFiltered
 		}
-		// Always update - SwiftUI will handle diff efficiently
-		filteredNodesCache = newFiltered
 	}
 
 	private func rebuildVisibleItemsCache() {
-		cachedVisibleItems = TreeKeyboardNavigation.buildVisibleItemList(
-			nodes: filteredNodesCache,
-			expandedIDs: expandedIDs
-		)
+		var ids: [String] = []
+		var flat: [FlatNode] = []
+		buildFlatNodes(from: filteredNodesCache, expandedIDs: expandedIDs, indentLevel: 0, ids: &ids, flat: &flat)
+		cachedVisibleItems = ids
+		flatNodes = flat
+	}
+
+	private func buildFlatNodes(
+		from nodes: [TreeNode],
+		expandedIDs: Set<String>,
+		indentLevel: Int,
+		ids: inout [String],
+		flat: inout [FlatNode]
+	) {
+		for node in nodes {
+			let nodeID = node.id
+			let isExpanded = expandedIDs.contains(nodeID)
+			ids.append(nodeID)
+			flat.append(FlatNode(id: nodeID, node: node, indentLevel: indentLevel, isExpanded: isExpanded))
+			if isExpanded, case let .folder(folder) = node {
+				buildFlatNodes(
+					from: folder.children,
+					expandedIDs: expandedIDs,
+					indentLevel: indentLevel + 1,
+					ids: &ids,
+					flat: &flat
+				)
+			}
+		}
 	}
 
 	/**
@@ -363,34 +414,6 @@ struct PeripheryTreeView: View {
 		}
 
 		return message
-	}
-
-	private func filterNode(_ node: TreeNode, with filterState: FilterState) -> TreeNode? {
-		switch node {
-		case var .folder(folder):
-			let filteredChildren = folder.children.compactMap { filterNode($0, with: filterState) }
-			guard !filteredChildren.isEmpty else { return nil }
-			folder.children = filteredChildren
-			return .folder(folder)
-
-		case let .file(file):
-			// Check if file is manually hidden via "Ignore All Warnings"
-			if hiddenFileIDs.contains(file.id) {
-				return nil
-			}
-
-			// When restored from cache, scanResults is empty so the index has no data.
-			// Show all nodes as-is — filtering requires live scan results.
-			guard !scanResults.isEmpty else { return node }
-
-			// Use index to get filtered results for this file
-			let filteredResults = resultIndex.filteredResults(
-				forFile: file.path,
-				filterState: filterState,
-				hiddenWarningIDs: hiddenWarningIDs
-			)
-			return filteredResults.isEmpty ? nil : node
-		}
 	}
 
 	/**
@@ -565,7 +588,19 @@ struct PeripheryTreeView: View {
 			}
 
 			// Apply filtering to see if this folder would have any visible children
-			let filteredFolder = filterNode(.folder(folder), with: filterState ?? FilterState())
+			let snapshot = filterState.map { FilterSnapshot(from: $0) }
+			let filteredFolder: TreeNode? = if let snapshot {
+				filterTreeNode(
+					.folder(folder),
+					filterSnapshot: snapshot,
+					hiddenFileIDs: hiddenFileIDs,
+					hiddenWarningIDs: hiddenWarningIDs,
+					indexSnapshot: resultIndex.snapshotIndex(),
+					scanResultsEmpty: scanResults.isEmpty
+				)
+			} else {
+				.folder(folder)
+			}
 
 			// If filtering returns nil, the folder is empty
 			if filteredFolder == nil {
@@ -1486,6 +1521,15 @@ struct PeripheryTreeView: View {
 	}
 }
 
+// Flat representation of a visible tree node — used by LazyVStack to avoid eager
+// DisclosureGroup rendering. Each item corresponds to exactly one rendered row.
+private struct FlatNode: Identifiable {
+	let id: String
+	let node: TreeNode
+	let indentLevel: Int
+	let isExpanded: Bool
+}
+
 private struct TreeNodeView: View {
 	let node: TreeNode
 	let filterState: FilterState?
@@ -1508,94 +1552,67 @@ private struct TreeNodeView: View {
 	var body: some View {
 		switch node {
 		case let .folder(folder):
-			DisclosureGroup(
-				isExpanded: expansionBinding(for: folder.id, in: $expandedIDs)
-			) {
-				ForEach(folder.children, id: \.id) { child in
-					TreeNodeView(
-						node: child,
-						filterState: filterState,
-						scanResults: scanResults,
-						expandedIDs: $expandedIDs,
-						selectedID: $selectedID,
-						removingFileIDs: $removingFileIDs,
-						hiddenWarningIDs: hiddenWarningIDs,
-						indentLevel: indentLevel + 1,
-						resultIndex: resultIndex,
-						onIgnoreAllWarnings: onIgnoreAllWarnings,
-						onRemoveAllUnusedCode: onRemoveAllUnusedCode,
-						onIgnoreAllWarningsInFolder: onIgnoreAllWarningsInFolder,
-						onRemoveAllUnusedCodeInFolder: onRemoveAllUnusedCodeInFolder,
-						copyMenuLabel: copyMenuLabel,
-						copyPathMenuLabel: copyPathMenuLabel,
-						copyFilePathsToClipboard: copyFilePathsToClipboard,
-						removeUnusedCodeMenuLabel: removeUnusedCodeMenuLabel
-					)
-				}
+			Button {
+				selectedID = folder.id
 			} label: {
-				Button {
-					selectedID = folder.id
-				} label: {
-					HStack(spacing: 0) {
-						ChevronOrPlaceholder(
-							hasChildren: !folder.children.isEmpty,
-							expandedIDs: $expandedIDs,
-							id: folder.id,
-							toggleWithDescendants: { toggleWithDescendants(for: .folder(folder)) }
-						)
+				HStack(spacing: 0) {
+					ChevronOrPlaceholder(
+						hasChildren: !folder.children.isEmpty,
+						expandedIDs: $expandedIDs,
+						id: folder.id,
+						toggleWithDescendants: { toggleWithDescendants(for: .folder(folder)) }
+					)
 
-						FolderRowView(folder: folder)
-					}
-				}
-				.buttonStyle(.plain)
-				.treeLabelPadding(indentLevel: indentLevel)
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.contentShape(.rect)
-				.background(selectedID == folder.id ? Color.accentColor.opacity(0.2) : Color.clear)
-				.simultaneousGesture(
-					TapGesture(count: 2)
-						.onEnded {
-							openFolderInFinder(path: folder.path)
-						}
-				)
-				.contextMenu {
-					Button(copyMenuLabel(.folder(folder))) {
-						let text = TreeCopyFormatter.formatForCopy(
-							node: .folder(folder),
-							scanResults: scanResults,
-							filterState: filterState
-						)
-						TreeCopyFormatter.copyToClipboard(text)
-					}
-					.keyboardShortcut("c", modifiers: .command)
-
-					Button(copyPathMenuLabel(.folder(folder))) {
-						copyFilePathsToClipboard(.folder(folder))
-					}
-
-					Divider()
-
-					Button("Open in Finder") {
-						openFolderInFinder(path: folder.path)
-					}
-
-					let fileURL = URL(fileURLWithPath: folder.path)
-					Button("Reveal in Finder") {
-						NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-					}
-
-					Divider()
-
-					Button(removeUnusedCodeMenuLabel(.folder(folder))) {
-						onRemoveAllUnusedCodeInFolder(folder)
-					}
-
-					Button("Ignore All Warnings") {
-						onIgnoreAllWarningsInFolder(folder)
-					}
+					FolderRowView(folder: folder)
 				}
 			}
-			.disclosureGroupStyle(TreeDisclosureStyle())
+			.buttonStyle(.plain)
+			.treeLabelPadding(indentLevel: indentLevel)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.contentShape(.rect)
+			.background(selectedID == folder.id ? Color.accentColor.opacity(0.2) : Color.clear)
+			.simultaneousGesture(
+				TapGesture(count: 2)
+					.onEnded {
+						openFolderInFinder(path: folder.path)
+					}
+			)
+			.contextMenu {
+				Button(copyMenuLabel(.folder(folder))) {
+					let text = TreeCopyFormatter.formatForCopy(
+						node: .folder(folder),
+						scanResults: scanResults,
+						filterState: filterState
+					)
+					TreeCopyFormatter.copyToClipboard(text)
+				}
+				.keyboardShortcut("c", modifiers: .command)
+
+				Button(copyPathMenuLabel(.folder(folder))) {
+					copyFilePathsToClipboard(.folder(folder))
+				}
+
+				Divider()
+
+				Button("Open in Finder") {
+					openFolderInFinder(path: folder.path)
+				}
+
+				let fileURL = URL(fileURLWithPath: folder.path)
+				Button("Reveal in Finder") {
+					NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+				}
+
+				Divider()
+
+				Button(removeUnusedCodeMenuLabel(.folder(folder))) {
+					onRemoveAllUnusedCodeInFolder(folder)
+				}
+
+				Button("Ignore All Warnings") {
+					onIgnoreAllWarningsInFolder(folder)
+				}
+			}
 
 		case let .file(file):
 			Button {
