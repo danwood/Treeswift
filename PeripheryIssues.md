@@ -23,4 +23,31 @@ This file documents observed problems with Periphery scan results that cause fal
 
 ---
 
+## 2. `assignOnlyProperty`: Property Used in `init` Body Incorrectly Removed
+
+**Symptom:** Periphery flags a stored property as `assignOnlyProperty` and Treeswift removes the `let` declaration — but the property is assigned in the `init` body (`self.x = x`) and that assignment is left behind, causing a compile error ("value of type X has no member 'confidence'").
+
+**Example:**
+```swift
+public struct DetectedPitchPoint: Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public let tick: TickTime
+    public let pitch: Double
+    public let confidence: Double   // ← Periphery flags as assignOnlyProperty, removes it
+    
+    public init(id: UUID = UUID(), tick: TickTime, pitch: Double, confidence: Double = 1.0) {
+        self.confidence = confidence  // ← left behind → compile error
+    }
+}
+```
+File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
+
+**Root cause:** Periphery marks a stored property as `assignOnlyProperty` when it finds no *read* usages — only writes (the init assignment). However the property may genuinely need to exist as part of the struct's public interface or for future reads. Removing the declaration while leaving the init body intact breaks the build.
+
+**Impact:** Build failure. `self.confidence = confidence` in the init becomes invalid once the property declaration is removed.
+
+**Workaround:** Do not apply `assignOnlyProperty` removals to properties that appear in an `init` body assignment (`self.x = x`). Either skip these manually, or filter out `assignOnlyProperty` from the annotation filter when running bulk removals. The property declaration must be restored by hand if incorrectly removed.
+
+---
+
 
