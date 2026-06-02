@@ -52,6 +52,8 @@ File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
 
 ## 3. Protocol Declarations Flagged as Unused When Used Only via Conformance
 
+**Status: Fixed** — `ProtocolConformanceRetainer` now retains any protocol that has at least one conformer in the source graph.
+
 **Symptom:** Periphery flags a `protocol` declaration as unused and Treeswift removes it, even though multiple types conform to it. The protocol body is deleted, leaving conformance declarations (`SomeType: TheProtocol`) that now fail to compile.
 
 **Example:**
@@ -65,15 +67,15 @@ public enum DealStatus: String, StatusRepresentable { ... }
 ```
 File: `CoreData/Common/StatusProtocol.swift`
 
-**Root cause:** Periphery considers a protocol "unused" if no code calls its methods or reads its associated types directly. Conformance declarations (`: TheProtocol`) are not counted as usage of the protocol itself.
+**Root cause:** Conformance references (`: TheProtocol`) are `.related` references from conforming types to the protocol. If every conforming type is itself unused, no reference chain marks the protocol as used, leaving it in `unusedDeclarations`.
 
-**Impact:** Build failure. All types conforming to the removed protocol fail to compile.
-
-**Workaround:** Skip `CoreData/Common/StatusProtocol.swift` and similar pure-protocol files from bulk removal. Add `// periphery:ignore` to protocol declarations that are used only via conformance, or exclude such files from the nodeIds list.
+**Fix:** `ProtocolConformanceRetainer` (new file in `PeripherySource/periphery/Sources/SourceGraph/Mutators/`) checks all protocol declarations and calls `graph.markRetained` on any that have at least one incoming `.related` reference whose parent is a conformable kind (class, struct, enum, or extension). Wired into the pipeline in `SourceGraphMutatorRunner.swift` after `ObservableMacroRetainer`.
 
 ---
 
 ## 4. Protocol Conformance Extensions Removed (`extension Type: Protocol`)
+
+**Status: Fixed** — `ScanResultBuilder` now skips conformance extensions when emitting `.unused` results for extensions of unused types.
 
 **Symptom:** Periphery flags an `extension SomeType: SomeProtocol { ... }` block as unused and Treeswift removes it. Callers that pass `SomeType` where `SomeProtocol` is expected then fail with "does not conform to expected type".
 
@@ -88,11 +90,9 @@ someFunc(project)   // error: 'Project' does not conform to 'Shareable'
 ```
 File: `CoreData/Common/` (various extension files)
 
-**Root cause:** Periphery sees the conformance extension body as unreferenced if no code explicitly calls the protocol's methods through that conformance. Protocol-typed parameters that accept the conforming type are not tracked as "using" the conformance.
+**Root cause:** When a concrete type is unused, `ScanResultBuilder` emits `.unused` results for all its folded extensions — including conformance extensions. Removing a conformance extension breaks any call site that passes the concrete type as the protocol type.
 
-**Impact:** Build failure anywhere the conforming type is passed as the protocol type.
-
-**Workaround:** Do not apply bulk removal to extension files that declare protocol conformances. Inspect these manually and skip. Add `// periphery:ignore` to conformance extensions if they must remain.
+**Fix:** In `ScanResultBuilder.build()`, before appending an extension result, check whether `ext.related` contains a reference with `declarationKind == .protocol`. If so, skip the result — the extension is a protocol conformance block and should not be auto-removed even when the parent type is unused.
 
 ---
 
@@ -114,13 +114,45 @@ func cleanupOrphans() throws {
 ```
 Files: `Engine/EngineCacheManager.swift`, `Core/DeepLinkHandler.swift`
 
-**Root cause:** Periphery tracks references across the module's source graph but misses or undercounts intra-type references in some cases — particularly for `private` members called only from within the same `class`/`struct`/`actor`. The member appears unreachable from Periphery's perspective.
+**Root cause (identified):** For stored `private let`/`var` properties, the Swift index store records references to the property's implicit **accessor USR** (getter/setter) rather than the property's own USR when the property is read or written. `UsedDeclarationMarker.markUsed(_:)` marks the accessor as used but does not propagate to the parent property declaration. The property never enters `usedDeclarations` and is therefore falsely flagged as unused.
+
+**Fix applied:** `UsedDeclarationMarker.markUsed(_:)` now propagates the used status from any accessor declaration up to its parent property, mirroring the existing `functionConstructor → containing type` propagation. See `PeripherySource/periphery/Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift` and `PeripherySource/periphery/README_Treeswift.md` §13 / P6.
+
+**Scope of fix:** Addresses the stored-property case (`private let logger`). The `private func purge` case (function call) should already be handled correctly by `calledBy` relations in the index store; if a function is still falsely flagged after this fix, it may be a separate issue requiring further investigation.
 
 **Impact:** Build failure or silent runtime breakage.
 
-**Workaround:** Do not apply bulk `unused` annotation removals without manual review of each declaration. `redundantAccessibility` and `redundantInternalAccessibility` removals are much safer for bulk operation — they only adjust access modifiers, never remove code.
+**Workaround (until fix verified):** Do not apply bulk `unused` annotation removals without manual review of each declaration. `redundantAccessibility` and `redundantInternalAccessibility` removals are much safer for bulk operation — they only adjust access modifiers, never remove code.
 
 **Recommended safe bulk strategy:** Filter to `annotationFilter: ["redundantAccessibility", "redundantInternalAccessibility", "redundantPublicAccessibility"]` only. Review `unused` and `assignOnlyProperty` removals manually.
+
+---
+
+## 6. `redundantPublicAccessibility` Strips `public` From Protocol Extension Members Satisfying Public Protocol Requirements
+
+**Symptom:** Periphery flags a `public extension SomePublicProtocol { var id: ... }` as having redundant `public`, removes it — but the `var id` inside satisfies a `public` protocol requirement (`Identifiable`). Stripping `public` from the extension makes `id` internal, breaking conformance.
+
+**Example:**
+```swift
+// Before — correct:
+public extension StatusRepresentable {
+    var id: String { rawValue }   // satisfies Identifiable.id (public)
+}
+
+// After Treeswift strips public — broken:
+extension StatusRepresentable {
+    var id: String { rawValue }   // now internal → build error
+}
+// error: property 'id' must be declared public because it matches
+// a requirement in public protocol 'Identifiable'
+```
+File: `CoreData/Common/StatusProtocol.swift`
+
+**Root cause:** Periphery sees `public extension PublicProtocol` and considers `public` redundant (protocol is already public). But Swift requires the `public` on the extension to satisfy `public` protocol witness requirements — removing it demotes the members to `internal`.
+
+**Impact:** Build failure on any type conforming to the protocol whose `id` came from the extension default.
+
+**Workaround:** Do not apply `redundantPublicAccessibility` to protocol extensions. Skip or add `// periphery:ignore` to protocol extension declarations.
 
 ---
 

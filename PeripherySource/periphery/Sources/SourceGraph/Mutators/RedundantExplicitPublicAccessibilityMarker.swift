@@ -58,6 +58,10 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
 
     private func validateExtension(_ decl: Declaration) throws {
         if decl.accessibility.isExplicitly(.public) {
+            // Protocol extensions need `public` so their members can satisfy public protocol requirements.
+            // Removing `public` from a protocol extension would make its members internal, breaking conformance.
+            guard decl.kind != .extensionProtocol else { return }
+
             // If the extended kind is already marked as having redundant public accessibility, then this extension
             // must also have redundant accessibility.
             if let extendedDecl = try graph.extendedDeclaration(forExtension: decl),

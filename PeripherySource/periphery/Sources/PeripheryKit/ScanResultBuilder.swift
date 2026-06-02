@@ -26,6 +26,13 @@ public enum ScanResultBuilder {
                 for decl in decls {
                     let extensions = graph.extensions[decl, default: []]
                     for ext in extensions {
+                        // Skip conformance extensions (e.g., `extension Type: Protocol { ... }`).
+                        // Even when the concrete type is unused, the protocol conformance may be
+                        // required by callers that accept the protocol as a parameter or return type.
+                        // Removing a conformance extension silently breaks such call sites.
+                        let isConformanceExtension = ext.related.contains { $0.declarationKind == .protocol }
+                        guard !isConformanceExtension else { continue }
+
                         extensionResults.append(ScanResult(declaration: ext, annotation: .unused))
                     }
                 }

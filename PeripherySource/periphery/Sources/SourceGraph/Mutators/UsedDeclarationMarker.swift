@@ -51,6 +51,14 @@ final class UsedDeclarationMarker: SourceGraphMutator {
                 markUsed([parent])
             }
 
+            // When an accessor (getter/setter/etc.) is used, the containing property is also used.
+            // The Swift index store records references to implicit accessor USRs rather than the
+            // property USR when reading or writing a stored property, so we must propagate upward
+            // to ensure the property declaration itself is not falsely flagged as unused.
+            if declaration.kind.isAccessorKind, let parent = declaration.parent {
+                markUsed([parent])
+            }
+
             for ref in declaration.references {
                 markUsed(declarationsReferenced(by: ref))
             }

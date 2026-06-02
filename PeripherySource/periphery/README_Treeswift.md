@@ -382,6 +382,52 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 11. ProtocolConformanceRetainer: Retain protocols with conformers ⟶ [Pending Upstream P4]
+
+**Purpose**: Prevent false-positive `.unused` results on protocols that are conformed to but never used as existential types.
+
+**Root cause**: Conformance references (`: TheProtocol`) are `.related` references that point FROM the conforming type TO the protocol. The `UsedDeclarationMarker` follows these through the conforming type, but only if the conforming type is itself marked used. If all conforming types are unused, the protocol has no incoming "normal" references and ends up in `unusedDeclarations`.
+
+**Fix**: New retainer iterates all protocol declarations and retains any that have at least one incoming `.related` reference from a conformable kind (class, struct, enum, or extension).
+
+**Changes**:
+- `Sources/SourceGraph/Mutators/ProtocolConformanceRetainer.swift` (NEW FILE)
+- `Sources/SourceGraph/SourceGraphMutatorRunner.swift`: Added `ProtocolConformanceRetainer.self` after `ObservableMacroRetainer.self`
+
+**Status**: Pending upstream — see [P4](#p4-retain-protocols-that-have-at-least-one-conforming-type).
+
+---
+
+### 12. ScanResultBuilder: Skip conformance extensions of unused types ⟶ [Pending Upstream P5]
+
+**Purpose**: Prevent false-positive `.unused` results on `extension Type: Protocol { ... }` blocks when the parent type is unused.
+
+**Root cause**: `ScanResultBuilder` emits `.unused` results for all folded extensions of unused types. This includes conformance extensions. Removing a conformance extension breaks any call site that passes the concrete type where the protocol is expected, even if the concrete type has no other direct references.
+
+**Fix**: Before appending an extension result, check whether the extension's `related` set contains a reference with `declarationKind == .protocol`. If so, skip it — the extension is a protocol conformance block and should not be auto-removed.
+
+**Changes**:
+- `Sources/PeripheryKit/ScanResultBuilder.swift`: Added `isConformanceExtension` guard in the extension-result loop
+
+**Status**: Pending upstream — see [P5](#p5-skip-conformance-extensions-when-reporting-extensions-of-unused-types).
+
+---
+
+### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
+
+**Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
+
+**Root cause**: When a stored property is read (e.g. `logger.info(...)`), the Swift index store records a reference to the property's implicit getter USR, not the property's own USR. The property declaration never accumulates a direct reference, so it ends up in `unusedDeclarations` even when actively used.
+
+**Fix**: In `UsedDeclarationMarker.markUsed(_:)`, added a propagation case for accessor kinds parallel to the existing `functionConstructor → parent` case. When any accessor (getter, setter, didSet, willSet, etc.) is marked used, its parent property declaration is also marked used.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`: Added `if declaration.kind.isAccessorKind, let parent = declaration.parent { markUsed([parent]) }` block inside `markUsed(_:)`
+
+**Status**: Pending upstream — see [P6](#p6-useddeclarationmarker-propagate-used-status-from-accessor-to-parent-property).
+
+---
+
 ---
 
 ## Pending Upstream Contributions
@@ -421,6 +467,44 @@ When contributing one of these upstream:
 **File**: `Sources/SourceGraph/Mutators/ObservableMacroRetainer.swift`
 **Change**: Added loop over implicit `varInstance` declarations (`_propName`) in detected `@Observable` types to call `graph.unmarkRedundantInternalAccessibility` before the existing explicit-property loop.
 **Why general-purpose**: Any codebase using `@Observable` can receive spurious `redundantInternalAccessibility` warnings on synthesized backing storage properties whose source positions point into macro expansion files. Not Treeswift-specific.
+**Upstream branch**: `master`
+
+---
+
+### P4. Retain protocols that have at least one conforming type
+
+**Files**:
+- `Sources/SourceGraph/Mutators/ProtocolConformanceRetainer.swift` (NEW FILE)
+- `Sources/SourceGraph/SourceGraphMutatorRunner.swift` (add retainer to pipeline)
+
+**Change**: New `ProtocolConformanceRetainer` mutator scans all protocol declarations and calls `graph.markRetained` on any protocol that has at least one `.related` reference whose parent is a conformable kind (class, struct, enum, or extension). This prevents protocols used only via conformance from being flagged as `.unused` and removed.
+
+**Why general-purpose**: Any codebase with internal protocols that are only conformed to (never used as existential types) will get false-positive `.unused` results that cause destructive removals — the protocol body is deleted while conformance declarations remain, breaking compilation.
+**Upstream branch**: `master`
+
+---
+
+### P5. Skip conformance extensions when reporting extensions of unused types
+
+**File**: `Sources/PeripheryKit/ScanResultBuilder.swift`
+
+**Change**: In the loop that emits `.unused` results for extensions of unused types, added a guard that skips any extension whose `related` set contains a reference with `declarationKind == .protocol`. Such extensions are `extension Type: Protocol { ... }` conformance blocks. Removing them silently breaks call sites that pass the conforming type where the protocol is expected.
+
+**Why general-purpose**: Any codebase using protocol conformance extensions is at risk of having them incorrectly flagged as unused when the concrete type has no direct references but is used implicitly through its protocol conformance.
+**Upstream branch**: `master`
+
+---
+
+### P6. UsedDeclarationMarker: propagate used status from accessor to parent property
+
+**File**: `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`
+
+**Change**: In `markUsed(_:)`, when a declaration of an accessor kind (getter/setter/didSet/willSet/etc.) is marked used, also mark its parent property declaration as used. Mirrors the existing constructor → containing-type propagation pattern.
+
+**Why needed**: The Swift index store records references to implicit accessor USRs (e.g. the getter of `private let logger`) rather than the property's own USR when the property is read or written. Without this propagation, the property declaration itself is never added to `usedDeclarations`, so it appears in `unusedDeclarations` and is flagged as unused — even though the property is actively used via its accessor.
+
+**Why general-purpose**: Any codebase with `private let` or `private var` properties read within the same type can trigger this false positive. Not Treeswift-specific.
+
 **Upstream branch**: `master`
 
 ---

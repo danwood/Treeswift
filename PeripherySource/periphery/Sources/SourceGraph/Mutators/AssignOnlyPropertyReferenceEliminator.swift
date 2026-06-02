@@ -29,7 +29,11 @@ enum AssignOnlyPropertyAnalyzer {
               let setter = property.declarations.first(where: { $0.kind == .functionAccessorSetter }),
               let getter = property.declarations.first(where: { $0.kind == .functionAccessorGetter }),
               graph.references(to: setter).contains(where: { $0.kind != .retained }),
-              !graph.references(to: getter).contains(where: { $0.kind != .retained })
+              !graph.references(to: getter).contains(where: { $0.kind != .retained }),
+              // If all non-retained writes to this property come from initializers, the property is a
+              // genuine stored value that is simply never read externally. Removing the declaration
+              // would leave orphaned `self.x = x` assignments in the init body, breaking the build.
+              !graph.references(to: setter).filter({ $0.kind != .retained }).allSatisfy({ $0.parent?.kind == .functionConstructor })
         else { return false }
 
         return true
