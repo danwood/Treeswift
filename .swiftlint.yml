@@ -1,6 +1,7 @@
 excluded:
   - "**/.build"
   - "PeripherySource/**"
+  - ".claude/worktrees/**"
 
 opt_in_rules:
   - single_test_class
