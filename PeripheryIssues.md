@@ -17,21 +17,10 @@ This file documents observed problems with Periphery scan results that cause fal
 
 **Impact:** When Treeswift tries to insert `private` access modifiers at those locations, it targets the wrong lines (e.g., closing braces, blank lines, doc comments), producing syntactically invalid Swift.
 
-**Workaround applied in Treeswift:** `insertAccessKeyword` now returns the line unchanged when the expected declaration keyword (e.g., `var`, `let`) is not found on that line. This prevents corruption but means the access-control fix is silently skipped for these properties.
-
-**Partial fix applied:** `ObservableMacroRetainer` now suppresses `redundantInternalAccessibility` on implicit backing storage properties (`_propName`), so those warnings are no longer emitted. The `insertAccessKeyword` guard remains as a safety net for any remaining edge cases.
+**Fix applied:** `ObservableMacroRetainer` now suppresses `redundantInternalAccessibility` on all implicit backing storage properties (`_propName`), so those warnings are never emitted. The `insertAccessKeyword` guard (returns line unchanged when expected keyword not found) remains as a safety net for any edge cases not covered by the retainer.
 
 **Affected declaration kinds:** `varInstance` properties inside `@Observable` classes — specifically the synthesized storage (`_propName`) entries.
 
 ---
 
-## 2. `skipReferenced` Does Not Guarantee Build-Safe Removals Across File Boundaries
-
-**Symptom:** `skipReferenced` removes a type from file A, but leaves a reference to that type in file B (in the same scan scope), breaking the build.
-
-**Example:** `SidebarSection` enum defined in `NavigationEnums.swift` is removed, but `NavigationEnums.swift` also contains `case section(SidebarSection)` which references it — these are in the same file (self-reference within the deleted enum cascade), BUT the *definition* of `SidebarSection` and the *using case* are separate declarations. Periphery may remove the definition without removing the using case.
-
-**Root cause:** The `skipReferenced` strategy is meant to only remove items with no external references. But if two declarations reference each other circularly (type A used in type B, type B used in type A, both unused externally), Periphery may decide to remove both — but the removal order matters. If type A's definition is removed first, and type B's reference to A isn't removed in the same operation, the intermediate state is invalid.
-
-**Broader issue:** The `skipReferenced` guarantee (removing items will not break a build) assumes Periphery's reference analysis is complete. Any gap in the reference analysis (macro expansions, conditional compilation, etc.) can cause false "safe" removals.
 
