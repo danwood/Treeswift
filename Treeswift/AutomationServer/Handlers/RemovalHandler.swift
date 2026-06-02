@@ -115,7 +115,7 @@ enum RemovalHandler {
 	}
 
 	static func handleExecute(server: AutomationServer, id: String, request: Router.Request) async -> Router.Response {
-		guard let (_, state) = await MainActor.run(resultType: (PeripheryConfiguration, ScanState)?.self, body: {
+		guard let (config, state) = await MainActor.run(resultType: (PeripheryConfiguration, ScanState)?.self, body: {
 			resolveConfig(server: server, id: id)
 		}) else {
 			return .error("configuration not found", status: 404)
@@ -124,6 +124,7 @@ enum RemovalHandler {
 		let (scanResults, sourceGraph, treeNodes, isScanning, filterState) = await MainActor.run {
 			(state.scanResults, state.sourceGraph, state.treeNodes, state.isScanning, server.filterState)
 		}
+		let xcodeprojPath = config.project
 
 		if scanResults.isEmpty, !isScanning {
 			return .error("no scan results available", status: 404)
@@ -171,23 +172,37 @@ enum RemovalHandler {
 		}
 
 		// Pass 2 — Execute: write all planned results to disk
-		// In the automation context, always write modified contents rather than
-		// trashing files. This keeps the Xcode project intact (no missing file
-		// references) so the build can verify whether remaining code compiles.
+		// If a file would be fully emptied and is safe to delete (i.e. it is a folder
+		// reference rather than an explicit PBXFileReference), trash it outright.
+		// Otherwise write the modified (possibly import-only) contents so the Xcode
+		// project stays intact and the build can verify remaining code compiles.
 		for (fileNode, removal) in plans {
 			let deletedCount = removal.deletionStats.deletedCount
-			do {
-				try removal.modifiedContents.write(toFile: fileNode.path, atomically: true, encoding: .utf8)
+			var fileWasDeleted = false
+
+			if removal.shouldDeleteFile,
+			   let proj = xcodeprojPath,
+			   XcodeProjectFileChecker.isSafeToDelete(filePath: fileNode.path, xcodeprojPath: proj) {
+				fileWasDeleted = FileDeletionHandler.moveToTrash(filePath: fileNode.path)
+			}
+
+			if fileWasDeleted {
 				SourceFileReader.invalidateCache(for: fileNode.path)
-				if removal.shouldDeleteFile {
-					logLines.append("Emptied file (would delete in UI): \(fileNode.path)")
-				} else {
-					logLines.append("Removed \(deletedCount) declaration(s) from \(fileNode.path)")
+				logLines.append("Deleted file: \(fileNode.path)")
+			} else {
+				do {
+					try removal.modifiedContents.write(toFile: fileNode.path, atomically: true, encoding: .utf8)
+					SourceFileReader.invalidateCache(for: fileNode.path)
+					if removal.shouldDeleteFile {
+						logLines.append("Emptied file (explicit project reference, cannot delete): \(fileNode.path)")
+					} else {
+						logLines.append("Removed \(deletedCount) declaration(s) from \(fileNode.path)")
+					}
+				} catch {
+					let errMsg = "Failed to write \(fileNode.path): \(error.localizedDescription)"
+					errors.append(errMsg)
+					logLines.append("Error: \(errMsg)")
 				}
-			} catch {
-				let errMsg = "Failed to write \(fileNode.path): \(error.localizedDescription)"
-				errors.append(errMsg)
-				logLines.append("Error: \(errMsg)")
 			}
 
 			totalDeleted += deletedCount
@@ -195,7 +210,7 @@ enum RemovalHandler {
 				filePath: fileNode.path,
 				deletedCount: deletedCount,
 				nonDeletableCount: removal.deletionStats.nonDeletableCount,
-				deleted: false
+				deleted: fileWasDeleted
 			))
 		}
 
