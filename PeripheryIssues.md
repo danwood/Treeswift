@@ -23,28 +23,7 @@ This file documents observed problems with Periphery scan results that cause fal
 
 ---
 
-## 2. `@Observable` Macro: Types Referenced Only in Macro-Synthesized Code Marked as Unused
-
-**Symptom:** Types used as property types inside `@Observable` classes are marked as `.unused` even though they ARE referenced — but only in the macro-generated accessor boilerplate (e.g., `ObservationTracker` code in `@__swiftmacro_*.swift` files).
-
-**Examples from Prodcore:**
-- `SidebarSection` — property type of `var requestedSidebarSection: SidebarSection?` in `AppState`
-- `InspectorItem` — property type of `var inspectorItem: InspectorItem?`
-- `WorkspaceScope` — property type of `var scope: WorkspaceScope` in `WorkspaceState`
-- `LibrarySection` — property type of `var selectedLibrarySection: LibrarySection?` in `NavigationState`
-- `DocumentTypeFilter`, `LibraryDestinationSection`
-
-**Root cause:** Periphery's reference graph does not see references inside macro expansion files. The `@Observable` macro generates `ObservationRegistrar` calls and backing property accessors that reference these types — but since macro expansion code is not part of the reference graph, Periphery considers the types unreferenced.
-
-**Impact:** `skipReferenced` removes these types even though removing them breaks the build — the types are still referenced in hand-written code that uses `@Observable` properties typed to them (e.g., `NavigationEnums.swift: case section(SidebarSection)`).
-
-**Note:** This is distinct from the "only in macro expansion" case — the types appear in *both* macro-generated code AND real source. Periphery's analysis fails because it doesn't walk macro expansions for references.
-
-**No workaround applied yet.** A possible fix: post-process scan results to remove `.unused` annotations for types that appear as property types of `@Observable` classes.
-
----
-
-## 3. `skipReferenced` Does Not Guarantee Build-Safe Removals Across File Boundaries
+## 2. `skipReferenced` Does Not Guarantee Build-Safe Removals Across File Boundaries
 
 **Symptom:** `skipReferenced` removes a type from file A, but leaves a reference to that type in file B (in the same scan scope), breaking the build.
 
@@ -56,7 +35,7 @@ This file documents observed problems with Periphery scan results that cause fal
 
 ---
 
-## 4. Scan Cache Positions Valid Only for Exact Source State at Scan Time
+## 3. Scan Cache Positions Valid Only for Exact Source State at Scan Time
 
 **Symptom:** After running an integration test cycle that modifies source (via removal execution) and then restores it (via `git reset`), a subsequent removal operation using the cached scan results produces wrong edits.
 
@@ -66,7 +45,7 @@ This file documents observed problems with Periphery scan results that cause fal
 
 ---
 
-## 5. `build_prodcore_for_index` Does Not Update Periphery's Indexstore
+## 4. `build_prodcore_for_index` Does Not Update Periphery's Indexstore
 
 **Symptom:** Running `xcodebuild clean build` against the target project before scanning does NOT update the indexstore Periphery reads.
 
