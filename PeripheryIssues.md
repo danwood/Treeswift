@@ -156,4 +156,27 @@ File: `CoreData/Common/StatusProtocol.swift`
 
 ---
 
+## 7. `unused`: Nested Types Used Only Within Parent Type Incorrectly Removed
+
+**Symptom:** A nested `enum`/`struct` defined inside a type is removed even though it is used as a return type or parameter type by methods of the enclosing type.
+
+**Example:**
+```swift
+enum DeepLinkHandler {
+    enum Destination: Equatable { ... }   // ← removed as unused
+
+    static func parse(_ url: URL) -> Destination? { ... }        // now broken
+    static func toNavigationDestination(_ d: Destination) -> ... // now broken
+}
+```
+File: `Core/DeepLinkHandler.swift`
+
+**Root cause:** Same root cause as Issue 5 — Periphery doesn't track references to a nested type that come exclusively from within the enclosing type. The accessor-propagation fix in Issue 5 covers stored properties but not nested type declarations.
+
+**Fix applied:** `UsedDeclarationMarker.markUsed(_:)` now also walks child function/method declarations' `returnType` and `parameterType` references when marking a parent type as used, mirroring the existing `varType` walk for child property declarations. This ensures nested types used only in sibling method signatures are marked used when the parent type is used.
+
+**Impact:** Build failure wherever the removed type is referenced.
+
+---
+
 

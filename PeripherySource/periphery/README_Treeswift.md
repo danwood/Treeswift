@@ -413,6 +413,23 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 14. UsedDeclarationMarker: retain nested types referenced in sibling method signatures ⟶ [Pending Upstream P7]
+
+**Purpose**: Fix false-positive `.unused` results for nested types (enums, structs) that are used only as return types or parameter types of sibling methods within the same parent type.
+
+**Root cause**: When the Swift index store builds reference relations for a method's type annotations (return type, parameter type), the resulting references are stored on the method declaration, not the parent type. The `markUsed` walk in `UsedDeclarationMarker` already follows `varType` references from child property declarations — but it did not follow `returnType` or `parameterType` references from child function declarations. A nested type used only in sibling method signatures therefore had no path to `usedDeclarations` and was falsely flagged as unused.
+
+**Example**: `enum Destination` nested inside `enum DeepLinkHandler` is used only as the return type of `parse(_:)` and the parameter type of `toNavigationDestination(_:)`. When those methods are not independently retained (e.g. platform-guarded callers), `Destination` falls out of `usedDeclarations`.
+
+**Fix**: In `UsedDeclarationMarker.markUsed(_:)`, added a second walk over child declarations (after the existing `varType` walk) that iterates child function/method declarations and follows their `returnType` and `parameterType` references. Mirrors the existing pattern for `varType` on property children.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`: Added `for childDecl in declaration.declarations where childDecl.kind.isFunctionKind { for ref in childDecl.references where ref.role == .returnType || ref.role == .parameterType { markUsed(declarationsReferenced(by: ref)) } }` block inside `markUsed(_:)`, after the existing `varType` walk.
+
+**Status**: Pending upstream — see [P7](#p7-useddeclarationmarker-retain-nested-types-referenced-in-sibling-method-signatures).
+
+---
+
 ### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
 
 **Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
@@ -504,6 +521,20 @@ When contributing one of these upstream:
 **Why needed**: The Swift index store records references to implicit accessor USRs (e.g. the getter of `private let logger`) rather than the property's own USR when the property is read or written. Without this propagation, the property declaration itself is never added to `usedDeclarations`, so it appears in `unusedDeclarations` and is flagged as unused — even though the property is actively used via its accessor.
 
 **Why general-purpose**: Any codebase with `private let` or `private var` properties read within the same type can trigger this false positive. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P7. UsedDeclarationMarker: retain nested types referenced in sibling method signatures
+
+**File**: `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`
+
+**Change**: In `markUsed(_:)`, added a walk over child function/method declarations — after the existing `varType` walk for properties — that follows their `returnType` and `parameterType` references. When the parent type is marked used, any nested type referenced only in a sibling method's return or parameter type annotation is also marked used.
+
+**Why needed**: A nested enum or struct used only as a return/parameter type has no external references of its own. Without this walk, it falls out of `usedDeclarations` and is falsely flagged as `.unused`. The existing `varType` walk for child property declarations addresses the same problem for properties; this extends the pattern to functions.
+
+**Why general-purpose**: Any codebase with a nested type used only within its parent's method signatures can trigger this false positive. Not Treeswift-specific.
 
 **Upstream branch**: `master`
 
