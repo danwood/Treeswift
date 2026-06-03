@@ -891,6 +891,206 @@ struct CodeModificationHelper {
 		return .success(())
 	}
 
+	// MARK: - Fileprivate Cascade
+
+	/**
+	 Cascades `fileprivate` to sibling `init` and `func` declarations whose signatures
+	 reference a type that was just made `fileprivate`.
+
+	 Swift requires that any initializer or function whose parameter or return type is
+	 `fileprivate` must itself be `fileprivate`. When Treeswift inserts `fileprivate` on a
+	 nested enum/struct/class, this method finds sibling declarations in the same enclosing
+	 scope that reference that type and adds `fileprivate` to them if they carry no explicit
+	 access modifier.
+
+	 Algorithm:
+	 1. For each `(lineIndex, typeName)` pair, walk backwards from `lineIndex` counting
+	    braces to locate the opening `{` of the parent type body.
+	 2. Walk forwards from `lineIndex` to find the matching closing `}`.
+	 3. Within that range, scan for `init(` or `func ` lines that mention `typeName` in
+	    their signature and lack an explicit access keyword — then insert `fileprivate`.
+	 */
+	/**
+	 Locates the line index for a `fileprivate` type declaration in `lines`, searching
+	 outward from `near` to handle index shifts caused by earlier deletions.
+
+	 Returns nil if no matching line is found within a reasonable window.
+	 */
+	private static func findFileprivateTypeLine(
+		typeName: String,
+		near storedIndex: Int,
+		in lines: [String]
+	) -> Int? {
+		guard let pattern = try? Regex("\\bfileprivate\\b.+\\b(enum|struct|class)\\s+\(typeName)\\b")
+		else { return nil }
+		// Search within ±5 lines of the stored index to tolerate small index shifts.
+		let searchRadius = 5
+		let low = max(0, storedIndex - searchRadius)
+		let high = min(lines.count - 1, storedIndex + searchRadius)
+		for idx in low ... high {
+			if lines[idx].contains(pattern) {
+				return idx
+			}
+		}
+		return nil
+	}
+
+	private static func cascadeFileprivateToAffectedDeclarations(
+		lines: [String],
+		fileprivateNestedTypeNames: [(lineIndex: Int, typeName: String)],
+		pendingLogEntries: inout [ModificationLogger.PendingEntry]
+	) -> [String] {
+		var lines = lines
+
+		for (storedLineIndex, typeName) in fileprivateNestedTypeNames {
+			// Resolve the current line index for this type in the (possibly modified) lines array.
+			// We search for the fileprivate type declaration near the stored index to handle any
+			// index shifts from earlier deletions in the same batch.
+			guard let typeLineIndex = Self.findFileprivateTypeLine(
+				typeName: typeName,
+				near: storedLineIndex,
+				in: lines
+			) else { continue }
+
+			// Walk backwards from the line above the type to find the enclosing scope's `{`.
+			// We start one line above the type's own line so we don't mistake the type's own
+			// `{` for the parent's opening brace. Scanning characters in reverse: `}` increases
+			// depth, `{` decreases. When depth is 0 and we encounter `{`, that is the parent
+			// body's opening brace.
+			var depth = 0
+			var scopeStart: Int?
+			let searchFrom = max(typeLineIndex - 1, 0)
+			outer: for idx in stride(from: searchFrom, through: 0, by: -1) {
+				for ch in lines[idx].reversed() {
+					if ch == "}" {
+						depth += 1
+					} else if ch == "{" {
+						if depth == 0 {
+							scopeStart = idx
+							break outer
+						}
+						depth -= 1
+					}
+				}
+			}
+			guard let scopeStart else { continue }
+
+			// Walk forward from the parent opening brace to find the matching closing `}`.
+			depth = 0
+			var scopeEnd: Int?
+			outer: for idx in scopeStart ..< lines.count {
+				for ch in lines[idx] {
+					if ch == "{" {
+						depth += 1
+					} else if ch == "}" {
+						depth -= 1
+						if depth == 0 {
+							scopeEnd = idx
+							break outer
+						}
+					}
+				}
+			}
+			guard let scopeEnd else { continue }
+
+			// Compile patterns once per type name.
+			guard let typePattern = try? Regex("\\b\(typeName)\\b"),
+			      let funcPattern = try? Regex("\\bfunc\\s+\\w"),
+			      // Matches declarations that already have a non-private access modifier
+			      // before func/init. `private` is excluded because `private init` referencing
+			      // a `fileprivate` type must be upgraded to `fileprivate`, not skipped.
+			      let nonPrivateAccessedInitOrFuncPattern = try? Regex(
+			      	"\\b(public|internal|fileprivate)\\s+(func|init)\\b"
+			      ),
+			      let privateInitOrFuncPattern = try? Regex(
+			      	"\\bprivate\\s+(func|init)\\b"
+			      ) else { continue }
+
+			// Scan lines within the parent scope for `init` or `func` declarations that:
+			//  - have the fileprivate type name somewhere in their signature
+			//  - do not already have a non-upgradeable access modifier
+			//
+			// Because signatures can span multiple lines (e.g. multi-line init parameter
+			// lists), we detect the declaration keyword line first, then collect the full
+			// signature text up to the closing `)` before checking for the type name.
+			var idx = scopeStart
+			while idx <= scopeEnd {
+				let line = lines[idx]
+
+				// Must be an init or func declaration line (keyword must appear here)
+				let isInit = line.contains("init(")
+				let isFunc = line.firstMatch(of: funcPattern) != nil
+				guard isInit || isFunc else {
+					idx += 1
+					continue
+				}
+
+				// Skip if already has a non-private access modifier (public/internal/fileprivate).
+				// These are either already correct or indicate a different access level intent.
+				// `private` is NOT skipped here because `private init/func` referencing a
+				// `fileprivate` type needs to be upgraded to `fileprivate`.
+				if line.contains(nonPrivateAccessedInitOrFuncPattern) {
+					idx += 1
+					continue
+				}
+
+				// Detect whether the declaration already has `private` before init/func,
+				// which means we need to replace `private` with `fileprivate` rather than insert.
+				let alreadyPrivate = line.contains(privateInitOrFuncPattern)
+
+				// Also skip if any non-private standalone access keyword leads the declaration
+				let trimmed = line.trimmingCharacters(in: .whitespaces)
+				let hasNonPrivateLeadingAccess = ["public ", "internal ", "fileprivate "].contains {
+					trimmed.hasPrefix($0)
+				}
+				if hasNonPrivateLeadingAccess {
+					idx += 1
+					continue
+				}
+
+				// Collect the full signature text (from this line to the closing `)`)
+				// by counting unmatched parentheses across subsequent lines.
+				var signatureLines = [line]
+				var parenDepth = line.count(where: { $0 == "(" }) - line.count(where: { $0 == ")" })
+				var sigEnd = idx
+				while parenDepth > 0, sigEnd + 1 <= scopeEnd {
+					sigEnd += 1
+					let sigLine = lines[sigEnd]
+					signatureLines.append(sigLine)
+					parenDepth += sigLine.count(where: { $0 == "(" })
+					parenDepth -= sigLine.count(where: { $0 == ")" })
+				}
+				let fullSignature = signatureLines.joined(separator: "\n")
+
+				// Only cascade if the type name appears in the signature
+				guard fullSignature.contains(typePattern) else {
+					idx = sigEnd + 1
+					continue
+				}
+
+				// Insert or replace access keyword with `fileprivate` on the declaration line.
+				// If the declaration already has `private`, replace it; otherwise insert fresh.
+				let kind: Declaration.Kind = isInit ? .functionConstructor : .functionMethodInstance
+				let (modified, action) = replaceOrInsertAccessKeyword(
+					oldKeyword: alreadyPrivate ? "private" : nil,
+					newKeyword: "fileprivate",
+					declarationKind: kind,
+					in: line
+				)
+				if modified != line {
+					lines[idx] = modified
+					pendingLogEntries.append(.init(
+						startLine: idx + 1,
+						endLine: idx + 1,
+						action: "\(action) (cascade from fileprivate `\(typeName)`)"
+					))
+				}
+				idx = sigEnd + 1
+			}
+		}
+		return lines
+	}
+
 	// MARK: - Batch Operations
 
 	/**
@@ -1065,6 +1265,11 @@ struct CodeModificationHelper {
 		// removals can be mapped back to original coordinates for logging
 		var originalLineNumbers = Array(1 ... lines.count)
 
+		// Track nested type names that receive `fileprivate` so we can cascade the
+		// modifier to sibling inits/funcs that reference them as parameter/return types.
+		// Each entry is (lineIndex: Int, typeName: String).
+		var fileprivateNestedTypeNames: [(lineIndex: Int, typeName: String)] = []
+
 		// Track ranges deleted so far (in original line coordinates) so that
 		// subsequent operations whose location.line falls inside an already-deleted
 		// range are skipped rather than applied to the wrong content.
@@ -1113,6 +1318,16 @@ struct CodeModificationHelper {
 						endLine: location.line,
 						action: action
 					))
+					// Track nested types that become fileprivate so we can cascade
+					// the modifier to sibling inits/funcs that reference them.
+					let isNestedType = declaration.kind == .enum || declaration.kind == .struct || declaration
+						.kind == .class
+					if suggested == .fileprivate,
+					   declaration.parent != nil,
+					   isNestedType,
+					   !declaration.name.isEmpty {
+						fileprivateNestedTypeNames.append((lineIndex: lineIndex, typeName: declaration.name))
+					}
 				} else {
 					// No suggested accessibility means top-level scope
 					// Use 'private' by convention (equivalent to fileprivate at top level)
@@ -1274,6 +1489,24 @@ struct CodeModificationHelper {
 				// Record source graph adjustment to apply after writing
 				sourceGraphAdjustments.append((afterLine: finalEndLine, delta: -linesRemoved))
 			}
+		}
+
+		// Cascade `fileprivate` to sibling inits/funcs whose parameter/return types just
+		// became fileprivate. Swift requires the containing declaration to also be fileprivate
+		// when its signature references a fileprivate type. We handle this by scanning the
+		// lines within the enclosing type body for `init` or `func` declarations that:
+		//   1. reference the newly-fileprivate type name in their parameter list or return type
+		//   2. do not yet carry an explicit access modifier
+		//
+		// We detect the enclosing scope by counting braces from the fileprivate type's line
+		// backwards to find the opening `{` of the parent type, then forward to find its
+		// closing `}`. Within that range we patch any unguarded init/func that uses the type.
+		if !fileprivateNestedTypeNames.isEmpty {
+			lines = Self.cascadeFileprivateToAffectedDeclarations(
+				lines: lines,
+				fileprivateNestedTypeNames: fileprivateNestedTypeNames,
+				pendingLogEntries: &pendingLogEntries
+			)
 		}
 
 		// Snapshot before post-processing so we can detect which lines were removed
