@@ -179,4 +179,28 @@ File: `Core/DeepLinkHandler.swift`
 
 ---
 
+## 8. `unused`: Stored `let` Properties With No External Reads Removed, Leaving Orphan `self.x = x` in `init`
+
+**Symptom:** A `public let` property is flagged as `unused` (not `assignOnlyProperty`) and removed. The `init` body that assigns `self.x = x` is NOT removed (init stays because it's used). Build fails: "value of type X has no member 'x'".
+
+**Example:**
+```swift
+public struct DetectedPitchPoint: Identifiable, Hashable, Sendable {
+    public let confidence: Double    // ← flagged unused, removed
+
+    public init(..., confidence: Double = 1.0) {
+        self.confidence = confidence  // ← stays → build error
+    }
+}
+```
+File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
+
+**Root cause:** `AssignOnlyPropertyReferenceEliminator` already guards against `let` bindings (`!property.isLetBinding`). But the `unused` annotation path (separate from `assignOnlyProperty`) does not have this guard. When no external code reads `confidence`, Periphery marks the declaration `unused` and Treeswift removes only the property declaration — leaving the init assignment orphaned.
+
+**Impact:** Build failure. The init body references a now-nonexistent property.
+
+**Workaround:** Do not remove `unused` declarations that are `let` properties assigned inside an `init`. Filter manually or add `// periphery:ignore`.
+
+---
+
 
