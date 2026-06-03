@@ -59,7 +59,31 @@ final class AssignOnlyPropertyReferenceEliminator: SourceGraphMutator {
                 } else {
                     graph.markAssignOnlyProperty(property)
                 }
+            } else if isLetPropertyWithInitBodyAssignment(property) {
+                // A `let` stored property that is assigned inside an init body cannot be safely
+                // removed: removing the declaration leaves `self.x = x` orphaned in the init,
+                // causing a build error. Retain the property so it does not appear as `unused`.
+                graph.markRetained(property)
             }
         }
+    }
+
+    // MARK: - Private
+
+    /**
+     Returns true when a `let` stored property is assigned exclusively inside an init body.
+     Such properties must be retained: removing the declaration while leaving the init body
+     intact would leave an orphaned `self.x = x` assignment that breaks the build.
+     */
+    private func isLetPropertyWithInitBodyAssignment(_ property: Declaration) -> Bool {
+        guard property.isLetBinding,
+              property.kind.isVariableKind,
+              let setter = property.declarations.first(where: { $0.kind == .functionAccessorSetter }),
+              graph.references(to: setter).contains(where: {
+                  $0.kind != .retained && $0.parent?.kind == .functionConstructor
+              })
+        else { return false }
+
+        return true
     }
 }

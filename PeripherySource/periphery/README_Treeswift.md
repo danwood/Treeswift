@@ -445,6 +445,23 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 16. AssignOnlyPropertyReferenceEliminator: retain `let` properties assigned in init bodies ⟶ [Pending Upstream P9]
+
+**Purpose**: Prevent `let` stored properties that are assigned inside an `init` body from being falsely reported as `unused` and removed, which would leave orphaned `self.x = x` assignments in the init, breaking the build.
+
+**Root cause**: `AssignOnlyPropertyReferenceEliminator` already guards against `let` bindings (`!property.isLetBinding`) to prevent them from being flagged as `assignOnlyProperty`. However, that guard also means the init-body-only protection introduced for `var` properties (Issue 2) does not apply to `let` properties. When no external code reads a `let` property, it falls through to the `unused` declaration path with no guard, and Treeswift removes only the property declaration — leaving the init body's `self.x = x` assignment intact. The init is not removed (it's used), so the orphaned assignment causes a build error.
+
+**Example**: `public let confidence: Double` in `DetectedPitchPoint`, assigned only in `init` and never read externally.
+
+**Fix**: In `AssignOnlyPropertyReferenceEliminator.mutate()`, added an `else if` branch after the existing assign-only check. For `let` stored properties that have a `functionAccessorSetter` child with at least one non-retained reference from a `functionConstructor` (i.e. assigned in an init body), the property is marked retained via `graph.markRetained`. Retained properties are excluded from `unusedDeclarations` results in `ScanResultBuilder`, so the property is never reported or removed.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift`: Added `isLetPropertyWithInitBodyAssignment(_:)` private method and `else if` branch in `mutate()` that calls `graph.markRetained(property)` for qualifying `let` properties.
+
+**Status**: Pending upstream — see [P9](#p9-assignonlypropertyreferenceeliminator-retain-let-properties-assigned-in-init-bodies).
+
+---
+
 ### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
 
 **Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
@@ -564,6 +581,20 @@ When contributing one of these upstream:
 **Why needed**: The Swift index store sometimes records only a reference to the method USR at a call site, without emitting a separate type-reference occurrence for the enclosing type. When that happens, the type is not added to `usedDeclarations` through the normal reference chain. Because the Issue 7 (P7) child-function walk fires only when the parent type is already marked used, a type reachable only through its static-method call sites could silently bypass the walk, leaving nested types falsely unused.
 
 **Why general-purpose**: Any codebase with an enum or struct that is accessed exclusively through static-method call sites (no explicit type-annotation usage) could encounter this if the index store omits the enclosing-type reference. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P9. AssignOnlyPropertyReferenceEliminator: retain `let` properties assigned in init bodies
+
+**File**: `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift`
+
+**Change**: In `mutate()`, added a private `isLetPropertyWithInitBodyAssignment(_:)` helper and an `else if` branch after the existing assign-only check. For any `let` stored property whose `functionAccessorSetter` child has at least one non-retained reference from a `functionConstructor`, calls `graph.markRetained(property)` to prevent the property from appearing in `unusedDeclarations`.
+
+**Why needed**: `let` stored properties can only be written in an init body. Removing such a property declaration while leaving the init body intact causes a build error (`self.x = x` references a nonexistent member). The existing `!property.isLetBinding` guard prevents `let` properties from entering the `assignOnlyProperty` path (correctly, since they have no getter for synthesized reads), but left them unprotected in the `unused` path.
+
+**Why general-purpose**: Any codebase with a `let` stored property that is written in an explicit `init` body but never read externally (e.g., stored for future use, documentation, or Codable conformance) will encounter this false positive. Not Treeswift-specific.
 
 **Upstream branch**: `master`
 

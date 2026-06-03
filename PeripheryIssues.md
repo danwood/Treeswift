@@ -181,6 +181,8 @@ File: `Core/DeepLinkHandler.swift`
 
 ## 8. `unused`: Stored `let` Properties With No External Reads Removed, Leaving Orphan `self.x = x` in `init`
 
+**Status: Fixed** — `AssignOnlyPropertyReferenceEliminator` now marks `let` properties with init-body setter references as retained, preventing them from appearing in `unusedDeclarations`.
+
 **Symptom:** A `public let` property is flagged as `unused` (not `assignOnlyProperty`) and removed. The `init` body that assigns `self.x = x` is NOT removed (init stays because it's used). Build fails: "value of type X has no member 'x'".
 
 **Example:**
@@ -197,9 +199,9 @@ File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
 
 **Root cause:** `AssignOnlyPropertyReferenceEliminator` already guards against `let` bindings (`!property.isLetBinding`). But the `unused` annotation path (separate from `assignOnlyProperty`) does not have this guard. When no external code reads `confidence`, Periphery marks the declaration `unused` and Treeswift removes only the property declaration — leaving the init assignment orphaned.
 
-**Impact:** Build failure. The init body references a now-nonexistent property.
+**Fix:** In `AssignOnlyPropertyReferenceEliminator.mutate()`, after the existing assign-only check, an `else if` branch checks whether the property is a `let` binding with a `functionAccessorSetter` child that has at least one non-retained reference from a `functionConstructor`. If so, `graph.markRetained(property)` is called, preventing the property from being reported as unused.
 
-**Workaround:** Do not remove `unused` declarations that are `let` properties assigned inside an `init`. Filter manually or add `// periphery:ignore`.
+**Impact:** Build failure. The init body references a now-nonexistent property.
 
 ---
 
