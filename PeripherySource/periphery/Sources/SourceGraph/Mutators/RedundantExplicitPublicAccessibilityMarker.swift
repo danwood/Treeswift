@@ -37,6 +37,12 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
     private func validate(_ decl: Declaration) throws {
         // Check if the declaration is public, and is referenced cross module.
         if decl.accessibility.isExplicitly(.public) {
+            // Never strip public from protocol declarations. Conforming types in the same
+            // module require the protocol to be public for their conformances to compile.
+            // Stripping public from a protocol also strips it from its extensions, breaking
+            // the witness table for conformances like Identifiable.id.
+            guard decl.kind != .protocol else { return }
+
             if !graph.isRetained(decl),
                !isReferencedCrossModule(decl),
                !isExposedPubliclyByAnotherDeclaration(decl),
