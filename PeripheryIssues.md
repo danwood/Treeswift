@@ -116,13 +116,13 @@ Files: `Engine/EngineCacheManager.swift`, `Core/DeepLinkHandler.swift`
 
 **Root cause (identified):** For stored `private let`/`var` properties, the Swift index store records references to the property's implicit **accessor USR** (getter/setter) rather than the property's own USR when the property is read or written. `UsedDeclarationMarker.markUsed(_:)` marks the accessor as used but does not propagate to the parent property declaration. The property never enters `usedDeclarations` and is therefore falsely flagged as unused.
 
-**Fix applied:** `UsedDeclarationMarker.markUsed(_:)` now propagates the used status from any accessor declaration up to its parent property, mirroring the existing `functionConstructor → containing type` propagation. See `PeripherySource/periphery/Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift` and `PeripherySource/periphery/README_Treeswift.md` §13 / P6.
+**Fix applied (stored-property case):** `UsedDeclarationMarker.markUsed(_:)` now propagates the used status from any accessor declaration up to its parent property, mirroring the existing `functionConstructor → containing type` propagation. See `PeripherySource/periphery/Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift` and `PeripherySource/periphery/README_Treeswift.md` §13 / P6. The `private let logger` false positive is resolved.
 
-**Scope of fix:** Addresses the stored-property case (`private let logger`). The `private func purge` case (function call) should already be handled correctly by `calledBy` relations in the index store; if a function is still falsely flagged after this fix, it may be a separate issue requiring further investigation.
+**Current state of `EngineCacheManager` (as of 2026-06-05):** The `private func purge` case was based on an earlier version of the file. The current `EngineCacheManager.swift` does not have a `private func purge` — `purge` is internal and correctly flagged as unused (it has no callers outside the file, and `cleanupOrphanFiles`/`cleanupStaleFiles` which call it are themselves unused). This is a genuine "all methods unused" scenario, not a false positive. The remaining concern is cascade ordering: 11 methods are flagged unused, but `cacheURL(for:signature:)` and `sanitizeFilename(_:)` are NOT flagged (they are called by the flagged methods). If the 11 methods are removed, `cacheURL` and `sanitizeFilename` become dead code not captured in this scan pass.
+
+**Residual issue:** Treeswift/Periphery currently cannot perform multi-pass cascade removal of a deeply interconnected call chain where intermediate nodes have external callers. This is a known limitation, not a bug. The safe approach is to remove the entire type in one operation (if the type itself is unused) or to manually review removals in files with internal call chains.
 
 **Impact:** Build failure or silent runtime breakage.
-
-**Workaround (until fix verified):** Do not apply bulk `unused` annotation removals without manual review of each declaration. `redundantAccessibility` and `redundantInternalAccessibility` removals are much safer for bulk operation — they only adjust access modifiers, never remove code.
 
 **Recommended safe bulk strategy:** Filter to `annotationFilter: ["redundantAccessibility", "redundantInternalAccessibility", "redundantPublicAccessibility"]` only. Review `unused` and `assignOnlyProperty` removals manually.
 
@@ -268,7 +268,7 @@ public enum ProductionProjectInspectorType: String, CaseIterable, UnitInspectorD
 
 ## 11. `unused`: Nested Type Removed While Parent Type is Kept — Orphaned References in Parent
 
-**Status: Fixed** — `filterSkipReferenced` now skips nested types whose parent type is not in the deletion set.
+**Status: Fixed** — The P7/P8 fixes to `UsedDeclarationMarker` (sections 14 and 15 in `README_Treeswift.md`) resolved the root cause. `Destination` is no longer flagged as unused at all: when `parse()` and `toNavigationDestination()` are marked used, the parent `DeepLinkHandler` is also marked used (P8), and then its child methods' `returnType`/`parameterType` references are walked (P7), marking `Destination` as used.
 
 **Symptom:** A nested type (e.g. `enum Destination`) inside an outer type (e.g. `enum DeepLinkHandler`) is flagged as `unused`/`unattached` and removed. The outer type is NOT removed (it's in `shared` — referenced by other orphaned types, skipped by `skipReferenced`). Build fails because the outer type's methods return or accept the removed nested type.
 
@@ -278,7 +278,7 @@ public enum ProductionProjectInspectorType: String, CaseIterable, UnitInspectorD
 
 // DeepLinkHandler in 'shared' category — kept by skipReferenced
 enum DeepLinkHandler {
-    enum Destination: Equatable { ... }   // ← in 'unattached', removed
+    enum Destination: Equatable { ... }   // ← was in 'unattached', removed
 
     static func parse(_ url: URL) -> Destination? { ... }        // now broken
     static func toNavigationDestination(_ d: Destination) -> ... // now broken
@@ -287,17 +287,13 @@ enum DeepLinkHandler {
 // error: cannot find type 'Destination' in scope
 ```
 
-**Root cause (partially understood):** `Destination` is in `unattached`. Debug confirmed that during `filterSkipReferenced`, `hasExternalReferences(Destination)` returns `true` (refs from `parse()` and `toNavigationDestination()` methods whose parents are not in deletion set). So `Destination` IS correctly classified as "skip". But it still gets removed.
+**Root cause:** Two issues interacted. First, `DeepLinkHandler` was not being added to `usedDeclarations` even when its static methods were called (P8 fix). Second, nested type `Destination` used only in sibling method signatures (return/parameter types) was not walked when the parent was marked used (P7 fix).
 
-`isNestedTypeWithKeptParent` fix added three iterations (check parent not in set → check parent has external refs → check parent's children have external refs). All return the right answer in testing. Yet `Destination` still removed.
+**Fixes applied:** P7 (`UsedDeclarationMarker` walks child function returnType/parameterType refs) and P8 (`UsedDeclarationMarker` propagates function-used → parent-used). With both fixes, `Destination` is no longer emitted as a scan result and is never removed.
 
-**Open question:** Is `filterSkipReferenced` even the code path that removes it? Could be a second code path (e.g. removing parent type's body via a different operation's line range, or a non-`unused` annotation path). Needs more investigation.
+**Additional fix committed (Treeswift):** `isNestedTypeWithKeptParent` in `UnusedDependencyAnalyzer` provides a safety net: a nested type whose parent is not in the deletion set is always skipped during removal. This defense-in-depth catch is preserved even though the Periphery fixes mean `Destination` shouldn't appear in results at all.
 
-**Impact:** Build failure. Parent type methods reference the removed nested type.
-
-**Partial fix committed:** `isNestedTypeWithKeptParent` added — handles the case where parent is genuinely absent from the deletion set. The specific `DeepLinkHandler.Destination` case remains broken despite the fix returning `true` for `extRefs`. Root cause not yet found.
-
-**Workaround:** Skip `Core/DeepLinkHandler.swift` in removals until fixed.
+**Note on earlier investigation:** Debug had confirmed `filterSkipReferenced` returned `extRefs=true` for `Destination` yet removal still happened — suggesting a second removal code path. With the P7/P8 upstream fixes, `Destination` never enters the deletion set, bypassing that code path entirely.
 
 ---
 
