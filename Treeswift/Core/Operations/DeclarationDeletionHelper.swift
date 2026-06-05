@@ -629,6 +629,26 @@ struct DeclarationDeletionHelper {
 				continue
 			}
 
+			// Never remove a conformance extension — `extension Type: Protocol { }` must
+			// be preserved even when its body is empty or comment-only, because removing
+			// it silently breaks call sites that pass `Type` where `Protocol` is expected.
+			// Detect by checking for `: ` followed by a capitalised identifier before `{`.
+			let isConformanceExtension = trimmed.hasPrefix("extension ") && {
+				// Extract the part between "extension TypeName" and "{"
+				if let colonRange = trimmed.range(of: ":"),
+				   let braceRange = trimmed.range(of: "{"),
+				   colonRange.upperBound < braceRange.lowerBound {
+					let afterColon = trimmed[colonRange.upperBound ..< braceRange.lowerBound]
+						.trimmingCharacters(in: .whitespaces)
+					return !afterColon.isEmpty
+				}
+				return false
+			}()
+			guard !isConformanceExtension else {
+				index += 1
+				continue
+			}
+
 			// Scan backward to include preceding attributes, comments, and blank lines
 			// (mirrors the logic in findDeletionStartLine for regular declarations).
 			// Section markers (MARK, TODO, FIXME) are NOT consumed here — they are

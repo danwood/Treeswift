@@ -76,6 +76,10 @@ struct CodeModificationHelper {
 			// Every child (including enum cases) must be explicitly in allDeletingUSRs to
 			// allow parent promotion. Enum cases that are used externally are not in
 			// allDeletingUSRs and should block parent promotion.
+			// Guard against vacuous truth: an empty declarations set satisfies allSatisfy,
+			// but an empty container (e.g. `extension Type: Protocol {}`) should never be
+			// promoted to automatically.
+			guard !parent.declarations.isEmpty else { break }
 			let allChildrenDeleted = parent.declarations.allSatisfy { sibling in
 				sibling.usrs.contains { allDeletingUSRs.contains($0) }
 			}

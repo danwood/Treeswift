@@ -38,6 +38,15 @@ public enum ScanResultBuilder {
                 }
             }
 
+            // Also skip when the removable declaration itself is a conformance extension.
+            // An empty `extension Type: Protocol {}` body has no members, so Periphery marks it
+            // unused. But removing it silently breaks callers that pass the type as the protocol.
+            if removableDeclaration.kind == .extension,
+               removableDeclaration.related.contains(where: { $0.declarationKind == .protocol })
+            {
+                return [ScanResult]()
+            }
+
             return [ScanResult(declaration: removableDeclaration, annotation: .unused)] + extensionResults
         }
         let annotatedAssignOnlyProperties: [ScanResult] = assignOnlyProperties.map {
