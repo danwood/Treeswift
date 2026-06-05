@@ -25,7 +25,9 @@ extension ScanResult.Annotation {
 		     .redundantInternalAccessibility,
 		     .redundantFilePrivateAccessibility,
 		     .redundantAccessibility:
-			true
+			// Accessibility-only changes require a full source range to locate the modifier to rewrite.
+			// Without endLine/endColumn the declaration cannot be found on disk.
+			hasFullRange
 		case .assignOnlyProperty, .redundantProtocol:
 			false
 		case .superfluousIgnoreCommand:
