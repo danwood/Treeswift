@@ -220,7 +220,11 @@ enum UnusedDependencyAnalyzer {
 			}
 
 			if hasExternalReferences(op.declaration, deletionSet: deletionSet, sourceGraph: sourceGraph)
-				|| isNestedTypeWithKeptParent(op.declaration, deletionSet: deletionSet) {
+				|| isNestedTypeWithKeptParent(
+					op.declaration,
+					deletionSet: deletionSet,
+					sourceGraph: sourceGraph
+				) {
 				skippedCount += 1
 			} else {
 				kept.append(op)
@@ -449,19 +453,29 @@ enum UnusedDependencyAnalyzer {
 	 containing type that references the nested type (e.g., as a return type or property
 	 type) breaks. This guard prevents removing nested types whose parent would remain.
 	 */
+	/**
+	 Returns true when a nested type's parent will be KEPT (not actually removed) by the
+	 skipReferenced strategy — either because the parent is not in the deletion set, or
+	 because the parent itself has external references and will be skipped.
+
+	 When a nested type is removed but its containing type is kept, any code in the
+	 containing type that references the nested type (e.g., as a return type or property
+	 type) breaks. This guard prevents removing nested types whose parent would remain.
+	 */
 	private static func isNestedTypeWithKeptParent(
 		_ declaration: Declaration,
-		deletionSet: Set<Declaration>
+		deletionSet: Set<Declaration>,
+		sourceGraph: any SourceGraphProtocol
 	) -> Bool {
-		// Only applies to concrete type-level declarations (enum, struct, class, protocol)
 		let typeKinds: Set<Declaration.Kind> = [.enum, .struct, .class, .protocol, .typealias]
 		guard typeKinds.contains(declaration.kind) else { return false }
-		// Must have a parent that is also a type (nested, not a top-level type)
 		guard let parent = declaration.parent,
 		      typeKinds.contains(parent.kind)
 		else { return false }
-		// If the parent is also in the deletion set, it's safe to remove the nested type
-		return !deletionSet.contains(parent)
+		// Parent not in deletion set: it will definitely be kept
+		if !deletionSet.contains(parent) { return true }
+		// Parent is in deletion set but has external references: it will be skipped
+		return hasExternalReferences(parent, deletionSet: deletionSet, sourceGraph: sourceGraph)
 	}
 
 	/**
