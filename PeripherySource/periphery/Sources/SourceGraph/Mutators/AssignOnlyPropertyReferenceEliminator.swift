@@ -109,6 +109,29 @@ final class AssignOnlyPropertyReferenceEliminator: SourceGraphMutator {
             }
         }
 
+        // Path 3: for let stored properties, Swift's indexer may record NO references at all
+        // for the init-body assignment self.x = x (especially for public let in public structs).
+        // Fall back to name matching: if the parent type has an explicit init whose parameter
+        // list contains a parameter with the same name as this property, treat the property
+        // as having an init-body assignment and retain it.
+        if let parent = property.parent,
+           Declaration.Kind.concreteTypeKinds.contains(parent.kind)
+        {
+            let propName = property.name
+            for initDecl in parent.declarations where initDecl.kind == .functionConstructor && !initDecl.isImplicit {
+                // initDecl.name looks like "init(a:b:c:)" — check if propName appears as a label
+                let initName = initDecl.name
+                let paramLabels = initName
+                    .dropFirst("init(".count)
+                    .dropLast(1)
+                    .split(separator: ":")
+                    .map(String.init)
+                if paramLabels.contains(propName) {
+                    return true
+                }
+            }
+        }
+
         return false
     }
 }
