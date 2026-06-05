@@ -462,6 +462,21 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 17. DeclarationSyntaxVisitor: register secondary result at `VariableDeclSyntax` node position ⟶ [Pending Upstream P10]
+
+**Purpose**: Fix false "no source range" for `static let`/`static var` declarations inside `actor` types, which caused ghost `redundantInternalAccessibility` warnings that could not be applied.
+
+**Root cause**: For a variable declaration like `static let shared = TourStatsCache()`, the Swift index store records the declaration position at the `static` keyword (start of `VariableDeclSyntax`). `DeclarationSyntaxVisitor.visitPost(_:VariableDeclSyntax)` calls `parse(at: binding.positionAfterSkippingLeadingTrivia)`, which is the position of the `shared` identifier — not the `static` keyword. Position mismatch → `matchingResult` nil in `SwiftIndexer.visitDeclarations` → `applyDeclarationMetadata` never fires → `endLine`/`endColumn` never set on the declaration.
+
+**Fix**: After each `parse(at: binding.positionAfterSkippingLeadingTrivia ...)` call in the `IdentifierPatternSyntax` branch of `visitPost(_ node: VariableDeclSyntax)`, check if `node.positionAfterSkippingLeadingTrivia != binding.positionAfterSkippingLeadingTrivia`. If they differ (i.e., there are leading modifiers like `static`), call `parse(...)` a second time with `at: node.positionAfterSkippingLeadingTrivia` and the same `endPosition`. The second call appends a second `Result` to `results`, which `resultsByLocation` indexes under the node-start location — giving `visitDeclarations` a match for the index-store position.
+
+**Change**:
+- `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift`: Added secondary `parse(...)` call in `visitPost(_ node: VariableDeclSyntax)` inside the `IdentifierPatternSyntax` branch, guarded by `nodePos != binding.positionAfterSkippingLeadingTrivia`.
+
+**Status**: Pending upstream — see [P10](#p10-declarationsyntaxvisitor-register-secondary-result-at-variabledeclsyntax-node-position).
+
+---
+
 ### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
 
 **Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
@@ -581,6 +596,20 @@ When contributing one of these upstream:
 **Why needed**: The Swift index store sometimes records only a reference to the method USR at a call site, without emitting a separate type-reference occurrence for the enclosing type. When that happens, the type is not added to `usedDeclarations` through the normal reference chain. Because the Issue 7 (P7) child-function walk fires only when the parent type is already marked used, a type reachable only through its static-method call sites could silently bypass the walk, leaving nested types falsely unused.
 
 **Why general-purpose**: Any codebase with an enum or struct that is accessed exclusively through static-method call sites (no explicit type-annotation usage) could encounter this if the index store omits the enclosing-type reference. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P10. DeclarationSyntaxVisitor: register secondary result at `VariableDeclSyntax` node position
+
+**File**: `Sources/SyntaxAnalysis/DeclarationSyntaxVisitor.swift`
+
+**Change**: In `visitPost(_ node: VariableDeclSyntax)`, inside the `IdentifierPatternSyntax` branch, after calling `parse(at: binding.positionAfterSkippingLeadingTrivia ...)`, check if `node.positionAfterSkippingLeadingTrivia != binding.positionAfterSkippingLeadingTrivia`. If so, call `parse(...)` a second time with `at: nodePos` and the same `endPosition`. This registers a second `Location → Result` entry covering the `static`/`class`/`override` keyword position that the index store records.
+
+**Why needed**: For `static let`/`static var` (and any variable with leading modifiers), the Swift index store records the declaration at the modifier keyword position, not the binding identifier. Without the secondary entry, `visitDeclarations` in `SwiftIndexer` finds no match for the index-store position → no end-position data → no source range → the declaration appears as a ghost non-deletable item.
+
+**Why general-purpose**: Any codebase with `static let` or `static var` properties inside `actor`, `class`, or `struct` types may encounter this mismatch. The `actor` case is the most common trigger because `static let` singletons are idiomatic for actors.
 
 **Upstream branch**: `master`
 

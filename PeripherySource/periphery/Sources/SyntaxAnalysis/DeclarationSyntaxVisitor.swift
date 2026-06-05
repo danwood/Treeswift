@@ -223,6 +223,25 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     at: binding.positionAfterSkippingLeadingTrivia
                     , endPosition: binding.endPosition
                 )
+                // 🌲 Issue 12: For `static let`/`static var` inside actors, the index store records the
+                // position at the `static` keyword (node start), not the binding identifier. Register a
+                // second result at the node position so visitDeclarations can match it and apply end-position data.
+                let nodePos = node.positionAfterSkippingLeadingTrivia
+                if nodePos != binding.positionAfterSkippingLeadingTrivia {
+                    parse(
+                        modifiers: node.modifiers,
+                        attributes: node.attributes,
+                        trivia: node.commentCommandTrivia,
+                        variableType: binding.typeAnnotation?.type,
+                        closureParameterClause: closureParameters,
+                        returnClause: closureSignature?.returnClause,
+                        variableInitFunctionCallExpr: functionCallExpr,
+                        variableInitExpr: binding.initializer?.value,
+                        isLetBinding: isLetBinding,
+                        at: nodePos
+                        , endPosition: binding.endPosition
+                    )
+                }
             } else if let tuplePatternSyntax = binding.pattern.as(TuplePatternSyntax.self) {
                 visitVariableTupleBinding(
                     node: node,
