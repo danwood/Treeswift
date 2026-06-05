@@ -199,7 +199,7 @@ File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
 
 **Root cause:** `AssignOnlyPropertyReferenceEliminator` already guards against `let` bindings (`!property.isLetBinding`). But the `unused` annotation path (separate from `assignOnlyProperty`) does not have this guard. When no external code reads `confidence`, Periphery marks the declaration `unused` and Treeswift removes only the property declaration — leaving the init assignment orphaned.
 
-**Fix:** In `AssignOnlyPropertyReferenceEliminator.mutate()`, after the existing assign-only check, an `else if` branch checks whether the property is a `let` binding with a `functionAccessorSetter` child that has at least one non-retained reference from a `functionConstructor`. If so, `graph.markRetained(property)` is called, preventing the property from being reported as unused.
+**Fix (revised):** In `AssignOnlyPropertyReferenceEliminator.mutate()`, after the existing assign-only check, an `else if` branch calls `isLetPropertyWithInitBodyAssignment`. The function checks two paths: (1) a `functionAccessorSetter` child referenced from a constructor (covers unusual codegen), and (2) a direct reference to the property itself or its getter from a `functionConstructor`. Path 2 is the primary path for `public let` stored properties in structs. If either path matches, `graph.markRetained(property)` is called, preventing the property from appearing as `unused`.
 
 **Impact:** Build failure. The init body references a now-nonexistent property.
 

@@ -74,16 +74,41 @@ final class AssignOnlyPropertyReferenceEliminator: SourceGraphMutator {
      Returns true when a `let` stored property is assigned exclusively inside an init body.
      Such properties must be retained: removing the declaration while leaving the init body
      intact would leave an orphaned `self.x = x` assignment that breaks the build.
+
+     For `var` properties the Swift indexer emits the init-body assignment as a reference
+     to the implicit `functionAccessorSetter` child. For `let` properties Swift does not
+     generate a setter child — the init-body write is recorded as a direct reference to
+     the property itself (or its getter) from the `functionConstructor`. Both paths are
+     checked here so that neither kind is incorrectly removed.
      */
     private func isLetPropertyWithInitBodyAssignment(_ property: Declaration) -> Bool {
         guard property.isLetBinding,
-              property.kind.isVariableKind,
-              let setter = property.declarations.first(where: { $0.kind == .functionAccessorSetter }),
-              graph.references(to: setter).contains(where: {
-                  $0.kind != .retained && $0.parent?.kind == .functionConstructor
-              })
+              property.kind.isVariableKind
         else { return false }
 
-        return true
+        // Path 1: setter child present (covers var-like let in unusual codegen paths)
+        if let setter = property.declarations.first(where: { $0.kind == .functionAccessorSetter }),
+           graph.references(to: setter).contains(where: {
+               $0.kind != .retained && $0.parent?.kind == .functionConstructor
+           })
+        {
+            return true
+        }
+
+        // Path 2: direct references to the property (or its getter) from a constructor.
+        // This is the common case for `public let` stored properties in structs: the
+        // init-body `self.x = x` assignment is recorded as a direct ref to the property.
+        let allRelevantDecls: [Declaration] = [property] + property.declarations.filter {
+            $0.kind == .functionAccessorGetter || $0.kind == .functionAccessorSetter
+        }
+        for decl in allRelevantDecls {
+            if graph.references(to: decl).contains(where: {
+                $0.kind != .retained && $0.parent?.kind == .functionConstructor
+            }) {
+                return true
+            }
+        }
+
+        return false
     }
 }
