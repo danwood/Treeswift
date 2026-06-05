@@ -219,7 +219,8 @@ enum UnusedDependencyAnalyzer {
 				continue
 			}
 
-			if hasExternalReferences(op.declaration, deletionSet: deletionSet, sourceGraph: sourceGraph) {
+			if hasExternalReferences(op.declaration, deletionSet: deletionSet, sourceGraph: sourceGraph)
+				|| isNestedTypeWithKeptParent(op.declaration, deletionSet: deletionSet) {
 				skippedCount += 1
 			} else {
 				kept.append(op)
@@ -438,6 +439,29 @@ enum UnusedDependencyAnalyzer {
 		}
 
 		return paths
+	}
+
+	/**
+	 Returns true when a declaration is a nested type (its parent is a type, not a function)
+	 AND the parent type is NOT in the deletion set.
+
+	 When a nested type is removed but its containing type is kept, any code in the
+	 containing type that references the nested type (e.g., as a return type or property
+	 type) breaks. This guard prevents removing nested types whose parent would remain.
+	 */
+	private static func isNestedTypeWithKeptParent(
+		_ declaration: Declaration,
+		deletionSet: Set<Declaration>
+	) -> Bool {
+		// Only applies to concrete type-level declarations (enum, struct, class, protocol)
+		let typeKinds: Set<Declaration.Kind> = [.enum, .struct, .class, .protocol, .typealias]
+		guard typeKinds.contains(declaration.kind) else { return false }
+		// Must have a parent that is also a type (nested, not a top-level type)
+		guard let parent = declaration.parent,
+		      typeKinds.contains(parent.kind)
+		else { return false }
+		// If the parent is also in the deletion set, it's safe to remove the nested type
+		return !deletionSet.contains(parent)
 	}
 
 	/**

@@ -266,4 +266,33 @@ public enum ProductionProjectInspectorType: String, CaseIterable, UnitInspectorD
 
 ---
 
+## 11. `unused`: Nested Type Removed While Parent Type is Kept — Orphaned References in Parent
+
+**Status: Fixed** — `filterSkipReferenced` now skips nested types whose parent type is not in the deletion set.
+
+**Symptom:** A nested type (e.g. `enum Destination`) inside an outer type (e.g. `enum DeepLinkHandler`) is flagged as `unused`/`unattached` and removed. The outer type is NOT removed (it's in `shared` — referenced by other orphaned types, skipped by `skipReferenced`). Build fails because the outer type's methods return or accept the removed nested type.
+
+**Example:**
+```swift
+// Core/DeepLinkHandler.swift
+
+// DeepLinkHandler in 'shared' category — kept by skipReferenced
+enum DeepLinkHandler {
+    enum Destination: Equatable { ... }   // ← in 'unattached', removed
+
+    static func parse(_ url: URL) -> Destination? { ... }        // now broken
+    static func toNavigationDestination(_ d: Destination) -> ... // now broken
+}
+
+// error: cannot find type 'Destination' in scope
+```
+
+**Root cause:** `Destination` is in `unattached` (no external references). `skipReferenced` strategy removes `unattached` items. But `DeepLinkHandler` is in `shared` (referenced by other orphaned types like collaboration views) so it's skipped. The removal does not check whether a nested type being removed has a parent that is being kept in the same pass.
+
+**Impact:** Build failure. Parent type methods reference the removed nested type.
+
+**Fix:** In `UnusedDependencyAnalyzer.filterSkipReferenced`, added `isNestedTypeWithKeptParent` check. When a type declaration (enum/struct/class/protocol/typealias) has a parent type that is NOT in the deletion set, the nested type is treated as having external references and is skipped. This prevents nested types from being removed when their parent type remains.
+
+---
+
 
