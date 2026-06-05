@@ -474,8 +474,18 @@ enum UnusedDependencyAnalyzer {
 		else { return false }
 		// Parent not in deletion set: it will definitely be kept
 		if !deletionSet.contains(parent) { return true }
-		// Parent is in deletion set but has external references: it will be skipped
-		return hasExternalReferences(parent, deletionSet: deletionSet, sourceGraph: sourceGraph)
+		// Parent is in deletion set but has external references (direct or via children): it will be skipped.
+		// Check direct refs to the parent type AND refs to any of its child declarations (methods, properties, etc.)
+		// because external code may call a method without directly referencing the parent type.
+		if hasExternalReferences(parent, deletionSet: deletionSet, sourceGraph: sourceGraph) {
+			return true
+		}
+		for child in parent.declarations {
+			if hasExternalReferences(child, deletionSet: deletionSet, sourceGraph: sourceGraph) {
+				return true
+			}
+		}
+		return false
 	}
 
 	/**
