@@ -287,11 +287,17 @@ enum DeepLinkHandler {
 // error: cannot find type 'Destination' in scope
 ```
 
-**Root cause:** `Destination` is in `unattached` (no external references). `skipReferenced` strategy removes `unattached` items. But `DeepLinkHandler` is in `shared` (referenced by other orphaned types like collaboration views) so it's skipped. The removal does not check whether a nested type being removed has a parent that is being kept in the same pass.
+**Root cause (partially understood):** `Destination` is in `unattached`. Debug confirmed that during `filterSkipReferenced`, `hasExternalReferences(Destination)` returns `true` (refs from `parse()` and `toNavigationDestination()` methods whose parents are not in deletion set). So `Destination` IS correctly classified as "skip". But it still gets removed.
+
+`isNestedTypeWithKeptParent` fix added three iterations (check parent not in set → check parent has external refs → check parent's children have external refs). All return the right answer in testing. Yet `Destination` still removed.
+
+**Open question:** Is `filterSkipReferenced` even the code path that removes it? Could be a second code path (e.g. removing parent type's body via a different operation's line range, or a non-`unused` annotation path). Needs more investigation.
 
 **Impact:** Build failure. Parent type methods reference the removed nested type.
 
-**Fix:** In `UnusedDependencyAnalyzer.filterSkipReferenced`, added `isNestedTypeWithKeptParent` check. When a type declaration (enum/struct/class/protocol/typealias) has a parent type that is NOT in the deletion set, the nested type is treated as having external references and is skipped. This prevents nested types from being removed when their parent type remains.
+**Partial fix committed:** `isNestedTypeWithKeptParent` added — handles the case where parent is genuinely absent from the deletion set. The specific `DeepLinkHandler.Destination` case remains broken despite the fix returning `true` for `extRefs`. Root cause not yet found.
+
+**Workaround:** Skip `Core/DeepLinkHandler.swift` in removals until fixed.
 
 ---
 
