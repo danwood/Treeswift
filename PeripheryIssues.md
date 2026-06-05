@@ -75,7 +75,7 @@ File: `CoreData/Common/StatusProtocol.swift`
 
 ## 4. Protocol Conformance Extensions Removed (`extension Type: Protocol`)
 
-**Status: Fixed** — `ScanResultBuilder` now skips conformance extensions when emitting `.unused` results for extensions of unused types.
+**Status: Fixed** — Three separate bugs all contributed to conformance extensions being wrongly removed. All three fixed.
 
 **Symptom:** Periphery flags an `extension SomeType: SomeProtocol { ... }` block as unused and Treeswift removes it. Callers that pass `SomeType` where `SomeProtocol` is expected then fail with "does not conform to expected type".
 
@@ -88,11 +88,19 @@ extension Project: Shareable { ... }
 func someFunc(_ item: some Shareable) { ... }
 someFunc(project)   // error: 'Project' does not conform to 'Shareable'
 ```
-File: `CoreData/Common/` (various extension files)
+File: `CoreData/Projects/Project+Extensions.swift`
 
-**Root cause:** When a concrete type is unused, `ScanResultBuilder` emits `.unused` results for all its folded extensions — including conformance extensions. Removing a conformance extension breaks any call site that passes the concrete type as the protocol type.
+**Root causes (three independent bugs):**
 
-**Fix:** In `ScanResultBuilder.build()`, before appending an extension result, check whether `ext.related` contains a reference with `declarationKind == .protocol`. If so, skip the result — the extension is a protocol conformance block and should not be auto-removed even when the parent type is unused.
+1. **ScanResultBuilder — extensions of unused parent types:** When a concrete type is unused, `ScanResultBuilder` emits `.unused` results for all its folded extensions, including conformance extensions. Fix: added `isConformanceExtension` guard in the extension-result loop (already applied).
+
+2. **ScanResultBuilder — standalone empty conformance extensions:** When an `extension Type: Protocol {}` has no body members, Periphery directly adds it to `unusedDeclarations`. `ScanResultBuilder` then emits it as a top-level `.unused` result. The Issue 4 guard only checked folded extensions (path 1) — it did not guard against the declaration itself being emitted as unused. Fix: added second guard at the `return [ScanResult(...)] + extensionResults` line: if `removableDeclaration.kind == .extension` and its `related` set contains a `.protocol` ref, return `[ScanResult]()`.
+
+3. **DeclarationDeletionHelper.removeEmptyContainers — comment-only body:** After declarations are removed from other extensions in the same file, `removeEmptyContainers` post-processes the modified source to clean up empty `extension`/`class`/`struct` blocks. An `extension Type: Protocol { // comments }` body with only comment lines passes the `bodyIsEmpty` check (comments are explicitly allowed) → the extension gets removed silently. Fix: added `isConformanceExtension` guard in `removeEmptyContainers` — any extension line containing `: SomeName` before `{` is skipped.
+
+**Additional related fix:** `findHighestEmptyAncestor` in `CodeModificationHelper` had a vacuous-truth bug — `parent.declarations.allSatisfy { ... }` returns `true` on an empty declarations set, which could spuriously promote deletions to empty container parents. Added `guard !parent.declarations.isEmpty else { break }`.
+
+**Impact:** Build failure. Protocol conformance broken — type no longer satisfies protocol at call sites.
 
 ---
 
