@@ -301,4 +301,27 @@ enum DeepLinkHandler {
 
 ---
 
+## 12. `redundantInternalAccessibility`: Ghost Warning With No Source Range for `static let` Inside `actor`
+
+**Status: Partially mitigated** — Treeswift now reports no-range items as non-deletable (0 del, 1 non) rather than counting them as deletable-but-never-applied.
+
+**Symptom:** Periphery flags a `static let` property inside an `actor` type as `redundantInternalAccessibility`. Treeswift shows 1 deletable in preview but applying it writes nothing to disk. On next scan the warning reappears — infinite loop.
+
+**Example:**
+```swift
+// Projects/Engagement/Views/Tools/MasterTour Connect/MasterTourImportConfirmationView.swift
+actor TourStatsCache {
+    static let shared = TourStatsCache()  // ← redundantInternalAccessibility, no range
+}
+```
+
+**Root cause:** Position mismatch between Swift index store and `DeclarationSyntaxVisitor`. Index store records `static let shared` at the `static` keyword position. Syntax visitor uses `binding.positionAfterSkippingLeadingTrivia` (the `shared` identifier position). Positions don't match → `matchingResult` nil in `SwiftIndexer.applyDeclarationMetadata` → no `endLine`/`endColumn` → no source range.
+
+**Treeswift fix applied:** `canRemoveCode` now requires `hasFullRange` for all accessibility annotations. No-range items appear as non-deletable (1 non) instead of phantom deletable (1 del, never applied).
+
+**Upstream fix needed (Periphery):** `SwiftIndexer.visitDeclarations` should fall back to matching by the `VariableDeclSyntax` node position when binding-level match fails, so `static let` inside actors get end positions populated.
+
+**Impact:** Persistent ghost warning shown as 1 non-deletable. Cannot be resolved without upstream fix.
+
+---
 
