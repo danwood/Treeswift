@@ -205,4 +205,65 @@ File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
 
 ---
 
+## 9. `redundantInternalAccessibility`: Stored Properties Made Private Despite Cross-File Reads
+
+**Status: Fixed** — `isReferencedOutsideFile` now also checks implicit accessor child declarations (getter/setter USRs) for stored properties.
+
+**Symptom:** A stored `let` or `var` property on a struct is flagged as `redundantInternalAccessibility` and marked `private`. But the property is read from other files via `instance.propertyName`, causing a build error: `'propertyName' is inaccessible due to 'private' protection level`.
+
+**Example:**
+```swift
+// ProgramDisplayModel.swift — Models/Entities/
+struct ProgramDisplayModel: Identifiable, Hashable, Sendable {
+    let status: ProgramStatus    // ← made private by Treeswift
+    let releaseDate: Date?       // ← made private by Treeswift
+    ...
+}
+
+// ProductionDataView.swift — Projects/Production/  (different file)
+ProgramDisplayModel(status: program.status, releaseDate: program.releaseDate, ...)
+//                          ~~~~~~~~~~~~~~  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// error: 'status' is inaccessible due to 'private' protection level
+```
+
+**Root cause:** Swift's index store records reads of stored properties via their implicit **accessor child USRs** (getter USR), NOT via the property declaration's own USR. `isReferencedOutsideFile` only checked `graph.references(to: self)` — which found nothing for the property — and incorrectly concluded the property had no cross-file readers.
+
+**Fix:** `isReferencedOutsideFile` now additionally walks `declarations` (children) when `kind == .varInstance || kind == .varStatic`, checking each child for cross-file references. This mirrors the same accessor-child pattern already used in `isReferencedFromDifferentTypeInSameFile`.
+
+**Impact:** Build failure. Properties made `private` are inaccessible from call sites in other files.
+
+---
+
+## 10. `redundantPublicAccessibility`: Strips `public` From Protocol Requirement Members in Public Types
+
+**Status: Fixed** — `markExplicitPublicDescendentDeclarations` now skips members that implement protocol requirements.
+
+**Symptom:** Members of a `public enum`/`struct`/`class` that explicitly satisfy `public protocol` requirements have their `public` keyword removed by Treeswift. Swift then reports a conformance error because the members are no longer `public`.
+
+**Example:**
+```swift
+// Before — correct:
+public enum ProductionProjectInspectorType: String, CaseIterable, UnitInspectorDefinition {
+    public var id: String { "production.\(rawValue)" }
+    public var title: String { ... }
+    public var icon: String { ... }
+}
+
+// After Treeswift strips public — broken:
+public enum ProductionProjectInspectorType: String, CaseIterable, UnitInspectorDefinition {
+    var id: String { ... }    // now internal → conformance error
+    var title: String { ... }
+    var icon: String { ... }
+}
+// error: property 'id' must be declared public because it matches a requirement in public protocol 'UnitInspectorDefinition'
+```
+
+**Root cause:** When `validate(_:)` marks a parent declaration as having redundant public accessibility, it calls `markExplicitPublicDescendentDeclarations(from:)` which marks ALL explicitly `public` descendants. This did not skip members that are protocol requirement witnesses — those members MUST remain `public` to satisfy the protocol contract.
+
+**Fix:** `markExplicitPublicDescendentDeclarations` now skips any descendent declaration for which `isProtocolRequirement` returns true. The method reuses the same related-reference logic as `RedundantInternalAccessibilityMarker.isProtocolRequirement`.
+
+**Impact:** Build failure. Protocol conformance broken — member is internal but protocol requires public.
+
+---
+
 

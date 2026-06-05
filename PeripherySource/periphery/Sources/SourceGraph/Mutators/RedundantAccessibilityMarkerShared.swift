@@ -18,7 +18,19 @@ extension Declaration {
     /// This is a common check used by multiple accessibility markers to determine
     /// if a declaration needs file-level or module-level accessibility.
     func isReferencedOutsideFile(graph: SourceGraph) -> Bool {
-        graph.references(to: self).map(\.location.file).contains { $0 != location.file }
+        if graph.references(to: self).map(\.location.file).contains(where: { $0 != location.file }) {
+            return true
+        }
+        // For stored properties, Swift's indexer emits references to implicit accessor children
+        // (getter/setter USRs) rather than the property itself. Check those children too.
+        if kind == .varInstance || kind == .varStatic {
+            for child in declarations {
+                if graph.references(to: child).map(\.location.file).contains(where: { $0 != location.file }) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /// Generic recursive descendent declaration finder with filtering.
