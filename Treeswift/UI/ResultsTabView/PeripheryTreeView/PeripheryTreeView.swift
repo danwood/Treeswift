@@ -37,6 +37,13 @@ struct PeripheryTreeView: View {
 	@State private var flatNodes: [FlatNode] = []
 	@State private var removalSummary: RemovalSummary?
 	@State private var operationError: OperationError?
+
+	// macOS SwiftUI does not expose the .alert(item:) overload that iOS has, so
+	// a manual isPresented binding driven by the optional model value is required.
+	private var operationErrorPresented: Binding<Bool> {
+		Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
+	}
+
 	@State private var showStrategySheet = false
 	@State private var pendingRemovalTarget: RemovalTarget?
 	@State private var pendingDependencyChains: [DependencyChain] = []
@@ -72,7 +79,7 @@ struct PeripheryTreeView: View {
 		// Force dependency on filterChangeCounter by accessing it in body
 
 		ScrollViewReader { scrollProxy in
-			LazyVStack(alignment: .leading, spacing: 0) {
+			let listContent = LazyVStack(alignment: .leading, spacing: 0) {
 				ForEach(flatNodes) { flatNode in
 					TreeNodeView(
 						node: flatNode.node,
@@ -168,51 +175,52 @@ struct PeripheryTreeView: View {
 					}
 				}
 			}
-			.sheet(isPresented: $showProgressSheet) {
-				FileOperationProgressSheet(
-					progressState: fileOperationProgress,
-					onCancel: {
-						fileOperationProgress.isCancelled = true
-					}
-				)
-				.interactiveDismissDisabled()
-			}
-			.sheet(isPresented: $showStrategySheet) {
-				RemovalStrategySheet(
-					targetName: pendingRemovalTargetName,
-					dependencyChains: pendingDependencyChains,
-					onConfirm: { strategy in
-						showStrategySheet = false
-						if let target = pendingRemovalTarget {
-							executePendingRemoval(target: target, strategy: strategy)
+
+			listContent
+				.sheet(isPresented: $showProgressSheet) {
+					FileOperationProgressSheet(
+						progressState: fileOperationProgress,
+						onCancel: {
+							fileOperationProgress.isCancelled = true
 						}
-					},
-					onCancel: {
-						showStrategySheet = false
-						pendingRemovalTarget = nil
-						pendingDependencyChains = []
-					}
-				)
-			}
-			.alert(item: $removalSummary) { summary in
-				Alert(
-					title: Text("Deletion Summary"),
-					message: Text(buildSummaryMessage(summary)),
-					dismissButton: .default(Text("OK"))
-				)
-			}
-			// Binding(get:set:) is intentional — macOS SwiftUI does not expose the
-			// .alert(item:) overload that iOS has, so isPresented with a manual binding
-			// is the only way to drive an alert from an optional model value on macOS.
-			.alert(
-				"Operation Failed",
-				isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })
-			) {
-				Text(operationError?.message ?? "")
-			}
-			.onChange(of: searchNavState.navigationRequest) {
-				handleNavigationRequest(scrollProxy: scrollProxy)
-			}
+					)
+					.interactiveDismissDisabled()
+				}
+				.sheet(isPresented: $showStrategySheet) {
+					RemovalStrategySheet(
+						targetName: pendingRemovalTargetName,
+						dependencyChains: pendingDependencyChains,
+						onConfirm: { strategy in
+							showStrategySheet = false
+							if let target = pendingRemovalTarget {
+								executePendingRemoval(target: target, strategy: strategy)
+							}
+						},
+						onCancel: {
+							showStrategySheet = false
+							pendingRemovalTarget = nil
+							pendingDependencyChains = []
+						}
+					)
+				}
+				.alert(item: $removalSummary) { summary in
+					Alert(
+						title: Text("Deletion Summary"),
+						message: Text(buildSummaryMessage(summary)),
+						dismissButton: .default(Text("OK"))
+					)
+				}
+				.alert(
+					"Operation Failed",
+					isPresented: operationErrorPresented
+				) {
+					Button("OK") { operationError = nil }
+				} message: {
+					Text(operationError?.message ?? "")
+				}
+				.onChange(of: searchNavState.navigationRequest) {
+					handleNavigationRequest(scrollProxy: scrollProxy)
+				}
 		} // ScrollViewReader
 		.overlay {
 			if filteredNodesCache.isEmpty, !rootNodes.isEmpty {
