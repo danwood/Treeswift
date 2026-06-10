@@ -110,8 +110,8 @@ final class ScanStateManager {
 						.deletingPathExtension().lastPathComponent
 					group.addTask(priority: .userInitiated) {
 						// Runs on background thread — PreRestoredCache.init is nonisolated.
-						let pre = await PreRestoredCache(from: cache) { @MainActor [weak self] _, label in
-							self?.cacheRestoreStatus = "\(configName): \(label)"
+						let pre = await PreRestoredCache(from: cache) { @MainActor _, label in
+							self.cacheRestoreStatus = "\(configName): \(label)"
 						}
 						return (config, pre)
 					}

@@ -17,7 +17,7 @@ enum SourceFingerprint {
 	 Sorting by path ensures a deterministic result regardless of filesystem enumeration order.
 	 Returns nil if the path cannot be enumerated.
 	 */
-	static func compute(for projectPath: String) -> String? {
+	nonisolated static func compute(for projectPath: String) -> String? {
 		let url = URL(fileURLWithPath: projectPath)
 		guard let enumerator = FileManager.default.enumerator(
 			at: url,

@@ -53,14 +53,14 @@ struct FilterSnapshot: Sendable {
 	}
 
 	/** Returns true if the scan result should be shown given this filter snapshot. */
-	func shouldShow(scanResult: ScanResult, declaration: Declaration) -> Bool {
+	nonisolated func shouldShow(scanResult: ScanResult, declaration: Declaration) -> Bool {
 		if topLevelOnly, declaration.parent != nil {
 			return false
 		}
 		return shouldShowIgnoringTopLevel(scanResult: scanResult, declaration: declaration)
 	}
 
-	private func shouldShowIgnoringTopLevel(scanResult: ScanResult, declaration: Declaration) -> Bool {
+	private nonisolated func shouldShowIgnoringTopLevel(scanResult: ScanResult, declaration: Declaration) -> Bool {
 		switch scanResult.annotation.warningType {
 		case .unused where !showUnused: return false
 		case .assignOnly where !showAssignOnly: return false
