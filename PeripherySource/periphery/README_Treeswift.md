@@ -477,7 +477,22 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
-### 13. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
+### 13. UsedDeclarationMarker: retain nested types used as stored-property types in same parent ⟶ [Upstream master d763b7a]
+
+**Purpose**: Fix false-positive `.unused` results for nested types (enums, structs, classes, protocols) that are used only as the declared type of a stored property within the same parent type.
+
+**Root cause**: The Swift index store does not always emit a reference occurrence when a nested type is used as the type annotation of a stored property within the same parent scope. For example, `private let status: PhraseStatus` inside `PhraseRange` — where `PhraseStatus` is a nested enum inside the same struct — produces no index reference from `status` to `PhraseStatus`. Without an index reference, none of the existing reference-walking paths in `UsedDeclarationMarker` marks `PhraseStatus` as used, so it is falsely flagged as `.unused`.
+
+**Fix**: In `UsedDeclarationMarker.markUsed(_:)`, when a parent type is marked used, collect its directly nested concrete type declarations into a name→declaration map. Then walk the parent's child variable declarations: if any child's `declaredType` (after stripping optional markers and array brackets) matches a nested type's name, mark that nested type as used.
+
+**Change**:
+- `Sources/SourceGraph/Mutators/UsedDeclarationMarker.swift`: Added nested-type-by-name walk inside `markUsed(_:)`, after the existing varType and returnType/parameterType walks. Marked with `// 🌲 Issue 13:`.
+
+**Status**: Applied to upstream `danwood/periphery` master (commit d763b7a), merged into combine branch, pulled into Treeswift subtree.
+
+---
+
+### 14. UsedDeclarationMarker: propagate used status from accessor to parent property ⟶ [Pending Upstream P6]
 
 **Purpose**: Fix false-positive `.unused` results for `private let`/`var` stored properties that are accessed from within the same type.
 
