@@ -1164,6 +1164,12 @@ struct CodeModificationHelper {
 		var deletedWarningIDs: [String] = []
 		var sourceGraphAdjustments: [(afterLine: Int, delta: Int)] = []
 		var failedIgnoreCommentsCount = 0
+		// Ghost modifications: access-control fixes whose rewrite produced an identical line
+		// (no bytes changed). These indicate a bad source location (e.g. the Issue-12 `static let`
+		// in an `actor` whose flagged line carries no modifier to rewrite). A "fix" that changes
+		// nothing must NOT be counted as applied — otherwise the warning re-appears on every rescan,
+		// causing an infinite cleanup loop. We collect them so the caller can surface them.
+		var ghostModifications: [String] = []
 
 		// Pre-process operations to handle preview cleanup for deleted Views
 		// Use SourceGraph to find #Preview macros that reference Views being deleted
@@ -1292,17 +1298,39 @@ struct CodeModificationHelper {
 				continue
 			}
 
+			// Applies an access-control line rewrite, but only commits and counts it when the
+			// rewrite actually changed the line. A no-op rewrite (identical line) is a ghost — the
+			// flagged source location does not carry the expected modifier (e.g. Issue-12 `static
+			// let` in an `actor`). Counting it would report a phantom success and re-flag forever.
+			// Returns true if the line changed.
+			func applyAccessControlRewrite(
+				lineIndex: Int,
+				newLine: String,
+				action: String,
+				onApplied: () -> Void = {}
+			) -> Bool {
+				guard lineIndex >= 0, lineIndex < lines.count else { return false }
+				guard newLine != lines[lineIndex] else {
+					ghostModifications
+						.append("\(filePath):\(location.line) \(scanResult.annotation) — no change applied")
+					return false
+				}
+				lines[lineIndex] = newLine
+				removedWarningIDs.append(warningID)
+				pendingLogEntries.append(.init(startLine: location.line, endLine: location.line, action: action))
+				onApplied()
+				return true
+			}
+
 			// Handle different removal types
 			if case .redundantPublicAccessibility = scanResult.annotation {
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-				lines[lineIndex] = removeAccessKeyword("public", from: lines[lineIndex])
-				removedWarningIDs.append(warningID)
-				pendingLogEntries.append(.init(
-					startLine: location.line,
-					endLine: location.line,
+				_ = applyAccessControlRewrite(
+					lineIndex: lineIndex,
+					newLine: removeAccessKeyword("public", from: lines[lineIndex]),
 					action: "removed `public`"
-				))
+				)
 
 			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
 				// Internal is the default, so keyword may or may not be present
@@ -1316,21 +1344,17 @@ struct CodeModificationHelper {
 						declarationKind: declaration.kind,
 						in: lines[lineIndex]
 					)
-					lines[lineIndex] = modifiedLine
-					pendingLogEntries.append(.init(
-						startLine: location.line,
-						endLine: location.line,
-						action: action
-					))
 					// Track nested types that become fileprivate so we can cascade
-					// the modifier to sibling inits/funcs that reference them.
+					// the modifier to sibling inits/funcs that reference them — only if applied.
 					let isNestedType = declaration.kind == .enum || declaration.kind == .struct || declaration
 						.kind == .class
-					if suggested == .fileprivate,
-					   declaration.parent != nil,
-					   isNestedType,
-					   !declaration.name.isEmpty {
-						fileprivateNestedTypeNames.append((lineIndex: lineIndex, typeName: declaration.name))
+					_ = applyAccessControlRewrite(lineIndex: lineIndex, newLine: modifiedLine, action: action) {
+						if suggested == .fileprivate,
+						   declaration.parent != nil,
+						   isNestedType,
+						   !declaration.name.isEmpty {
+							fileprivateNestedTypeNames.append((lineIndex: lineIndex, typeName: declaration.name))
+						}
 					}
 				} else {
 					// No suggested accessibility means top-level scope
@@ -1341,36 +1365,26 @@ struct CodeModificationHelper {
 						declarationKind: declaration.kind,
 						in: lines[lineIndex]
 					)
-					lines[lineIndex] = modifiedLine
-					pendingLogEntries.append(.init(
-						startLine: location.line,
-						endLine: location.line,
-						action: action
-					))
+					_ = applyAccessControlRewrite(lineIndex: lineIndex, newLine: modifiedLine, action: action)
 				}
-				removedWarningIDs.append(warningID)
 
 			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-				lines[lineIndex] = replaceAccessKeyword("fileprivate", with: "private", in: lines[lineIndex])
-				removedWarningIDs.append(warningID)
-				pendingLogEntries.append(.init(
-					startLine: location.line,
-					endLine: location.line,
+				_ = applyAccessControlRewrite(
+					lineIndex: lineIndex,
+					newLine: replaceAccessKeyword("fileprivate", with: "private", in: lines[lineIndex]),
 					action: "replaced `fileprivate` with `private`"
-				))
+				)
 
 			} else if case .redundantAccessibility = scanResult.annotation {
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
-				lines[lineIndex] = removeAnyAccessKeyword(from: lines[lineIndex])
-				removedWarningIDs.append(warningID)
-				pendingLogEntries.append(.init(
-					startLine: location.line,
-					endLine: location.line,
+				_ = applyAccessControlRewrite(
+					lineIndex: lineIndex,
+					newLine: removeAnyAccessKeyword(from: lines[lineIndex]),
 					action: "removed access modifier"
-				))
+				)
 
 			} else if scanResult.annotation == ScanResult.Annotation.superfluousIgnoreCommand {
 				// Find and remove periphery:ignore comment
@@ -1587,7 +1601,8 @@ struct CodeModificationHelper {
 				deletedCount: deletedCount,
 				nonDeletableCount: nonDeletableCount,
 				failedIgnoreCommentsCount: failedIgnoreCommentsCount,
-				skippedReferencedCount: 0
+				skippedReferencedCount: 0,
+				ghostModifications: ghostModifications
 			)
 		)
 		return .success(BatchComputeResult(

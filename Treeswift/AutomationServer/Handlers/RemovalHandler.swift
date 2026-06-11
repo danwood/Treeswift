@@ -180,6 +180,15 @@ enum RemovalHandler {
 			let deletedCount = removal.deletionStats.deletedCount
 			var fileWasDeleted = false
 
+			// Surface ghost modifications: access-control "fixes" that changed no bytes. These
+			// are Treeswift bugs (bad source location) — reporting them prevents the silent
+			// infinite re-flag loop where a warning is "fixed" every pass but never changes.
+			for ghost in removal.deletionStats.ghostModifications {
+				let msg = "Ghost modification (no change applied — bad source location): \(ghost)"
+				errors.append(msg)
+				logLines.append(msg)
+			}
+
 			if removal.shouldDeleteFile,
 			   let proj = xcodeprojPath,
 			   XcodeProjectFileChecker.isSafeToDelete(filePath: fileNode.path, xcodeprojPath: proj) {

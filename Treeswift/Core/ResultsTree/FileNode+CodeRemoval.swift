@@ -19,6 +19,10 @@ extension FileNode {
 		let nonDeletableCount: Int
 		let failedIgnoreCommentsCount: Int
 		let skippedReferencedCount: Int
+		// Access-control "fixes" whose rewrite changed no bytes (ghosts). A non-empty list means
+		// Treeswift reported a fix it could not actually apply — a bug (bad source location), not a
+		// real removal. Surfaced so callers can flag it instead of silently re-flagging forever.
+		var ghostModifications: [String] = []
 	}
 
 	/**
@@ -144,7 +148,8 @@ extension FileNode {
 				deletedCount: batchResult.removalResult.deletionStats.deletedCount,
 				nonDeletableCount: nonDeletableCount,
 				failedIgnoreCommentsCount: batchResult.removalResult.deletionStats.failedIgnoreCommentsCount,
-				skippedReferencedCount: skippedReferencedCount
+				skippedReferencedCount: skippedReferencedCount,
+				ghostModifications: batchResult.removalResult.deletionStats.ghostModifications
 			)
 			return .success(RemovalResult(
 				filePath: batchResult.removalResult.filePath,
