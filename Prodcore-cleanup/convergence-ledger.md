@@ -71,8 +71,29 @@ Multi-pass scan→remove→rescan on Prodcore (in-place, then reverted):
 **Genuine dead code → 0 in one removal pass, with ZERO resurfacing ghosts.** `.unused` went
 41 → 0 and stayed 0; total 127 → 7 → 5. The 5 residual are all `assignOnlyProperty` (not removed by
 `forceRemoveAll`'s default filter — they need an explicit annotation filter and per-item review,
-not a false positive). Both passes built clean. **Both convergence conditions now demonstrated:
-false positives = 0, genuine dead code → 0 with no oscillation.** Prodcore reverted (probe only).
+not a false positive). Both passes built clean.
+
+### Committed cleanup + convergence to the true floor — 2026-06-10
+
+The cleanup was then **committed for real** (not reverted), driving the live warning count down:
+
+| step | Prodcore total | unused | redundant-acc | assignOnly | note |
+|------|----------------|--------|---------------|------------|------|
+| baseline | 127 | 41 | 81 | 5 | starting dead-code count |
+| committed removals (Prodcore `f7991ca5`) | — | — | — | — | 727 lines of dead code deleted, builds clean |
+| rescan | 7 | 0 | 2 | 5 | 2 second-order redundant-acc surfaced |
+| + actor ghost fix (Treeswift) + apply (Prodcore `942899a1`) | **5** | **0** | **0** | **5** | converged |
+
+Reaching the floor required fixing **F17** — `actor TourStatsCache` flagged
+`redundantInternalAccessibility` was a Treeswift *no-op ghost* (actors are classified `.class`, but
+the rewrite searched for the `class` keyword on an `actor` line and gave up → re-flagged forever).
+Fixed (`insertAccessKeyword` now handles `class`/`actor`) + a general no-op-detection guard. After
+the fix the actor was rewritten to `fileprivate actor`, built clean, and the warning did NOT
+re-appear on rescan.
+
+**TRUE FLOOR REACHED: 0 unused, 0 redundant-accessibility, 5 `assignOnlyProperty`** (the latter
+have no automated removal logic by design — see `docs/proposals/algorithmic-warning-fixes.md`).
+Both convergence conditions met: false positives = 0, genuine dead code → 0 with no oscillation.
 
 ## Open False Positives (must reach empty)
 

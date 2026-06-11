@@ -39,7 +39,7 @@ numbered section below.
 | F14 | P11 | Nested type **+ enum cases** removed when parent also unused | `AssignOnlyPropertyReferenceEliminator` (narrow + descendants) | ⏳ | TODO |
 | F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⏳ | TODO |
 | F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ⏳ | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
-| F17 | — | **OPEN:** `actor` accessibility flagged at unwritable position (Issue-12 residual) → infinite re-flag | Treeswift `CodeModificationHelper` ghost-detection guard (Periphery position bug still open) | — | — |
+| F17 | — | `actor` redundant-accessibility rewrite was a no-op ghost (actor classified as `.class`) | Treeswift `CodeModificationHelper.insertAccessKeyword` (class/actor keyword) + ghost-detection guard | n/a (Treeswift) | — |
 
 > The numbered sections below still carry their original "## N." headings (N == F-number). When you
 > add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
@@ -500,36 +500,37 @@ retained-property-only approach above avoids this.
 ---
 
 
-## 17. `redundantInternalAccessibility`: `actor`/`static let` Flagged at Unwritable Position (Issue-12 residual)
+## 17. `redundantInternalAccessibility` on an `actor`: rewrite was a no-op ghost (infinite re-flag)
 
-**Status: OPEN (Periphery side); Treeswift side defended.** P10 (F12) fixed the `static let` in
-`actor` *end-position* case, but this `actor TourStatsCache` case still produces a
-`redundantInternalAccessibility` warning whose `location.line` points at a line carrying no access
-modifier to rewrite — so Treeswift's access-control rewrite is a no-op.
+**Status: Fixed (Treeswift).** This is a **Treeswift removal bug**, not a Periphery analysis bug —
+Periphery flagged the actor correctly.
 
-**Symptom:** `actor TourStatsCache` (file-local) is flagged `redundantInternalAccessibility`
-(suggest `fileprivate`). Removal preview reported `deletable: 1`, but execute wrote **nothing** to
-disk (the line at `location.line` has no `internal` keyword and the actor keyword position doesn't
-match). On the next scan the warning re-appeared → infinite cleanup loop.
+**Symptom:** A file-local `actor` (e.g. `actor TourStatsCache`) is flagged
+`redundantInternalAccessibility` (suggest `fileprivate`). Removal preview reported `deletable: 1`,
+but execute wrote **nothing** to disk. On the next scan the warning re-appeared → infinite cleanup
+loop that never converges.
 
 **Example:** `Projects/Engagement/Views/Tools/MasterTour Connect/MasterTourImportConfirmationView.swift:10`
 ```swift
-actor TourStatsCache {
-    static let shared = TourStatsCache()
-    // …
-}
+actor TourStatsCache { … }   // flagged; should become `fileprivate actor TourStatsCache`
 ```
 
-**Treeswift-side fix (committed):** `computeBatchModifications` now verifies an access-control
-rewrite actually changed bytes; a no-op is recorded as `DeletionStats.ghostModifications` and
-surfaced by the removal API as an error ("Ghost modification — bad source location"). The ghost no
-longer counts as deletable, breaking the infinite loop. **This makes the bug loud and harmless, but
-does not fix the underlying Periphery mis-location** — that remains to root-cause (likely the
-`actor` declaration's flagged line/position, an extension of the P10 `VariableDeclSyntax` work to
-`actor`/type declarations).
+**Root cause:** Periphery (via the Swift index store) classifies an `actor` as
+`Declaration.Kind.class` — there is no dedicated actor kind. Treeswift's `insertAccessKeyword`
+mapped `.class` → the source keyword `"class"` and searched the line for it. The line reads
+`actor …`, so no match was found, and the function returned the line unchanged — a phantom "fix".
 
-**Verdict:** the no-op-detection guard is a general Treeswift safety net (good regardless). The
-Periphery position bug for `actor` accessibility flagging is still **open** — F12/P10 covered
-`static let` end-positions but not this actor-accessibility case.
+**Fix:** `insertAccessKeyword` now, for a `.class`-kind declaration, searches for `class` **or**
+`actor` (word-boundary match) and inserts the access modifier before whichever is present.
+
+**Defense-in-depth (also committed):** `computeBatchModifications` verifies an access-control
+rewrite actually changed bytes; any no-op is recorded as `DeletionStats.ghostModifications` and
+surfaced by the removal API as an error, so a future "fix that changes nothing" can never silently
+re-flag forever. This guard caught and diagnosed Issue 17 and protects against any similar position
+bug.
+
+**Verified:** `actor TourStatsCache` → `fileprivate actor TourStatsCache` written to disk, Prodcore
+builds clean, and the warning does NOT re-appear on rescan — Prodcore converges to its true floor
+(0 unused, 0 redundant-accessibility, 5 `assignOnlyProperty`).
 
 ---
