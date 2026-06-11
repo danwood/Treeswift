@@ -96,6 +96,16 @@ struct CodeModificationHelper {
 		return current
 	}
 
+	/**
+	 Builds the stable identifier for a warning from its file path and declaration USR.
+
+	 Matches the `path:usr` form used throughout removal so counts, UI hiding, and notifications
+	 all key off the same identity.
+	 */
+	private static func warningID(filePath: String, usr: String) -> String {
+		"\(filePath):\(usr)"
+	}
+
 	// MARK: - Access Control Helpers
 
 	/**
@@ -1440,7 +1450,25 @@ struct CodeModificationHelper {
 		var processedOperations: [(scanResult: ScanResult, declaration: Declaration, location: Location)] = []
 		var seenUSRIndices: [String: Int] = [:] // USR → index into processedOperations
 
-		for (scanResult, declaration, _) in operationsWithPreviews {
+		// The real flagged declarations (one per visible warning in this file), mapped to their
+		// original source line. Synthetic preview-deletion operations appended above are NOT warnings,
+		// so they are excluded. Used to attribute folded children back to surviving operations and to
+		// credit warnings whose lines were absorbed by an overlapping deletion.
+		var realWarningLines: [String: Int] = [:]
+		for op in operations {
+			realWarningLines[warningID(filePath: op.location.file.path.string, usr: op.declaration.usrs.first ?? "")]
+				= op.location.line
+		}
+		let realWarningIDs = Set(realWarningLines.keys)
+
+		// Maps a surviving processed-operation's USR to every original warning ID it subsumes.
+		// When `findHighestEmptyAncestor` promotes children to a shared parent, or the USR-dedup
+		// merges an access-level fix into a full deletion, multiple original warnings collapse onto
+		// one operation. Removing that one operation resolves all of them, so the deletion count must
+		// credit each folded warning — not just the single surviving operation.
+		var foldedWarningIDs: [String: [String]] = [:]
+
+		for (scanResult, declaration, originalLocation) in operationsWithPreviews {
 			// For full declaration deletions, check if parent should be deleted instead
 			let actualTarget: Declaration = if shouldCheckEmptyAncestor(scanResult.annotation, declaration.kind) {
 				findHighestEmptyAncestor(of: declaration, allDeletingUSRs: allDeletingUSRs, sourceGraph: sourceGraph)
@@ -1449,6 +1477,17 @@ struct CodeModificationHelper {
 			}
 
 			let usr = actualTarget.usrs.first ?? ""
+
+			// Fold this operation's original warning ID under the surviving target USR (skipping
+			// synthetic preview deletions, which are not warnings).
+			let originalWarningID = warningID(
+				filePath: originalLocation.file.path.string,
+				usr: declaration.usrs.first ?? ""
+			)
+			if realWarningIDs.contains(originalWarningID) {
+				foldedWarningIDs[usr, default: []].append(originalWarningID)
+			}
+
 			if let existingIndex = seenUSRIndices[usr] {
 				// Already have an operation for this USR — upgrade to full deletion if needed
 				let existingAnnotation = processedOperations[existingIndex].scanResult.annotation
@@ -1515,7 +1554,12 @@ struct CodeModificationHelper {
 		// adjustments don't affect operations above it
 		for (scanResult, declaration, location) in processedOperations {
 			let usr = declaration.usrs.first ?? ""
-			let warningID = "\(location.file.path.string):\(usr)"
+			let operationWarningID = warningID(filePath: location.file.path.string, usr: usr)
+
+			// Every original warning that collapsed onto this operation. Crediting all of them (rather
+			// than just `operationWarningID`) is what makes the deletion count match the number of
+			// warnings the user saw resolved when an ancestor deletion absorbed its children.
+			let warningIDsForOperation = foldedWarningIDs[usr] ?? [operationWarningID]
 
 			// Skip if this line was consumed by a prior deletion's expanded range
 			if deletedOriginalRanges.contains(where: { location.line >= $0.0 && location.line <= $0.1 }) {
@@ -1540,7 +1584,7 @@ struct CodeModificationHelper {
 					return false
 				}
 				lines[lineIndex] = newLine
-				removedWarningIDs.append(warningID)
+				removedWarningIDs.append(contentsOf: warningIDsForOperation)
 				pendingLogEntries.append(.init(startLine: location.line, endLine: location.line, action: action))
 				onApplied()
 				return true
@@ -1646,7 +1690,7 @@ struct CodeModificationHelper {
 				deletedOriginalRanges.append((commentLine, commentLine))
 				lines.remove(at: commentIndex)
 				originalLineNumbers.remove(at: commentIndex)
-				removedWarningIDs.append(warningID)
+				removedWarningIDs.append(contentsOf: warningIDsForOperation)
 				pendingLogEntries.append(.init(
 					startLine: commentLine,
 					endLine: commentLine,
@@ -1664,8 +1708,8 @@ struct CodeModificationHelper {
 				deletedOriginalRanges.append((location.line, location.line))
 				lines.remove(at: lineIndex)
 				originalLineNumbers.remove(at: lineIndex)
-				removedWarningIDs.append(warningID)
-				deletedWarningIDs.append(warningID)
+				removedWarningIDs.append(contentsOf: warningIDsForOperation)
+				deletedWarningIDs.append(operationWarningID)
 				pendingLogEntries.append(.init(
 					startLine: location.line,
 					endLine: location.line,
@@ -1689,8 +1733,8 @@ struct CodeModificationHelper {
 					   ) {
 						// Successfully handled inline case deletion
 						lines = modifiedLines
-						removedWarningIDs.append(warningID)
-						deletedWarningIDs.append(warningID)
+						removedWarningIDs.append(contentsOf: warningIDsForOperation)
+						deletedWarningIDs.append(operationWarningID)
 						pendingLogEntries.append(.init(
 							startLine: location.line,
 							endLine: location.line,
@@ -1742,8 +1786,8 @@ struct CodeModificationHelper {
 				let linesRemoved = endIndex - startIndex + 1
 				lines.removeSubrange(startIndex ... endIndex)
 				originalLineNumbers.removeSubrange(startIndex ... endIndex)
-				removedWarningIDs.append(warningID)
-				deletedWarningIDs.append(warningID)
+				removedWarningIDs.append(contentsOf: warningIDsForOperation)
+				deletedWarningIDs.append(operationWarningID)
 				pendingLogEntries.append(.init(startLine: finalStartLine, endLine: finalEndLine, action: "Deleted"))
 
 				// Record source graph adjustment to apply after writing
@@ -1846,6 +1890,18 @@ struct CodeModificationHelper {
 			// If keeping file only for comments, remove imports
 			if shouldRemoveImports {
 				finalContents = FileContentAnalyzer.removeImportStatements(from: currentContents)
+			}
+		}
+
+		// Credit any real warning whose declaration line was absorbed by another deletion's
+		// expanded range (so its own operation was skipped at the top of the loop) but never
+		// otherwise counted. Without this, two independently-flagged declarations where one
+		// physically contains the other would resolve both yet count only the outer one.
+		var creditedIDs = Set(removedWarningIDs)
+		for (id, line) in realWarningLines where !creditedIDs.contains(id) {
+			if deletedOriginalRanges.contains(where: { line >= $0.0 && line <= $0.1 }) {
+				removedWarningIDs.append(id)
+				creditedIDs.insert(id)
 			}
 		}
 
