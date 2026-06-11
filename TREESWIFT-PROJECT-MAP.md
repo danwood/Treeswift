@@ -12,14 +12,17 @@ then go to the doc that answers your question.
 | Design proposals for future Treeswift capabilities (e.g. algorithmically fixing `assignOnlyProperty` / `redundantProtocol`) | **D — proposals** | [`docs/proposals/`](docs/proposals/) |
 | Build commands, code conventions, agent rules | (project guidance) | [`CLAUDE.md`](CLAUDE.md) |
 | Live convergence metrics | (part of C) | `Prodcore-cleanup/convergence-ledger.md` |
+| The git-history convergence experiment (replay historical baselines to zero) — what ran, results, and **resume state** | (part of C) | `Prodcore-cleanup/experiment-log.md` (narrative) · `Prodcore-cleanup/experiment-state.json` (authoritative resume) |
 
 ## The boundary that keeps A and B separate
 
 A and B both touch `PeripherySource/periphery/`, so the split matters:
 
 - **A (analysis fixes)** = changes to *what Periphery decides is used/unused/redundant*. Symptoms,
-  root causes, the mutator fixes, regression fixtures, upstream-push status. Catalogued as **F1–F16**
-  in `PERIPHERY-ANALYSIS-FIXES.md`.
+  root causes, the mutator fixes, regression fixtures, upstream-push status. Catalogued as **F1–F20**
+  in `PERIPHERY-ANALYSIS-FIXES.md`. (Note: F17–F20 are Treeswift-side *removal/rewrite* fixes — they
+  live in `Treeswift/Core`, not the subtree — but are catalogued in A alongside the analysis fixes
+  because they are all "false positive a `forceRemoveAll` would hit, and how it was fixed".)
 - **B (integration mods)** = changes to *make Periphery importable and drivable as a library* —
   public APIs, library products, the progress delegate, end-position tracking, concurrency
   checkpoints — plus the subtree/upstream workflow. In `README_Treeswift.md`.
