@@ -1107,6 +1107,201 @@ struct CodeModificationHelper {
 		return lines
 	}
 
+	// MARK: - Public-to-Extension Cascade
+
+	/**
+	 Strips `public` from declarations inside `extension <TypeName>` blocks for every type
+	 whose own `public` was just removed.
+
+	 Swift requires that a member's declared access not exceed the effective access of its
+	 extension, which inherits the extended type's access. Once Treeswift downgrades a type
+	 from `public` to internal (a `redundantPublicAccessibility` fix), any `public` member in
+	 that type's extensions becomes illegal ("cannot declare a public initializer in an
+	 extension with internal requirements"). Periphery flags the type but not the extension
+	 member, so this keeps the rewrite self-consistent.
+
+	 Algorithm: scan for `extension <TypeName>` opening lines; within each block (matched by
+	 brace depth) remove a leading `public ` from the extension declaration itself and from
+	 every member declaration line. Conservative — only strips an explicit leading `public `.
+	 */
+	private static func cascadePublicStripFromExtensions(
+		lines: [String],
+		downgradedTypeNames: Set<String>,
+		pendingLogEntries: inout [ModificationLogger.PendingEntry]
+	) -> [String] {
+		var lines = lines
+
+		// Match `extension <TypeName>` where TypeName is one of the downgraded types. The
+		// extension may carry generic constraints / conformances after the name, so match a
+		// word boundary after the name rather than end-of-token.
+		let alternation = downgradedTypeNames
+			.map { NSRegularExpression.escapedPattern(for: $0) }
+			.joined(separator: "|")
+		guard !alternation.isEmpty,
+		      let extensionPattern = try? Regex("\\bextension\\s+(?:\(alternation))\\b")
+		else { return lines }
+
+		var idx = 0
+		while idx < lines.count {
+			guard lines[idx].contains(extensionPattern) else {
+				idx += 1
+				continue
+			}
+
+			// Strip a leading `public ` from the extension declaration line itself.
+			lines[idx] = stripLeadingPublic(from: lines[idx], at: idx, pendingLogEntries: &pendingLogEntries)
+
+			// Find the extension body's opening `{` and its matching `}` by brace depth.
+			var depth = 0
+			var seenBrace = false
+			var bodyEnd: Int?
+			var scan = idx
+			outer: while scan < lines.count {
+				for ch in lines[scan] {
+					if ch == "{" {
+						depth += 1
+						seenBrace = true
+					} else if ch == "}" {
+						depth -= 1
+						if seenBrace, depth == 0 {
+							bodyEnd = scan
+							break outer
+						}
+					}
+				}
+				scan += 1
+			}
+			guard let bodyEnd else { idx += 1; continue }
+
+			// Strip a leading `public ` from each member declaration line in the body.
+			if bodyEnd > idx {
+				for member in (idx + 1) ..< bodyEnd {
+					lines[member] = stripLeadingPublic(
+						from: lines[member],
+						at: member,
+						pendingLogEntries: &pendingLogEntries
+					)
+				}
+			}
+			idx = bodyEnd + 1
+		}
+		return lines
+	}
+
+	/**
+	 Removes a single leading `public ` modifier (after indentation) from a declaration line,
+	 logging the change. Returns the line unchanged if it has no leading `public `.
+	 */
+	private static func stripLeadingPublic(
+		from line: String,
+		at lineIndex: Int,
+		pendingLogEntries: inout [ModificationLogger.PendingEntry]
+	) -> String {
+		let leadingWhitespace = String(line.prefix { $0 == " " || $0 == "\t" })
+		let rest = line[line.index(line.startIndex, offsetBy: leadingWhitespace.count)...]
+		guard rest.hasPrefix("public ") else { return line }
+		let newLine = leadingWhitespace + rest.dropFirst("public ".count)
+		pendingLogEntries.append(.init(
+			startLine: lineIndex + 1,
+			endLine: lineIndex + 1,
+			action: "removed `public` (cascade from downgraded type's extension)"
+		))
+		return newLine
+	}
+
+	// MARK: - Fileprivate Function Cascade
+
+	/**
+	 Inserts `fileprivate` on any `func` — extension method or free function — whose signature
+	 references a type that was just narrowed to `fileprivate`, when the func carries no explicit
+	 access keyword.
+
+	 Swift requires a function whose parameter or return type is `fileprivate` to be at most
+	 `fileprivate` ("method must be declared fileprivate because its result uses a fileprivate
+	 type"). The same-scope sibling cascade only patches inits/funcs inside the type's own parent
+	 body; it does not reach `extension <Other> { func … -> [FileprivateType] }` or top-level free
+	 functions. This pass closes that gap file-wide.
+
+	 Conservative: only patches a `func` line that has no leading access keyword (so it can't lower
+	 an intentionally-public API), and only when the type name appears in the collected signature.
+	 */
+	private static func cascadeFileprivateToReferencingFunctions(
+		lines: [String],
+		fileprivateTypeNames: Set<String>,
+		pendingLogEntries: inout [ModificationLogger.PendingEntry]
+	) -> [String] {
+		var lines = lines
+
+		let alternation = fileprivateTypeNames
+			.map { NSRegularExpression.escapedPattern(for: $0) }
+			.joined(separator: "|")
+		guard !alternation.isEmpty,
+		      let typeRefPattern = try? Regex("\\b(?:\(alternation))\\b"),
+		      let funcKeywordPattern = try? Regex("\\bfunc\\b")
+		else { return lines }
+
+		var idx = 0
+		while idx < lines.count {
+			let line = lines[idx]
+			// Must be a `func` declaration line with no explicit leading access modifier.
+			guard line.contains(funcKeywordPattern) else { idx += 1; continue }
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+			let hasLeadingAccess = ["public ", "internal ", "fileprivate ", "private ", "open "]
+				.contains { trimmed.hasPrefix($0) }
+			if hasLeadingAccess { idx += 1; continue }
+
+			// Collect the full signature: from this line through the line that closes the
+			// parameter list, plus that line's remainder (which carries the `-> ReturnType`).
+			var sigEnd = idx
+			var parenDepth = line.count(where: { $0 == "(" }) - line.count(where: { $0 == ")" })
+			while parenDepth > 0, sigEnd + 1 < lines.count {
+				sigEnd += 1
+				parenDepth += lines[sigEnd].count(where: { $0 == "(" })
+				parenDepth -= lines[sigEnd].count(where: { $0 == ")" })
+			}
+			let signature = lines[idx ... sigEnd].joined(separator: "\n")
+
+			// Only cascade when the signature references a fileprivate type.
+			guard signature.contains(typeRefPattern) else { idx = sigEnd + 1; continue }
+
+			// Insert `fileprivate` before `func` (or before a leading `static`/`class` specifier).
+			let newLine = insertFileprivateBeforeFunc(in: line)
+			if newLine != line {
+				lines[idx] = newLine
+				pendingLogEntries.append(.init(
+					startLine: idx + 1,
+					endLine: idx + 1,
+					action: "inserted `fileprivate` (cascade: func references a fileprivate type)"
+				))
+			}
+			idx = sigEnd + 1
+		}
+		return lines
+	}
+
+	/**
+	 Inserts `fileprivate ` before the `func` keyword on a declaration line, preserving leading
+	 whitespace and any `static`/`class`/`mutating`/`nonmutating` specifier that precedes `func`.
+	 */
+	private static func insertFileprivateBeforeFunc(in line: String) -> String {
+		let leadingWhitespace = String(line.prefix { $0 == " " || $0 == "\t" })
+		var rest = Substring(line.dropFirst(leadingWhitespace.count))
+		// Keep specifiers like `static`/`class`/`final`/`mutating` ahead of the inserted keyword.
+		var prefixSpecifiers = ""
+		let movableSpecifiers = ["static ", "class ", "final ", "mutating ", "nonmutating ", "override "]
+		var changed = true
+		while changed {
+			changed = false
+			for spec in movableSpecifiers where rest.hasPrefix(spec) {
+				prefixSpecifiers += spec
+				rest = rest.dropFirst(spec.count)
+				changed = true
+			}
+		}
+		guard rest.hasPrefix("func ") else { return line }
+		return leadingWhitespace + prefixSpecifiers + "fileprivate " + rest
+	}
+
 	// MARK: - Batch Operations
 
 	/**
@@ -1292,6 +1487,23 @@ struct CodeModificationHelper {
 		// Each entry is (lineIndex: Int, typeName: String).
 		var fileprivateNestedTypeNames: [(lineIndex: Int, typeName: String)] = []
 
+		// Track type names whose `public` was removed (redundantPublicAccessibility) so we can
+		// cascade-strip `public` from members declared in `extension <TypeName>` blocks in the
+		// same file. Swift requires a member's declared access not exceed its extension's
+		// effective access (which inherits the type's), so once the type is internal a `public`
+		// member in its extension is invalid ("cannot declare a public initializer in an
+		// extension with internal requirements"). Periphery flags the type but not the
+		// extension member, so Treeswift must keep the rewrite self-consistent.
+		var publicDowngradedTypeNames: Set<String> = []
+
+		// Track ALL type names made `fileprivate` this batch (top-level or nested) so we can
+		// cascade `fileprivate` to any `func` in the file — including extension methods and free
+		// functions — whose signature references the type but carries no explicit access keyword.
+		// Swift requires a function whose parameter or return type is `fileprivate` to be at most
+		// `fileprivate` ("method must be declared fileprivate because its result uses a fileprivate
+		// type"). The same-scope sibling cascade above does not reach extension/free functions.
+		var fileprivateTypeNamesForFuncCascade: Set<String> = []
+
 		// Track ranges deleted so far (in original line coordinates) so that
 		// subsequent operations whose location.line falls inside an already-deleted
 		// range are skipped rather than applied to the wrong content.
@@ -1338,11 +1550,19 @@ struct CodeModificationHelper {
 			if case .redundantPublicAccessibility = scanResult.annotation {
 				let lineIndex = location.line - 1
 				guard lineIndex >= 0, lineIndex < lines.count else { continue }
+				let isType = declaration.kind == .struct || declaration.kind == .class
+					|| declaration.kind == .enum || declaration.kind == .protocol
 				_ = applyAccessControlRewrite(
 					lineIndex: lineIndex,
 					newLine: removeAccessKeyword("public", from: lines[lineIndex]),
 					action: "removed `public`"
-				)
+				) {
+					// Record downgraded type names so `public` members in their extensions are
+					// stripped to match (see publicDowngradedTypeNames declaration).
+					if isType, !declaration.name.isEmpty {
+						publicDowngradedTypeNames.insert(declaration.name)
+					}
+				}
 
 			} else if case let .redundantInternalAccessibility(suggestedAccessibility) = scanResult.annotation {
 				// Internal is the default, so keyword may or may not be present
@@ -1358,14 +1578,18 @@ struct CodeModificationHelper {
 					)
 					// Track nested types that become fileprivate so we can cascade
 					// the modifier to sibling inits/funcs that reference them — only if applied.
-					let isNestedType = declaration.kind == .enum || declaration.kind == .struct || declaration
-						.kind == .class
+					let isType = declaration.kind == .enum || declaration.kind == .struct
+						|| declaration.kind == .class
 					_ = applyAccessControlRewrite(lineIndex: lineIndex, newLine: modifiedLine, action: action) {
-						if suggested == .fileprivate,
-						   declaration.parent != nil,
-						   isNestedType,
-						   !declaration.name.isEmpty {
+						guard isType, !declaration.name.isEmpty else { return }
+						if suggested == .fileprivate, declaration.parent != nil {
 							fileprivateNestedTypeNames.append((lineIndex: lineIndex, typeName: declaration.name))
+						}
+						// Any type narrowed to fileprivate (or file-scope private) can break
+						// extension/free funcs whose signatures reference it — record for the
+						// file-wide func cascade.
+						if suggested == .fileprivate || suggested == .private {
+							fileprivateTypeNamesForFuncCascade.insert(declaration.name)
 						}
 					}
 				} else {
@@ -1377,7 +1601,13 @@ struct CodeModificationHelper {
 						declarationKind: declaration.kind,
 						in: lines[lineIndex]
 					)
-					_ = applyAccessControlRewrite(lineIndex: lineIndex, newLine: modifiedLine, action: action)
+					let isType = declaration.kind == .enum || declaration.kind == .struct
+						|| declaration.kind == .class
+					_ = applyAccessControlRewrite(lineIndex: lineIndex, newLine: modifiedLine, action: action) {
+						if isType, !declaration.name.isEmpty {
+							fileprivateTypeNamesForFuncCascade.insert(declaration.name)
+						}
+					}
 				}
 
 			} else if case .redundantFilePrivateAccessibility = scanResult.annotation {
@@ -1535,6 +1765,28 @@ struct CodeModificationHelper {
 			lines = Self.cascadeFileprivateToAffectedDeclarations(
 				lines: lines,
 				fileprivateNestedTypeNames: fileprivateNestedTypeNames,
+				pendingLogEntries: &pendingLogEntries
+			)
+		}
+
+		// A type whose `public` was just removed makes `public` members in its extensions
+		// invalid. Strip `public` from declarations inside `extension <TypeName>` blocks so the
+		// rewrite stays self-consistent (see publicDowngradedTypeNames declaration).
+		if !publicDowngradedTypeNames.isEmpty {
+			lines = Self.cascadePublicStripFromExtensions(
+				lines: lines,
+				downgradedTypeNames: publicDowngradedTypeNames,
+				pendingLogEntries: &pendingLogEntries
+			)
+		}
+
+		// A `func` (extension method or free function) whose signature references a type just
+		// narrowed to fileprivate must itself be at most fileprivate. The same-scope sibling
+		// cascade above does not reach extension/free functions, so do a file-wide pass.
+		if !fileprivateTypeNamesForFuncCascade.isEmpty {
+			lines = Self.cascadeFileprivateToReferencingFunctions(
+				lines: lines,
+				fileprivateTypeNames: fileprivateTypeNamesForFuncCascade,
 				pendingLogEntries: &pendingLogEntries
 			)
 		}
