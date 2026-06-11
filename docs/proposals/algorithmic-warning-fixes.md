@@ -38,10 +38,15 @@ The Periphery fixture `FixtureClass70` enumerates the shapes the algorithm must 
 | Complex (`get`/`set`) | `complexUnreadVar2` | NOT assignOnly | n/a — excluded |
 | Property-wrapped | `@Wrapped var wrappedProperty` | NOT assignOnly | n/a — excluded |
 | `// periphery:ignore` | `ignoredSimpleUnreadVar` | NOT reported | n/a |
+| **`weak` back-reference** (case W) | `weak var hostingView: HostView?` | **reported** assignOnly | ❌ **refuse** — `weak` is an intent marker (non-owning lifecycle hook); detectable, never auto-remove |
+| **`private(set)` / asymmetric access** (case P) | `private(set) var highlightCount: Int` | **reported** assignOnly | ❌ **refuse** — read-only API surface; detectable, never auto-remove |
 
-So Periphery already filters out the genuinely hard storage shapes (computed, observed, wrapped).
-What reaches Treeswift as `assignOnlyProperty` is always a **plain stored `var`** (or `static var`).
-That narrows the problem — but three sub-problems remain hard:
+So Periphery already filters out the genuinely hard *storage* shapes (computed, observed, wrapped),
+but it still reports `weak` and `private(set)` stored `var`s — two **intent-bearing** shapes the
+Prodcore evidence surfaced (cases W and P below). What reaches Treeswift as `assignOnlyProperty` is
+therefore a **plain stored `var`/`static var`**, *which may still carry `weak` or asymmetric
+access* — those two must be detected and excluded before anything is removed. With those excluded,
+three sub-problems remain hard:
 
 ### Sub-problem A — removing the write sites
 
@@ -92,15 +97,27 @@ future implementer doesn't "re-discover" the Combine cancellable case.
 
 | Case | Algorithmic? |
 |------|--------------|
-| Plain stored `var`/`static var`, assignments are pure `x = literal/simpleExpr` | ✅ Yes — delete decl + delete each pure-assignment statement |
+| Plain stored `var`/`static var`, **symmetric access**, **not `weak`/`unowned`**, assignments are pure `x = literal/simpleExpr` | ✅ Yes — delete decl + delete each pure-assignment statement |
+| Assignment rhs is a function call (`x = f(...)`), e.g. `playheadFrame = ticksToFrames(tick)` | ⚠️ Partial — rewrite to `_ = f(...)` or refuse; proving the call is side-effect-free is the hard part |
 | Assignment rhs has side effects | ⚠️ Partial — rewrite to `_ = rhs` or refuse; detecting side effects safely is hard |
 | Tuple-pattern / multiple-binding where only some bindings are assign-only | ⚠️ Involved — SwiftSyntax pattern surgery; doable but careful |
-| "Is this property *intended* to be write-only (e.g. debugging hook, KVO sink, API surface)?" | ❌ **Needs human/LLM judgment** — the algorithm can't know intent; Periphery's type-retain list is a crude proxy |
+| **`weak`/`unowned` stored var** (case W — `Coordinator.hostingView`) | ❌ **Refuse (detectable)** — non-owning lifecycle hook; "never read" is expected. Read `weak`/`unowned` off the decl and exclude |
+| **`private(set)` / setter-access < getter-access** (case P — `SharedWithYouService.highlightCount`) | ❌ **Refuse (detectable)** — read-only API surface; reads are external. Read the asymmetric access off the decl and exclude |
+| "Is this property otherwise *intended* to be write-only (debugging hook, KVO sink not caught by `weak`/`private(set)`)?" | ❌ **Needs human/LLM judgment** — residual after W/P are excluded; Periphery's type-retain list is a crude proxy |
 
 **Recommended first implementation**: handle ONLY the safe subset — a plain single-binding stored
-`var` whose every setter reference is a pure assignment statement (rhs is a literal or a
-side-effect-free expression by a conservative whitelist). Refuse (leave as today) for everything
-else, surfacing it for review. This makes `canRemoveCode` return true for that subset only.
+`var` that is (a) **not** `weak`/`unowned`, (b) of **symmetric accessibility** (no `private(set)` or
+other setter-narrower-than-getter), and (c) whose every setter reference is a pure assignment
+statement (rhs is a literal or a side-effect-free expression by a conservative whitelist; a bare
+function-call rhs does NOT qualify). Refuse (leave as today) for everything else, surfacing it for
+review. This makes `canRemoveCode` return true for that subset only. Always key edits off the
+**declaration USR / SwiftSyntax node**, never the property name (see the USR-disambiguation gotcha:
+`FinalStatistics.throughputPerSecond` collides by name with an unrelated computed var).
+
+From the Prodcore evidence, that safe subset is exactly: `AudioFileLoader.runtimeFormat` and the two
+`FinalStatistics` fields (3 of the 6 distinct cases). `TickClock.playheadFrame` is the
+function-call-rhs ⚠️ case; `Coordinator.hostingView` (W) and `SharedWithYouService.highlightCount`
+(P) are the two detectable ❌ refusals.
 
 ---
 
@@ -134,36 +151,93 @@ redundant protocol with its inherited protocol(s), then delete the protocol decl
 
 ---
 
-## Prodcore evidence — the current 5 `assignOnlyProperty` cases
-
-A clean Prodcore scan flags **5** `assignOnlyProperty` items (stable across scans; see the
-convergence ledger). A notable finding emerged while trying to enumerate them:
+## Prodcore evidence — the enumerated `assignOnlyProperty` cases (2026-06-11)
 
 > **`assignOnlyProperty` items are effectively invisible in Treeswift's current API/UI.** Because
 > `canRemoveCode` returns `false` for them, the removal preview reports them as `deletable: 0,
 > nonDeletable: 0` (filtered out before counting), and they carry no `usageBadge` in `files-tree`,
 > nor do they appear in the `orphans`/`shared`/`unattached` display categories. They show up ONLY in
-> the aggregate `summary` count (`assignOnlyProperty: 5`). So a user cannot currently even navigate
-> to them. **Surfacing them is a prerequisite for fixing them** — the future implementation must
-> first expose assignOnly items with their locations (a dedicated results category or a per-file
-> badge), independent of whether removal is automated.
+> the aggregate `summary` count. **Surfacing them is a prerequisite for fixing them** — the future
+> implementation must first expose assignOnly items with their locations (a dedicated results
+> category or a per-file badge), independent of whether removal is automated.
 
-Because the API does not expose their locations, the per-item classification below is left as the
-first task of any future assignOnly work: run the scan, surface the 5 items with file+line, then
-classify each against the Part-1 taxonomy (single stored `var` with pure-assignment writes =
-auto-fixable subset; multi-binding/destructured or side-effecting-rhs = involved; "intended
-write-only" = human/LLM judgment). The Periphery `FixtureClass70` / `FixtureClass123` cases above
-already cover every shape the 5 can take.
+**They were enumerated out-of-band** during the git-history convergence experiment by reading the
+declaration USRs straight out of Treeswift's scan-cache JSON
+(`ScanCache/scan-cache-<UUID>.json` → every object with `"annotationKind":"assignOnlyProperty"`
+carries a `declarationUSR`) and resolving each USR to source by grep. The four historical baselines
+(R5/R4/R-May/R3) and the converged R3 tree together yield a **small, stable, overlapping** set — the
+same handful of properties recur, because they are long-lived in the codebase, not baseline-specific.
+
+### The complete distinct set (union across baselines)
+
+| Property (type.member) | Declaration | Write site(s) | Shape | Verdict |
+|------------------------|-------------|---------------|-------|---------|
+| `AudioFileLoader.runtimeFormat` | `private var runtimeFormat: AVAudioFormat?` | `self.runtimeFormat = format` | single stored `var`, one **pure** assignment | ✅ **safe subset** — delete decl + the one assignment |
+| `ImportResult.FinalStatistics.averageProcessingTime` | `var averageProcessingTime: TimeInterval = 0` (struct field) | `statistics.averageProcessingTime = duration / Double(rows)` | stored `var`, **pure-arithmetic** assignment via an instance | ✅ **safe subset** — but see USR-disambiguation note below |
+| `ImportResult.FinalStatistics.throughputPerSecond` | `var throughputPerSecond: Double = 0` (struct field) | `statistics.throughputPerSecond = Double(rows) / duration` | same as above | ✅ **safe subset** — same USR-disambiguation note |
+| `TickClock.playheadFrame` | `private var playheadFrame: AVAudioFramePosition = 0` | `playheadFrame = ticksToFrames(ticks: tick)` | stored `var`, assignment **rhs is a function call** | ⚠️ **borderline** — `ticksToFrames` is a pure conversion here, but proving "no side effects" syntactically is the hard part; refuse OR rewrite to `_ = ticksToFrames(...)` |
+| `PathBarSegmentButton.Coordinator.hostingView` | **`weak var hostingView: PathBarSegmentHostView?`** | `coordinator.hostingView = host` | **`weak`** back-reference, written then never read | ❌ **intent — do NOT auto-remove** (see new case W) |
+| `SharedWithYouService.highlightCount` | **`private(set) var highlightCount: Int = 0`** | `self.highlightCount = count` | **`private(set)`** read-only-public property | ❌ **intent — do NOT auto-remove** (see new case P) |
+
+Per-baseline counts: R5 = 5 (rows 1–3 + hostingView + highlightCount), R4 ≈ R5 (days apart,
+codebase identical for these), R-May = 3 (rows 1–3 only), R3 pristine = 2, R3 converged = 4 (rows
+1–3 + `TickClock.playheadFrame`, which only surfaces after surrounding dead code is removed —
+a reminder that the assignOnly set is **second-order-sensitive**: it grows/shrinks as `.unused`
+removal changes what is reachable, so it must be re-enumerated after each pass, not once).
+
+### New cases this evidence adds to the taxonomy
+
+The `FixtureClass70`/`FixtureClass123` shapes (Part 1) cover the *storage* mechanics, but the real
+Prodcore set surfaced two **intent markers that are themselves syntactically detectable** and that
+the algorithm should treat as automatic "refuse + surface", not as a judgment call left to a human
+to notice later:
+
+- **Case W — `weak var` written-but-unread (`Coordinator.hostingView`).** A `weak` property is almost
+  never genuinely dead: it is a deliberately-non-owning back-reference (here a Coordinator holding a
+  weak handle to its hosting view to avoid a retain cycle). "Never read" is expected for a weak hook
+  whose only job is lifecycle/identity. **Detect `weak` on the declaration → never auto-remove**; if
+  removed, the assignment site (`coordinator.hostingView = host`) and the ownership intent both
+  vanish silently. This is a hard NO, cheaply detectable, and should be promoted to a first-class
+  exclusion (ideally in Periphery, like its existing `AnyCancellable` type-retain list — `weak`
+  assign-only properties should arguably not be reported at all).
+
+- **Case P — `private(set) var` written-but-unread (`SharedWithYouService.highlightCount`).** A
+  `private(set)` property is a **public/internal read-only API surface**: writable only inside the
+  type, readable from outside. Periphery sees no *in-module* reads and flags it, but the property
+  exists precisely so *external* code (or SwiftUI/KVO/tests) can read it. Removing it deletes
+  intended API. **Detect a `private(set)` (or any asymmetric setter access narrower than the getter)
+  → refuse + surface**, never auto-remove. (Compare the existing simple `var simpleUnreadVar` in
+  `FixtureClass70`, which has *symmetric* access and no API-surface intent — that one IS in the safe
+  subset.)
+
+Both W and P sharpen Part-1's "❌ needs human/LLM judgment" row into **concrete, detectable
+discriminators**: `weak` and `private(set)`/asymmetric-access are mechanical signals the algorithm
+can read off the declaration and use to refuse *without* needing to infer intent. The safe-subset
+rule should therefore be tightened to: *plain stored single-binding `var` with **symmetric**
+accessibility, **not** `weak`/`unowned`, whose every setter reference is a pure assignment.*
+
+### USR-disambiguation note (a real gotcha)
+
+`ImportResult.FinalStatistics.throughputPerSecond` (the assign-only **stored** field) coexists in the
+same file (`Shared/CoreData/Products/ProductImportModels.swift`) with an unrelated **computed**
+`var throughputPerSecond: Double { … }` on a *different* type. A name-based fix would corrupt the
+wrong declaration. The algorithm must key every edit off the **declaration USR / SwiftSyntax node
+identity**, never the property name — Periphery already gives the USR in the scan result, so this is
+straightforward but must not be skipped.
 
 ---
 
 ## Summary recommendation
 
 1. **`assignOnlyProperty`**: implement the *safe subset* algorithmically (single-binding stored
-   `var`, pure-assignment write sites). Flip `canRemoveCode` for that subset only; refuse + surface
-   the rest. Reuse Periphery's setter-reference graph to find write sites; use SwiftSyntax for the
-   declaration + statement edits. Multi-binding and side-effecting-rhs cases are involved but
-   eventually tractable; *intent* questions are not — leave those to review.
+   `var`, **symmetric access, not `weak`/`unowned`**, pure-assignment write sites). Flip
+   `canRemoveCode` for that subset only; refuse + surface the rest. Reuse Periphery's setter-reference
+   graph to find write sites; use SwiftSyntax for the declaration + statement edits, keyed off the
+   **USR** (never the name). **First, cheaply exclude the two detectable intent markers the Prodcore
+   evidence surfaced — `weak`/`unowned` (case W) and `private(set)`/asymmetric access (case P)** —
+   ideally upstream in Periphery so they are never reported (like its `AnyCancellable` type-retain
+   list). Multi-binding, function-call-rhs, and side-effecting-rhs cases are involved but eventually
+   tractable; residual *intent* questions are not — leave those to review.
 2. **`redundantProtocol`**: lower priority; mechanically tractable for the internal/simple case but
    high blast radius and entangled with API-design intent. Defer until `assignOnlyProperty` lands.
 3. Anything marked **❌ needs human/LLM judgment** above should remain non-auto-fixable and be
