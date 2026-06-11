@@ -6,7 +6,11 @@ Project-specific guidance for Claude Code when working with Treeswift.
 
 Treeswift is a macOS SwiftUI GUI for the Periphery static analysis tool. It uses a **local modified Periphery package** at `PeripherySource/periphery/` (managed as git subtree, tracking upstream with local modifications).
 
-**Read [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for:** architecture details, file organization, dependencies, technical environment, Swift version, and git subtree workflow.
+**Doc map — start at [TREESWIFT-PROJECT-MAP.md](TREESWIFT-PROJECT-MAP.md)**, which routes to the four documentation concerns:
+- **A — Periphery analysis fixes** (false-positive catalog F1–F16): [PERIPHERY-ANALYSIS-FIXES.md](PERIPHERY-ANALYSIS-FIXES.md)
+- **B — Periphery library-integration mods**: [PeripherySource/periphery/README_Treeswift.md](PeripherySource/periphery/README_Treeswift.md)
+- **C — Cleanup process** (measured loop + supervisor): [CLEANUP-PROCESS.md](CLEANUP-PROCESS.md)
+- **D — Treeswift implementation**: [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md)
 
 ## Build Command
 

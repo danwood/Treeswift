@@ -23,7 +23,7 @@ are bugs that must be FIXED in Periphery/Treeswift until none remain. The ledger
 ## How a Cycle Works (measured loop)
 
 1. Ensure Treeswift built clean AND the running binary is fresh (verify dylib mtime — see
-   [[stale-incremental-build]] / `.claude/prodcore.md`).
+   [[stale-incremental-build]] / `CLEANUP-PROCESS.md`).
 2. Clear the Treeswift scan cache, launch fresh, scan Prodcore. Record the summary counts.
 3. `forceRemoveAll` on the whole project (root). Build Prodcore. Record `build_errors` =
    number of distinct error lines, and list every broken file.

@@ -1,19 +1,48 @@
-# Known Periphery Issues and Quirks
+# Periphery Analysis Fixes
 
-> **Master index:** [`PERIPHERY_FIXES_INDEX.md`](PERIPHERY_FIXES_INDEX.md) cross-walks every Issue #
-> here to its P# (subtree change), mutator file, fixture, and status. Start there for the big picture.
+**Concern A — Periphery's _analysis_ false positives and how we fixed them.** This is the single
+home for every Periphery analysis bug found running Treeswift+Periphery on Prodcore: the symptom,
+root cause, the fix, where it lives, its regression fixture, and its upstream-push status.
 
-This file catalogs false positives and analysis bugs found while running Treeswift+Periphery on
-Prodcore. **Every entry here is a bug to FIX, not to document-and-skip.** The project goal is
-ZERO false positives: a full `forceRemoveAll` removal of Prodcore must build with zero errors.
+This is NOT for changes that merely make Periphery usable as a library (public APIs, progress
+delegate, end-position tracking, library products) — those are **Concern B**, in
+[`PeripherySource/periphery/README_Treeswift.md`](PeripherySource/periphery/README_Treeswift.md).
+For the project-wide doc map see [`TREESWIFT-PROJECT-MAP.md`](TREESWIFT-PROJECT-MAP.md).
 
-An entry is only "closed" when (a) the root cause is fixed in Periphery or Treeswift, and (b) a
-regression fixture in `Prodcore-cleanup/fixtures/` proves it stays fixed. Convergence is tracked
-in `Prodcore-cleanup/convergence-ledger.md` and audited by the `cleanup-supervisor` agent. A
-"Workaround:" line is a temporary stopgap only — it must be replaced by a "Fix applied:" line.
+**Every entry is a bug to FIX, not to document-and-skip.** The goal is ZERO false positives: a full
+`forceRemoveAll` removal of Prodcore must build with zero errors. An entry is "closed" only when the
+root cause is fixed AND a regression fixture proves it stays fixed. Convergence is tracked in
+[`CLEANUP-PROCESS.md`](CLEANUP-PROCESS.md) and its ledger.
 
-See `.claude/prodcore.md` for the measured loop and `.claude/agents/cleanup-supervisor.md` for
-the supervisor that prints the progress table.
+## Index
+
+Single numbering scheme: **F# = this catalog's fix number.** "P#" is the legacy
+`README_Treeswift.md` subtree-change tag, kept for cross-reference; "Up" = upstream push status
+(⬆️ in `danwood/periphery` master · ⏳ pending push). Detail for each F# is the correspondingly
+numbered section below.
+
+| F# | legacy P# | Title (short) | Mutator / file changed | Up | Fixture |
+|---:|-----------|---------------|------------------------|----|---------|
+| F1 | P1 | `@Observable` wrong source positions for synthesized accessors | `ObservableMacroRetainer` + `SourceGraphMutatorRunner` | ⏳ | — |
+| F2 | P2 | `let`-binding false positives in assignOnly detection | `DeclarationSyntaxVisitor`, `Declaration`, `SwiftIndexer`, `AssignOnlyPropertyReferenceEliminator` | ⏳ | — |
+| F3 | P4 | Protocol unused when used only via conformance | `ProtocolConformanceRetainer` (new) | ⏳ | — |
+| F4 | P5 | Protocol conformance extensions wrongly removed | `ScanResultBuilder` (+ Treeswift `removeEmptyContainers`, `findHighestEmptyAncestor`) | ⏳ | — |
+| F5 | P6 | Private members called only within same type removed (stored-property case) | `UsedDeclarationMarker` (accessor → property) | ⏳ | — |
+| F6 | — | `redundantPublicAccessibility` strips `public` from protocol-extension members | Treeswift-side guard | — | — |
+| F7 | P7 | Nested types used only in sibling method signatures removed | `UsedDeclarationMarker` (returnType/parameterType walk) | ⏳ | — |
+| F8 | P9 | Stored `let` with no external reads removed, orphaning `self.x = x` | `AssignOnlyPropertyReferenceEliminator` | ⏳ | — |
+| F9 | — | Stored properties made `private` despite cross-file reads | `isReferencedOutsideFile` (accessor-child walk) | ⏳ | — |
+| F10 | — | `redundantPublicAccessibility` strips `public` from protocol-requirement members | `markExplicitPublicDescendentDeclarations` | ⏳ | — |
+| F11 | P7+P8 | Nested type removed while parent kept (orphaned refs) | `UsedDeclarationMarker` (function→parent) + Treeswift `isNestedTypeWithKeptParent` | ⏳ | — |
+| F12 | P10 | Ghost `redundantInternalAccessibility`, no source range, `static let` in `actor` | `DeclarationSyntaxVisitor` (secondary result at node position) | ⏳ | — |
+| F13 | (master d763b7a) | Nested type as **same-parent** stored-property type removed | `UsedDeclarationMarker` (nested-by-name walk) | ⬆️ | TODO |
+| F14 | P11 | Nested type **+ enum cases** removed when parent also unused | `AssignOnlyPropertyReferenceEliminator` (narrow + descendants) | ⏳ | TODO |
+| F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⏳ | TODO |
+| F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ⏳ | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
+
+> The numbered sections below still carry their original "## N." headings (N == F-number). When you
+> add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
+> and add a regression fixture.
 
 ---
 
