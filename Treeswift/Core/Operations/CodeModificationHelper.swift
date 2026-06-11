@@ -340,11 +340,23 @@ struct CodeModificationHelper {
 			"import"
 		}
 
-		// Find the declaration keyword and insert access keyword before it.
-		// If the declaration keyword isn't found on this line (e.g. the location comes from
-		// a macro expansion and maps to a wrong source line), return the line unchanged to
-		// avoid corrupting unrelated code.
-		guard let range = line.range(of: declarationKeyword) else {
+		// Candidate source keywords for this kind. Periphery (via the Swift index store) classifies
+		// an `actor` as `.class` — its `Kind` has no dedicated actor case — so a `.class`-kind
+		// declaration may actually read `actor` in source. Search for whichever keyword is present.
+		let candidateKeywords: [String] = declarationKeyword == "class" ? ["class", "actor"] : [declarationKeyword]
+
+		// Find the declaration keyword and insert the access keyword before it. Match on a word
+		// boundary so e.g. `class` does not match inside `classify`. If none of the candidate
+		// keywords is found on this line (e.g. the location maps to a wrong source line from a macro
+		// expansion), return the line unchanged to avoid corrupting unrelated code.
+		var matched: (keyword: String, range: Range<String.Index>)?
+		for candidate in candidateKeywords {
+			if let r = line.range(of: "\\b\(candidate)\\b", options: .regularExpression) {
+				matched = (candidate, r)
+				break
+			}
+		}
+		guard let (foundKeyword, range) = matched else {
 			return line
 		}
 
@@ -353,7 +365,7 @@ struct CodeModificationHelper {
 		// keyword before them produces invalid Swift (`if private let x = ...`).
 		// Check that the token immediately before the keyword (ignoring leading whitespace) is not
 		// a control-flow keyword.
-		if declarationKeyword == "let" || declarationKeyword == "var" {
+		if foundKeyword == "let" || foundKeyword == "var" {
 			let prefix = String(line[line.startIndex ..< range.lowerBound])
 				.trimmingCharacters(in: .whitespaces)
 			let controlFlowKeywords = ["if", "guard", "while", "for", ","]
@@ -363,7 +375,7 @@ struct CodeModificationHelper {
 			}
 		}
 
-		return line.replacingCharacters(in: range, with: "\(keyword) \(declarationKeyword)")
+		return line.replacingCharacters(in: range, with: "\(keyword) \(foundKeyword)")
 	}
 
 	/**
