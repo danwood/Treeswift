@@ -40,9 +40,9 @@ numbered section below.
 | F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⏳ | TODO |
 | F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ⏳ | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
 | F17 | — | `actor` redundant-accessibility rewrite was a no-op ghost (actor classified as `.class`) | Treeswift `CodeModificationHelper.insertAccessKeyword` (class/actor keyword) + ghost-detection guard | n/a (Treeswift) | — |
-| F18 | — | Files pinned via `PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions` deleted from disk → "Build input files cannot be found" | Treeswift `XcodeProjectFileChecker.parseSynchronizedMembershipExceptions` (also treat synchronized-group exceptions as explicit refs → shell, don't delete) | n/a (Treeswift) | TODO Prodcore-cleanup fixture |
-| F19 | — | `redundantPublicAccessibility` downgrades a type but leaves `public init`/members in its **extensions** → "cannot declare a public initializer in an extension with internal requirements" | Treeswift `CodeModificationHelper.cascadePublicStripFromExtensions` (strip `public` from extension members of any type downgraded from public) | n/a (Treeswift) | TODO Prodcore-cleanup fixture |
-| F20 | — | Type narrowed to `fileprivate` but an **extension method / free function** returning it not cascaded → "method must be declared fileprivate because its result uses a fileprivate type" | Treeswift `CodeModificationHelper.cascadeFileprivateToReferencingFunctions` (file-wide cascade to funcs whose signature references a newly-fileprivate type) | n/a (Treeswift) | TODO Prodcore-cleanup fixture |
+| F18 | — | Files pinned via `PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions` deleted from disk → "Build input files cannot be found" | Treeswift `XcodeProjectFileChecker.parseSynchronizedMembershipExceptions` (also treat synchronized-group exceptions as explicit refs → shell, don't delete) | n/a (Treeswift) | ✅ E2E repro `fixtures/F18-synchronized-group-membership/` |
+| F19 | — | `redundantPublicAccessibility` downgrades a type but leaves `public init`/members in its **extensions** → "cannot declare a public initializer in an extension with internal requirements" | Treeswift `CodeModificationHelper.cascadePublicStripFromExtensions` (strip `public` from extension members of any type downgraded from public) | n/a (Treeswift) | ✅ E2E repro `fixtures/F19-public-extension-member/` |
+| F20 | — | Type narrowed to `fileprivate` but an **extension method / free function** returning it not cascaded → "method must be declared fileprivate because its result uses a fileprivate type" | Treeswift `CodeModificationHelper.cascadeFileprivateToReferencingFunctions` (file-wide cascade to funcs whose signature references a newly-fileprivate type) | n/a (Treeswift) | ✅ E2E repro `fixtures/F20-fileprivate-func-cascade/` |
 
 > The numbered sections below still carry their original "## N." headings (N == F-number). When you
 > add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
@@ -569,8 +569,12 @@ rather than deleted. Files discovered purely via folder scanning are still delet
 
 **Verified:** after the fix, a re-run `forceRemoveAll` on R-May leaves the four files as import-only
 shells (they remain on disk) and Prodcore builds clean. (Treeswift-side fix; not a Periphery
-analysis change. Owes a `Prodcore-cleanup/fixtures/` repro with a minimal synchronized-group
-project.)
+analysis change.)
+
+**Fixture:** `Prodcore-cleanup/fixtures/F18-synchronized-group-membership/` — a dead file plus the
+`project.pbxproj.snippet` showing the `membershipExceptions` shape. In-repo proof is the E2E
+build-clean on R-May; the unit-level assertion is `XcodeProjectFileChecker.isSafeToDelete(.../pinned
+.swift) == false`.
 
 ## F19 — `public` left on extension members after the type is downgraded
 
@@ -607,9 +611,11 @@ lines; it simply completes the downgrade Periphery asked for.
 
 **Verified:** after the fix a full `forceRemoveAll` on R-May builds clean (0 errors), and R-May
 converges. (Treeswift-side fix; the deeper cause is a Periphery analysis gap — it could instead flag
-the extension members too — which would belong upstream in `danwood/periphery`. Owes a
-`Prodcore-cleanup/fixtures/` repro: a public generic type with a constrained-extension `public
-init`.)
+the extension members too — which would belong upstream in `danwood/periphery`.)
+
+**Fixture:** `Prodcore-cleanup/fixtures/F19-public-extension-member/Fixture.swift` — a `public`
+generic type with a constrained-extension `public init` (carries `// swiftformat:disable all` so the
+deliberate shape isn't reformatted). In-repo proof is the E2E build-clean on R-May.
 
 ## F20 — `fileprivate` type not cascaded to an extension-method / free-function result
 
@@ -641,5 +647,8 @@ leading `static`/`class`/etc. specifiers). Conservative — it never lowers a fu
 carries an explicit access keyword, so intentional public API is untouched.
 
 **Verified:** after the fix, a full `forceRemoveAll` on R3 makes `computeSectionGroups` fileprivate
-and builds clean. (Treeswift-side fix. Owes a `Prodcore-cleanup/fixtures/` repro: a top-level
-fileprivate type returned by an extension method.)
+and builds clean. (Treeswift-side fix.)
+
+**Fixture:** `Prodcore-cleanup/fixtures/F20-fileprivate-func-cascade/Fixture.swift` — a top-level
+type returned by an `extension Array where …` method AND a free function (carries
+`// swiftformat:disable all`). In-repo proof is the E2E build-clean on R3.

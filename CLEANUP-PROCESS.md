@@ -118,15 +118,74 @@ upstream checkout.
 
 ## Prodcore Project File Structure
 
-Prodcore mixes folder references (blue) and explicit group references (yellow). Treeswift detects
-each: folder-reference files are deleted from disk when empty; explicit-reference files are left as
-import-only shells. No manual pbxproj editing needed.
+Prodcore mixes **three** Xcode file-tracking styles, and Treeswift must treat each correctly when a
+file goes fully dead (see `XcodeProjectFileChecker`):
+
+- **Folder references (blue) / synchronized root groups** — Xcode scans the folder; a fully-emptied
+  file is **deleted from disk**.
+- **Explicit group references (yellow, `PBXFileReference`)** — the file is named in `project.pbxproj`;
+  it is left as an **import-only shell**, never deleted (deleting it → "Build input files cannot be
+  found").
+- **Synchronized-folder membership exceptions** (`PBXFileSystemSynchronizedBuildFileExceptionSet` →
+  `membershipExceptions`) — a file inside a blue folder but pinned individually in the project (e.g.
+  to change target membership). Xcode requires it on disk, so it is treated **like a yellow
+  reference: shelled, not deleted.** Missing this was bug **F18** — see PERIPHERY-ANALYSIS-FIXES.md.
+
+No manual pbxproj editing needed; `isSafeToDelete` parses both `PBXFileReference` and
+`membershipExceptions`.
 
 ## Removal Strategies
 
 `forceRemoveAll` is the **measurement** worst case — surfaces every false positive. For committed
 cleanup, `skipReferenced` is the safe default; `cascade` also removes referencing unused code. The
 convergence target is that even `forceRemoveAll` produces zero build errors.
+
+## Operational discipline (hard-won — read before a long run)
+
+These cost real time on the 2026-06-11 git-history experiment; following them avoids the traps.
+
+1. **Cold-clear the ScanCache before any convergence VERDICT.** The per-config cache
+   `~/Library/Application Support/Treeswift/ScanCache/scan-cache-<CONFIG_UUID>.json` does NOT reliably
+   invalidate after an **in-place access-keyword rewrite**, so already-fixed redundant-accessibility
+   warnings re-serve as no-op "ghosts" against stale positions and a count looks stuck. Fix: `pkill -x
+   Treeswift; sleep 2`, then delete the cache **by exact filename** (a zsh glob `rm …/*.json` silently
+   fails when the running app just rewrote it), then relaunch and rescan. A flat redundant-acc count
+   with no-op ghosts is a **cache-staleness suspect first**, not a Periphery/removal bug. (Treeswift
+   cache-correctness bug, separate from any analysis fix.)
+2. **`git restore` the target repo to PRISTINE before EVERY scan — not just before every removal.**
+   Scanning a half-removed tree poisons everything: counts drift and a subsequent `forceRemoveAll`
+   on top of shells throws spurious structural errors ("Extraneous '}'", "Static methods may only be
+   declared on a type") that look like Treeswift bugs but are driver contamination.
+3. **Big/old baselines scan slowly (~20 min) and STARVE the HTTP server** — `curl` times out (rc=28)
+   though the app is alive at 40–55% CPU. Don't treat timeout as failure; poll `/scan/status` from a
+   silent background waiter until `isScanning:false`, then read `/results/summary`.
+4. **Converge `unused`-only FIRST, then the redundant-accessibility tail.** Removing
+   `{"strategy":"forceRemoveAll","annotationFilter":["unused"]}` builds clean on every baseline and
+   proves the core claim in isolation; the access-control tail then surfaces as a much smaller,
+   well-defined set. (This is how F19/F20 were isolated from the unused logic.)
+5. **Building OLD checkouts:** add `-disableAutomaticPackageResolution` (honor the baseline's pinned
+   `Package.resolved`, neutralizing `branch=main` drift) and, for pre-2026-06-01 commits, disable
+   code signing (`CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO`) — those
+   predate the root `Local.xcconfig` and fail provisioning, which is orthogonal to dead-code analysis
+   (a false positive is a COMPILE error, never a signing error). NEVER `git clean -fdx` (deletes the
+   gitignored `Local.xcconfig`).
+
+## Git-history replay (testing Treeswift against historical dirt)
+
+To stress Treeswift beyond the current (clean) HEAD, replay the commits **just before** each manual
+dead-code cleanup campaign — they are full of removable code. This is what found F18/F19/F20 (none
+were visible at clean HEAD). The full run + resume state lives in `Prodcore-cleanup/experiment-state.json`
++ `experiment-log.md`; the method:
+
+- **Find baselines:** on the target repo's first-parent main, a run of the cleanup author's commits
+  is one campaign; the first non-author commit below it is that campaign's dirty baseline. (Some
+  campaigns land via develop merges, not first-parent — check `git merge-base --is-ancestor`.)
+- **Per baseline:** `git switch -C ts-converge-<id>-<hash> <hash>` (throwaway branch; never touch the
+  home branch), capture the **pristine build error set** first (only *new* errors after removal are
+  false positives — historical breakage is subtracted), then run the measured loop committing each
+  pass, until `unused==0 AND redunAcc==0` on a cold-cache scan. Return to the home branch after.
+- A found false positive is FIXED at root (+ a fixture) before continuing — same rule as the normal
+  loop; the experiment is autonomous and self-paced.
 
 - Prodcore repo: `~/code/Prodcore/` · config ID `9E23EE49-A7B1-47BA-A5D6-DD150F7F15C7` · port `21663`
 - Automation API reference: [`docs/automation-api.md`](docs/automation-api.md)
