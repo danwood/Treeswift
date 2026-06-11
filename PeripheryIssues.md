@@ -1,5 +1,8 @@
 # Known Periphery Issues and Quirks
 
+> **Master index:** [`PERIPHERY_FIXES_INDEX.md`](PERIPHERY_FIXES_INDEX.md) cross-walks every Issue #
+> here to its P# (subtree change), mutator file, fixture, and status. Start there for the big picture.
+
 This file catalogs false positives and analysis bugs found while running Treeswift+Periphery on
 Prodcore. **Every entry here is a bug to FIX, not to document-and-skip.** The project goal is
 ZERO false positives: a full `forceRemoveAll` removal of Prodcore must build with zero errors.

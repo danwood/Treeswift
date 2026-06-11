@@ -1,5 +1,9 @@
 # Treeswift Modifications to Periphery
 
+> **Master index:** [`../../PERIPHERY_FIXES_INDEX.md`](../../PERIPHERY_FIXES_INDEX.md) cross-walks every
+> P# here to its Periphery Issue #, mutator file, fixture, and upstream status. Start there for the
+> big picture; this file holds the per-change detail and the subtree/upstream workflow.
+
 This is the **SINGLE SOURCE OF TRUTH** for all information about Treeswift's local modifications to the Periphery package. This document describes all changes, the diff minimization strategy, and the update workflow.
 
 ## Base Version
