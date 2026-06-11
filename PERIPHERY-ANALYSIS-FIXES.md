@@ -39,6 +39,7 @@ numbered section below.
 | F14 | P11 | Nested type **+ enum cases** removed when parent also unused | `AssignOnlyPropertyReferenceEliminator` (narrow + descendants) | ⏳ | TODO |
 | F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⏳ | TODO |
 | F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ⏳ | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
+| F17 | — | **OPEN:** `actor` accessibility flagged at unwritable position (Issue-12 residual) → infinite re-flag | Treeswift `CodeModificationHelper` ghost-detection guard (Periphery position bug still open) | — | — |
 
 > The numbered sections below still carry their original "## N." headings (N == F-number). When you
 > add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
@@ -498,3 +499,37 @@ retained-property-only approach above avoids this.
 
 ---
 
+
+## 17. `redundantInternalAccessibility`: `actor`/`static let` Flagged at Unwritable Position (Issue-12 residual)
+
+**Status: OPEN (Periphery side); Treeswift side defended.** P10 (F12) fixed the `static let` in
+`actor` *end-position* case, but this `actor TourStatsCache` case still produces a
+`redundantInternalAccessibility` warning whose `location.line` points at a line carrying no access
+modifier to rewrite — so Treeswift's access-control rewrite is a no-op.
+
+**Symptom:** `actor TourStatsCache` (file-local) is flagged `redundantInternalAccessibility`
+(suggest `fileprivate`). Removal preview reported `deletable: 1`, but execute wrote **nothing** to
+disk (the line at `location.line` has no `internal` keyword and the actor keyword position doesn't
+match). On the next scan the warning re-appeared → infinite cleanup loop.
+
+**Example:** `Projects/Engagement/Views/Tools/MasterTour Connect/MasterTourImportConfirmationView.swift:10`
+```swift
+actor TourStatsCache {
+    static let shared = TourStatsCache()
+    // …
+}
+```
+
+**Treeswift-side fix (committed):** `computeBatchModifications` now verifies an access-control
+rewrite actually changed bytes; a no-op is recorded as `DeletionStats.ghostModifications` and
+surfaced by the removal API as an error ("Ghost modification — bad source location"). The ghost no
+longer counts as deletable, breaking the infinite loop. **This makes the bug loud and harmless, but
+does not fix the underlying Periphery mis-location** — that remains to root-cause (likely the
+`actor` declaration's flagged line/position, an extension of the P10 `VariableDeclSyntax` work to
+`actor`/type declarations).
+
+**Verdict:** the no-op-detection guard is a general Treeswift safety net (good regardless). The
+Periphery position bug for `actor` accessibility flagging is still **open** — F12/P10 covered
+`static let` end-positions but not this actor-accessibility case.
+
+---
