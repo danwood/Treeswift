@@ -9,6 +9,7 @@ then go to the doc that answers your question.
 | What we changed in Periphery *just to consume it as a library*, and how to preserve that across subtree pulls | **B — Periphery integration mods** | [`PeripherySource/periphery/README_Treeswift.md`](PeripherySource/periphery/README_Treeswift.md) |
 | How to run a cleanup cycle against Prodcore and prove it's converging (the measured loop + supervisor) | **C — Cleanup process** | [`CLEANUP-PROCESS.md`](CLEANUP-PROCESS.md) |
 | How Treeswift itself is built — architecture, scan/removal, automation API | **D — Treeswift implementation** | [`IMPLEMENTATION_NOTES.md`](IMPLEMENTATION_NOTES.md) · [`docs/automation-api.md`](docs/automation-api.md) |
+| Design proposals for future Treeswift capabilities (e.g. algorithmically fixing `assignOnlyProperty` / `redundantProtocol`) | **D — proposals** | [`docs/proposals/`](docs/proposals/) |
 | Build commands, code conventions, agent rules | (project guidance) | [`CLAUDE.md`](CLAUDE.md) |
 | Live convergence metrics | (part of C) | `Prodcore-cleanup/convergence-ledger.md` |
 

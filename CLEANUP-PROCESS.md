@@ -36,6 +36,22 @@ prints a progress table. Invoke it at session start (baseline table), after ever
 `build_errors` went DOWN, no regression), and whenever unsure if it's real progress vs. whack-a-mole.
 It reads/updates the ledger and emits a CONVERGING / FLAT / REGRESSED verdict. Let the table say it.
 
+## Scan discipline — never overlap scans
+
+The automation server already rejects a concurrent scan with HTTP `409 "scan already running"`
+(`ScanHandler` checks `state.isScanning`), so two scans never truly run at once. The failure mode is
+the *driver's*: firing `POST /scan` from inside a background wait-loop, or reading
+`/results/summary` between back-to-back scans, yields stale or wrong counts that look like "the
+numbers went up."
+
+**Rule: one scan, one inline wait, read once.**
+- Issue exactly one `POST /scan`, then poll `/status` until `idle` (or `/scan/wait`), THEN read
+  `/results/summary` — all in a single foreground sequence.
+- NEVER issue `POST /scan` from inside a `until …; do sleep; done` background task, and never run
+  two such waiters concurrently.
+- Clear `ScanCache/*.json` only once, immediately before the single scan — not between reads.
+- If `POST /scan` returns 409, a scan is already in flight; wait for it instead of issuing another.
+
 ## The Measured Loop (each cycle)
 
 1. **Build Treeswift AND verify the running binary is fresh.** BUILD SUCCEEDED can lie — a stale
