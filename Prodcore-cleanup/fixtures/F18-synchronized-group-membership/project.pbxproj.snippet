@@ -1,0 +1,36 @@
+// F18 — the project.pbxproj shape that triggers the bug.
+//
+// A `PBXFileSystemSynchronizedRootGroup` (blue folder, auto-scanned) plus a
+// `PBXFileSystemSynchronizedBuildFileExceptionSet` that pins individual files via
+// `membershipExceptions`. The pinned files (here `Products/ProductType.swift`) are named explicitly,
+// so Xcode requires them on disk. `XcodeProjectFileChecker.parseSynchronizedMembershipExceptions`
+// must collect these filenames into the not-safe-to-delete set.
+//
+// Note the two accepted entry styles in a membershipExceptions list — bare and double-quoted:
+//   Products/ProductType.swift,
+//   "Media/Release+Extensions.swift",
+// The parser strips a trailing comma and surrounding quotes, then takes the last path component.
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		ED76DEE92F8CD26400C096EF /* Exceptions for "CoreData" folder in "Prodcore" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Products/ProductType.swift,
+				Documents/DocumentOperations.swift,
+				Common/IconReference.swift,
+				"Media/Release+Extensions.swift",
+			);
+			target = ED00000000000000000000FF /* Prodcore */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		ED76DEE82F8CD26400C096EF /* CoreData */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				ED76DEE92F8CD26400C096EF /* Exceptions for "CoreData" folder in "Prodcore" target */,
+			);
+			path = CoreData;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */

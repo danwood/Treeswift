@@ -10,9 +10,16 @@ import Foundation
 ///   entry in project.pbxproj. Deleting the file without updating the project breaks
 ///   the build with "Build input files cannot be found".
 ///
-/// This checker reads project.pbxproj and returns false for any file that appears
-/// as an explicit PBXFileReference, and true for files that don't appear (i.e. are
-/// discovered via folder reference).
+/// Modern Xcode projects can also use **synchronized folder groups**
+/// (`PBXFileSystemSynchronizedRootGroup`): the folder is scanned like a blue folder,
+/// but individual files may be pinned via a `PBXFileSystemSynchronizedBuildFileExceptionSet`'s
+/// `membershipExceptions` list (e.g. to change target membership). Those files are named
+/// explicitly in project.pbxproj, so deleting them from disk breaks the build with
+/// "Build input files cannot be found" — exactly like a yellow-group reference.
+///
+/// This checker reads project.pbxproj and returns false for any file that appears either
+/// as an explicit PBXFileReference OR in a synchronized-group `membershipExceptions` list,
+/// and true for files that don't appear (i.e. are discovered purely via folder reference).
 enum XcodeProjectFileChecker {
 	/// Cache: xcodeproj path → set of filenames explicitly referenced.
 	private static var cache: [String: Set<String>] = [:]
@@ -28,8 +35,9 @@ enum XcodeProjectFileChecker {
 		return !explicitFiles.contains(filename)
 	}
 
-	/// Returns the set of filenames explicitly listed as PBXFileReference entries
-	/// in the given xcodeproj's project.pbxproj. Results are cached per xcodeproj path.
+	/// Returns the set of filenames that project.pbxproj names explicitly — both classic
+	/// PBXFileReference entries and synchronized-group `membershipExceptions` — and which
+	/// therefore must NOT be deleted from disk. Results are cached per xcodeproj path.
 	private static func explicitFileReferences(in xcodeprojPath: String) -> Set<String> {
 		if let cached = cache[xcodeprojPath] {
 			return cached
@@ -39,6 +47,7 @@ enum XcodeProjectFileChecker {
 			return []
 		}
 		let result = parseExplicitFileReferences(from: contents)
+			.union(parseSynchronizedMembershipExceptions(from: contents))
 		cache[xcodeprojPath] = result
 		return result
 	}
@@ -74,6 +83,59 @@ enum XcodeProjectFileChecker {
 						filenames.insert(filename)
 					}
 				}
+			}
+		}
+
+		return filenames
+	}
+
+	/// Parses filenames from every `PBXFileSystemSynchronizedBuildFileExceptionSet`'s
+	/// `membershipExceptions` list. In a synchronized (blue) folder group these files are
+	/// pinned individually in project.pbxproj (usually to alter target membership), so —
+	/// like yellow-group references — Xcode requires them to exist on disk.
+	///
+	/// The exception lists look like:
+	/// ```
+	///     membershipExceptions = (
+	///         Products/ProductType.swift,
+	///         "Media/Release+Extensions.swift",
+	///     );
+	/// ```
+	/// Entries may be bare or double-quoted and are paths relative to the folder; only the
+	/// last path component is needed for the filename comparison in `isSafeToDelete`.
+	private static func parseSynchronizedMembershipExceptions(from pbxproj: String) -> Set<String> {
+		var filenames = Set<String>()
+		var inExceptionList = false
+
+		for line in pbxproj.split(separator: "\n", omittingEmptySubsequences: false) {
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+			if !inExceptionList {
+				if trimmed.hasPrefix("membershipExceptions = (") {
+					inExceptionList = true
+				}
+				continue
+			}
+
+			// End of this exception list.
+			if trimmed.hasPrefix(")") {
+				inExceptionList = false
+				continue
+			}
+
+			// Strip a trailing comma, then surrounding quotes, leaving a relative path.
+			var entry = trimmed
+			if entry.hasSuffix(",") {
+				entry.removeLast()
+			}
+			if entry.hasPrefix("\""), entry.hasSuffix("\""), entry.count >= 2 {
+				entry = String(entry.dropFirst().dropLast())
+			}
+			guard !entry.isEmpty else { continue }
+
+			let filename = URL(fileURLWithPath: entry).lastPathComponent
+			if filename.hasSuffix(".swift") {
+				filenames.insert(filename)
 			}
 		}
 
