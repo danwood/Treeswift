@@ -1,6 +1,16 @@
 # Known Periphery Issues and Quirks
 
-This file documents observed problems with Periphery scan results that cause false positives, incorrect positions, or other unexpected behaviors. These may be candidates for upstream fixes.
+This file catalogs false positives and analysis bugs found while running Treeswift+Periphery on
+Prodcore. **Every entry here is a bug to FIX, not to document-and-skip.** The project goal is
+ZERO false positives: a full `forceRemoveAll` removal of Prodcore must build with zero errors.
+
+An entry is only "closed" when (a) the root cause is fixed in Periphery or Treeswift, and (b) a
+regression fixture in `Prodcore-cleanup/fixtures/` proves it stays fixed. Convergence is tracked
+in `Prodcore-cleanup/convergence-ledger.md` and audited by the `cleanup-supervisor` agent. A
+"Workaround:" line is a temporary stopgap only — it must be replaced by a "Fix applied:" line.
+
+See `.claude/prodcore.md` for the measured loop and `.claude/agents/cleanup-supervisor.md` for
+the supervisor that prints the progress table.
 
 ---
 
@@ -328,6 +338,131 @@ actor TourStatsCache {
 **Impact (before fix):** Persistent ghost warning — shown as 1 non-deletable after Treeswift mitigation, or as 1 phantom deletable that never writes to disk.
 
 **See:** `README_Treeswift.md` §17 / P10 for upstream contribution details.
+
+---
+
+## 13. `unused`: Nested Type Used as a Same-Parent Stored-Property Type Removed
+
+**Status: Fixed** — `UsedDeclarationMarker` Issue-13 walk (README_Treeswift.md §13, upstream master d763b7a).
+
+**Symptom:** A nested type used only as the declared type of a stored property within the same
+parent type is flagged unused and removed, leaving the property's type annotation unresolvable.
+
+**Example:**
+```swift
+struct PhraseRange {
+    private let status: PhraseStatus      // type annotation
+    enum PhraseStatus { case unknown }    // ← removed; `status` now references a missing type
+}
+```
+File: `Units/Programs/Models/TuneTargetDisplayModels.swift`
+
+**Root cause:** The Swift index store does not always emit a reference occurrence when a nested
+type is used as the type annotation of a same-scope stored property. No reference → falsely unused.
+
+**Fix:** `UsedDeclarationMarker.markUsed(_:)` collects a parent's nested concrete types by name and
+marks any whose name matches a sibling property's `declaredType` (sanitized) as used.
+
+---
+
+## 14. `unused`: Nested Type AND Its Enum Cases Removed When Both Parent and Type Are Unused
+
+**Status: Fixed** — `AssignOnlyPropertyReferenceEliminator` marks the nested type and all its
+descendants (enum cases, members) used when it is a sibling property's declared type, even when
+the parent type is itself unused.
+
+**Symptom:** Same shape as Issue 13, but the Issue-13 walk only fires when the **parent** type is
+marked used. When the parent (`PhraseRange`) is itself unused, the nested `PhraseStatus` enum was
+still flagged. Worse: the enum *case* (`case unknown`) was flagged `unused` independently — after
+Treeswift removed the case, empty-container cleanup swept away the now-empty `enum PhraseStatus`,
+re-orphaning `private let status: PhraseStatus`.
+
+**Example:** `enum PhraseStatus { case unknown }` inside an unused `struct PhraseRange`, used as
+`private let status: PhraseStatus`. File: `Units/Programs/Models/TuneTargetDisplayModels.swift`.
+
+**Root cause:** Two gaps. (1) Issue-13's protection is conditional on the parent being used.
+(2) Marking only the nested *type* used leaves its enum *cases* flagged, and empty-container
+post-processing then removes the whole enum.
+
+**Fix:** In `AssignOnlyPropertyReferenceEliminator.mutate()`, for every concrete type whose name
+matches a sibling property's `declaredType` (same-parent), call `graph.markUsed` on the type AND
+on every `descendentDeclarations` entry (cases, members). `markUsed` (not `markRetained`) is
+required: nested decls are "retained" via a retained reference rather than via
+`retainedDeclarations`, and `ScanResultBuilder`'s final filter only checks `retainedDeclarations`.
+
+**Still open (generalization):** A **top-level** type used as a property type *in a different
+type* (e.g. `fileprivate struct PriceValue` used as `let price: PriceValue` inside another
+struct) is NOT covered — its parent is the module, not the property's enclosing type. See ledger
+"Open False Positives". Needs a graph-wide "type referenced as any surviving property's type"
+retainer or a Treeswift removal-time guard.
+
+---
+
+## 15. `unused`: Sole Class Initializer Removed, Leaving Stored Properties Un-initializable
+
+**Status: Fixed** — `AssignOnlyPropertyReferenceEliminator.isRequiredClassInit` retains it.
+
+**Symptom:** The only explicit `init` of a `class` (which, unlike a struct, gets no synthesized
+memberwise init) is flagged `unused` and removed. Stored properties with no default value become
+un-initializable → build error.
+
+**Example:**
+```swift
+fileprivate class WebPage: NSObject {
+    private var urlRequest: URLRequest        // no default value
+    init(url: URL) { self.urlRequest = URLRequest(url: url); super.init() }  // ← removed
+}
+```
+File: `Components/WebView.swift`. (Post-fix: the init is downgraded to `private` rather than
+removed — safe, since it is only used in-type.)
+
+**Root cause:** The init has no external callers, so Periphery flags it unused. But for a class
+with non-default stored properties it is structurally required.
+
+**Fix:** `isRequiredClassInit(_:)` retains a `functionConstructor` that is the sole non-implicit
+init of a `class` parent and assigns at least one stored property (detected via setter / direct
+references from a `functionConstructor`).
+
+---
+
+## 16. `unused`: Custom Type Used Only as a Retained `Codable` Property's Type Removed
+
+**Status: Fixed** — `CodablePropertyRetainer` now retains the declared type (+ descendants) of each
+retained Codable/Encodable property.
+
+**Symptom:** A custom type used only as the declared type of a `Codable`/`Encodable` property is
+flagged `unused` and removed, while the property itself is retained (by `CodablePropertyRetainer`),
+leaving the property's type annotation unresolvable → build error.
+
+**Example:**
+```swift
+fileprivate struct PriceLookupResponse: Decodable {
+    struct ProductInfo: Decodable {
+        let price: PriceValue          // ← property retained (Codable)
+    }
+}
+fileprivate struct PriceValue: Decodable {  // ← removed; `price` now references a missing type
+    let decimal: Decimal
+    init(from decoder: Decoder) throws { ... }
+}
+```
+File: `Main/Gear/PriceLookup/ClaudePriceLookupService.swift`
+
+**Root cause:** `CodablePropertyRetainer` retains a Codable type's stored properties (so synthesized
+coding keeps working) but did NOT retain the *types* those properties are declared as. When such a
+type is a separate custom type with no other references, it falls into `unusedDeclarations` and is
+removed even though a retained property depends on it.
+
+**Fix:** `CodablePropertyRetainer.retainDeclaredType(of:)` resolves each retained property's
+sanitized `declaredType` to concrete type declarations (indexed graph-wide by simple name) and
+`markRetained`s them plus their descendants. Restricting to the declared types of *retained*
+properties keeps genuinely-dead type+property pairs removable (preserving convergence).
+
+**Note on a rejected broader fix:** An earlier attempt generalized Issue 14 into a graph-wide "mark
+used any type used as any property's declaredType" sweep. The mass `markUsed` perturbed
+`ignoreUnusedDescendents`, surfacing many previously-ignored declarations as removable and causing
+a ~90-error, 29-file over-removal regression (recorded in the convergence ledger). The targeted
+retained-property-only approach above avoids this.
 
 ---
 
