@@ -24,6 +24,9 @@
 // Unit-level: `XcodeProjectFileChecker.isSafeToDelete(filePath: ".../ProductType.swift",
 //   xcodeprojPath: <proj with the snippet>)` must return `false`.
 
+// swiftformat:disable all
+// (Deliberate dead-code repro — do not reformat.)
+
 import Foundation
 
 struct OnlyDeadThingHere {

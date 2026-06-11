@@ -31,9 +31,38 @@ Two homes for a fixture:
 | 14 | Nested type + its enum cases, parent unused | same as 13 but `P` itself unused | `E` and `E.x` not removed (no orphaned `let s: E`) | E2E repro — TODO add |
 | 15 | Sole required class init | `class C { let x: T; init(x:){…} }`, init uncalled | `init` retained (or downgraded), `x` initializable | Periphery `RetentionTest` — TODO add |
 | 16 | Custom type as retained Codable property's type | `struct R: Codable { let v: V }; struct V: Codable {…}`, both otherwise unused, `retainCodableProperties:true` | `V` retained (referenced) when `R`'s props retained | ✅ Periphery test written: `RetentionTest.testRetainsCodablePropertyCustomType` + fixture `testRetainsCodablePropertyCustomType.swift` (FixtureStruct200/201). Runs only on upstream checkout; verified in-repo via E2E (build_errors 0). |
+| 18 | Synchronized-folder `membershipExceptions` file deleted | file in a `PBXFileSystemSynchronizedRootGroup` pinned via `membershipExceptions`, entirely dead | file SHELLED (kept on disk as import-only), not deleted → no "Build input files cannot be found" | ✅ repro: `F18-synchronized-group-membership/` (`Fixture.swift` + `project.pbxproj.snippet`). **Treeswift-only** bug; verified E2E on R-May. Unit form: `XcodeProjectFileChecker.isSafeToDelete(.../pinned.swift) == false`. |
+| 19 | `public` left on extension member after type downgrade | `public struct W<T>` + `extension W where T==Int { public init() }`, W used in-module | type → `internal` AND extension `public init` → `init` (cascade) → compiles | ✅ repro: `F19-public-extension-member/Fixture.swift`. **Treeswift-only**; verified E2E on R-May. Fix: `CodeModificationHelper.cascadePublicStripFromExtensions`. |
+| 20 | `fileprivate` not cascaded to extension-method/free-func result | top-level type → `fileprivate`, returned by `extension Other { func … -> [Type] }` and a free func | the func(s) → `fileprivate` (cascade) → compiles (no "method must be declared fileprivate…") | ✅ repro: `F20-fileprivate-func-cascade/Fixture.swift`. **Treeswift-only**; verified E2E on R3. Fix: `CodeModificationHelper.cascadeFileprivateToReferencingFunctions`. |
+
+## F18/F19/F20 are Treeswift removal-logic bugs (not Periphery analysis)
+
+Unlike fixtures 13–16 (Periphery analysis gaps, whose canonical home is a `RetentionTest` unit
+test), **F18/F19/F20 are bugs in Treeswift's own code-modification logic** — they live in
+`Treeswift/Core/Utilities/XcodeProjectFileChecker.swift` and
+`Treeswift/Core/Operations/CodeModificationHelper.swift`. So:
+
+- Their repro is an **E2E Prodcore probe** (the operative in-repo proof): on the baseline that
+  surfaced them, `forceRemoveAll` → build → `build_errors == 0`. Already achieved (R-May for F18/F19,
+  R3 for F20).
+- The `Fixture.swift` files here are the **minimal source shapes** + the exact expected outcome, so
+  the bug can be re-triggered deliberately. They are not wired to a runner because **Treeswift has no
+  XCTest target yet** (the fixed functions are `private static`). If/when a Treeswift test target is
+  added, the unit-level assertions noted in each fixture header are the tests to write
+  (`XcodeProjectFileChecker.isSafeToDelete` for F18; a small `computeBatchModifications` round-trip
+  for F19/F20).
+- They are **not** upstream-Periphery contributions. The *deeper* cause of F19/F20 (Periphery emits a
+  redundant-accessibility warning on a type without coupling it to the access of its
+  extension-members / referencing-funcs) could be addressed upstream in `danwood/periphery`, which
+  would then need its own `RetentionTest`/`AccessibilityTest`; that is a separate, optional follow-up.
 
 ## Building these out
 
 Priority order: 16 (just fixed, most fragile — a custom-type Codable property), then 14 (the
 removal-cascade case that caused the empty-enum re-orphan), then 13 and 15. Each upstream fixture
 also discharges the "owed Periphery test" noted in `README_Treeswift.md` P11–P13.
+
+For F18/F19/F20: the highest-value next step is a **Treeswift XCTest target** so the cascade helpers
+and `XcodeProjectFileChecker` get true unit coverage (they are pure, fast, deterministic functions —
+ideal for unit tests). Until then the `Fixture.swift` shapes + the E2E baseline results are the
+regression record.

@@ -1,0 +1,112 @@
+{
+  "experiment": "git-history-convergence",
+  "prodcoreRepo": "/Users/dwood/code/Prodcore",
+  "treeswiftRepo": "/Users/dwood/code/SWIFTUI/Treeswift",
+  "configId": "9E23EE49-A7B1-47BA-A5D6-DD150F7F15C7",
+  "automationPort": 21663,
+  "buildFlags": ["-disableAutomaticPackageResolution", "CODE_SIGNING_ALLOWED=NO", "CODE_SIGN_IDENTITY=", "CODE_SIGNING_REQUIRED=NO"],
+  "buildFlagsNote": "Pre-2026-06-01 baselines (R4/R-May/R3) fail codesign: the current Local.xcconfig provisioning profile does not match bundle id 'app.prodcore.Prodcore' at those commits. Signing is orthogonal to dead-code analysis (a false positive is a COMPILE error, not a signing error), so all Prodcore builds disable code signing. R5 (post-06-01) compiled+signed fine; disabling signing changes nothing there.",
+  "homeBranchProdcore": "DanCleanupJune10",
+  "homeBranchTreeswift": "june10bigtest",
+  "targetBuildDir": "/Users/dwood/Library/Developer/Xcode/DerivedData/Treeswift-dinllqxkmqwisdexefwnooymbqcx/Build/Products/Debug",
+  "maxPassesPerBaseline": 8,
+  "MAX_FIX_ATTEMPTS": 3,
+  "currentBaselineId": null,
+  "experimentComplete": true,
+  "fixesMade": [
+    {"f": "F18", "baseline": "R-May", "file": "Treeswift/Core/Utilities/XcodeProjectFileChecker.swift", "summary": "forceRemoveAll deleted 4 files pinned via PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions (ProductType/DocumentOperations/IconReference/RegionHelpers) → 'Build input files cannot be found'. Fixed: parseSynchronizedMembershipExceptions unions sync-group exceptions into the not-safe-to-delete set so they are shelled, not deleted. Treeswift rebuilt, dylib verified fresh.", "fixture": "TODO (Prodcore-cleanup/fixtures minimal sync-group project)", "catalogued": "PERIPHERY-ANALYSIS-FIXES.md F18", "memory": "f18-synchronized-group-membership-exceptions"},
+    {"f": "F19", "baseline": "R-May", "file": "Treeswift/Core/Operations/CodeModificationHelper.swift", "summary": "After F18, forceRemoveAll left exactly 4 'cannot declare a public initializer in an extension with internal requirements' (ProductionInspector/ProductionToolbar/FastPickerView/GridPickerView): a public generic type was downgraded to internal but its constrained-extension public init was not. Fixed: computeBatchModifications records publicDowngradedTypeNames; cascadePublicStripFromExtensions strips leading public from those types' extension members. Unused-only removal was already clean (257 deleted, 0 errors), proving the core claim independent of this access-control cascade.", "fixture": "TODO (public generic type + constrained-extension public init)", "catalogued": "PERIPHERY-ANALYSIS-FIXES.md F19", "memory": "f19-public-extension-cascade"},
+    {"f": "F20", "baseline": "R3", "file": "Treeswift/Core/Operations/CodeModificationHelper.swift", "summary": "R3 full removal (after unused pass) left 1 error: 'method must be declared fileprivate because its result uses a fileprivate type' (SequenceView:724). Top-level struct SectionGroup was narrowed to fileprivate but func computeSectionGroups() -> [SectionGroup] in 'extension Array where ...' was not cascaded (existing cascade only covers same-parent-scope nested types). Fixed: record all fileprivate-narrowed type names; cascadeFileprivateToReferencingFunctions does a file-wide pass inserting fileprivate on any no-access-keyword func whose signature references a fileprivate type. Unused-only removal on R3 was already clean (849 deleted, 0 errors). F17/F19/F20 are one access-control-cascade family.", "fixture": "TODO (top-level fileprivate type returned by an extension method)", "catalogued": "PERIPHERY-ANALYSIS-FIXES.md F20", "memory": "f20-fileprivate-func-cascade"}
+  ],
+  "findings": [
+    {"baseline": "R5", "kind": "treeswift-cache-bug", "summary": "ScanCache re-serves already-fixed redundant-accessibility warnings as no-op ghosts after in-place access-keyword rewrites; fixed only by hard-deleting scan-cache-<UUID>.json (app killed) before a cold rescan. Not a false positive (build clean), not a Periphery bug. Memory: scancache-stale-accesscontrol-ghosts.", "actionable": "Invalidate a file's cached warnings when an in-place access rewrite touches it."}
+  ],
+  "baselines": [
+    {
+      "id": "R5",
+      "commit": "a1711d27",
+      "date": "2026-06-04",
+      "status": "converged",
+      "throwawayBranch": "ts-converge-R5-a1711d27",
+      "pristineBuildOK": true,
+      "pristineErrorSet": [],
+      "currentPass": 3,
+      "fixAttempts": 0,
+      "lastSummary": {"total":5,"unused":0,"redunAcc":0,"assignOnly":5,"redunProto":0},
+      "passes": [
+        {"pass":1,"unused":271,"redunAcc":464,"removed":721,"newErrors":0,"brokenFiles":0,"commit":"137fd70d","ghosts":5,"note":"builds clean, 0 FPs"},
+        {"pass":2,"unused":1,"redunAcc":99,"removed":100,"newErrors":0,"brokenFiles":0,"commit":"1f12d964","ghosts":0,"note":"converging"},
+        {"pass":3,"unused":0,"redunAcc":5,"removed":5,"newErrors":0,"brokenFiles":0,"commit":"24a02d22","ghosts":0,"note":"redunAcc 5 residual was stale ScanCache; cold rescan = 0"}
+      ],
+      "convergedAtPass": 3,
+      "blockedReason": null,
+      "result": "CONVERGED: unused 271->0, redunAcc 464->0, 776 decls removed, build clean every pass, 0 false positives. Floor 5 assignOnly."
+    },
+    {
+      "id": "R4",
+      "commit": "20fb9b87",
+      "date": "2026-05-31",
+      "status": "converged",
+      "throwawayBranch": "ts-converge-R4-20fb9b87",
+      "pristineBuildOK": true,
+      "pristineErrorSet": [],
+      "currentPass": 3,
+      "fixAttempts": 0,
+      "lastSummary": {"total":5,"unused":0,"redunAcc":0,"assignOnly":5,"redunProto":0},
+      "passes": [
+        {"pass":1,"unused":272,"redunAcc":465,"removed":723,"newErrors":0,"commit":"(r4p1)","note":"clean, needed CODE_SIGNING_ALLOWED=NO"},
+        {"pass":2,"unused":1,"redunAcc":99,"removed":100,"newErrors":0,"commit":"c7bd9247"},
+        {"pass":3,"unused":0,"redunAcc":5,"removed":5,"newErrors":0,"commit":"4a422c93","note":"cold rescan after = redunAcc 0"}
+      ],
+      "convergedAtPass": 3,
+      "blockedReason": null,
+      "result": "CONVERGED: unused 272->0, redunAcc 465->0, ~828 decls removed, build clean every pass, 0 false positives. Floor 5 assignOnly. Cold-cache discipline avoided the phantom-ghost detour."
+    },
+    {
+      "id": "R-May",
+      "commit": "96e372e4",
+      "date": "2026-04-19",
+      "status": "converged",
+      "throwawayBranch": "ts-converge-RMay-96e372e4",
+      "pristineBuildOK": true,
+      "pristineErrorSet": [],
+      "currentPass": 3,
+      "fixAttempts": 2,
+      "lastSummary": {"total":3,"unused":0,"redunAcc":0,"assignOnly":3,"redunProto":0},
+      "passes": [
+        {"pass":1,"unused":260,"redunAcc":1330,"removed":1586,"newErrors":0,"commit":"13b225cc","note":"needed F18+F19; clean run after fixes"},
+        {"pass":2,"unused":8,"redunAcc":192,"removed":200,"newErrors":0,"commit":"ed9292e0"},
+        {"pass":3,"unused":1,"redunAcc":23,"removed":24,"newErrors":0,"commit":"0d34fbfe","note":"cold verdict after = unused 0, redunAcc 0"}
+      ],
+      "convergedAtPass": 3,
+      "blockedReason": null,
+      "result": "CONVERGED after fixing F18 (sync-folder membershipExceptions deletion) + F19 (extension-public cascade): unused 260->0, redunAcc 1330->0, ~1810 decls removed, build clean every pass, 0 false positives. Floor 3 assignOnly. Dirtiest baseline."
+    },
+    {
+      "id": "R3",
+      "commit": "23ad2547",
+      "date": "2026-04-13",
+      "status": "converged",
+      "throwawayBranch": "ts-converge-R3-23ad2547",
+      "pristineBuildOK": true,
+      "pristineErrorSet": [],
+      "currentPass": 4,
+      "fixAttempts": 1,
+      "lastSummary": {"total":4,"unused":0,"redunAcc":0,"assignOnly":4,"redunProto":0},
+      "passes": [
+        {"pass":1,"unused":862,"redunAcc":1939,"removed":849,"newErrors":0,"commit":"ad3db3b6","note":"unused-only (full had 4 access-control errors); core claim clean"},
+        {"pass":2,"unused":8,"redunAcc":2008,"removed":2017,"newErrors":0,"commit":"8f659673","note":"redundant-acc; needed F20"},
+        {"pass":3,"unused":9,"redunAcc":1059,"removed":1068,"newErrors":0,"commit":"00df378b"},
+        {"pass":4,"unused":0,"redunAcc":30,"removed":30,"newErrors":0,"commit":"7742d491","note":"cold verdict after = unused 0, redunAcc 0"}
+      ],
+      "convergedAtPass": 4,
+      "blockedReason": null,
+      "result": "CONVERGED after fixing F20 (and F18/F19 carried from R-May): unused 862->0, redunAcc 1939->0, ~3964 decls removed across 4 passes, build clean every pass, 0 false positives. Floor 4 assignOnly. Biggest/oldest baseline."
+    }
+  ],
+  "optionalSkipped": [
+    { "id": "R2", "commit": "c6a12858", "reason": "build-config commit, not a real cleanup" },
+    { "id": "R1", "commit": "5e383a08", "reason": "non-working periphery-script attempt, no dead code" }
+  ],
+  "updatedAt": "2026-06-11T06:25:24Z"
+}
