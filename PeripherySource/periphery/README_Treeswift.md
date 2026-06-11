@@ -507,6 +507,71 @@ Updated `result()` method signature to accept optional `endPosition` parameter (
 
 ---
 
+### 18. AssignOnlyPropertyReferenceEliminator: retain nested type + cases used as a same-parent property type ⟶ [Pending Upstream P11]
+
+**Purpose**: Prevent a nested type (and its enum cases / members) from being removed when it is
+used as the declared type of a stored property in the same parent type, even when the parent
+type is itself unused.
+
+**Root cause**: The Issue-13 walk in `UsedDeclarationMarker` protects a nested type only when its
+parent type is marked used. When the parent is itself unused, the nested type — and crucially its
+enum *cases* — fall through to `unusedDeclarations`. Removing the case empties the enum, and
+empty-container post-processing then removes the enum, orphaning the property's type annotation.
+
+**Fix**: In `AssignOnlyPropertyReferenceEliminator.mutate()`, iterate concrete types whose name
+matches a sibling property's sanitized `declaredType` and `graph.markUsed` the type plus every
+`descendentDeclarations` entry. `markUsed` (not `markRetained`) is required because nested
+declarations are retained via a retained reference, and `ScanResultBuilder`'s final filter checks
+only `retainedDeclarations`.
+
+**Change**: `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift` — added the
+Issue-14 loop in `mutate()`. Marked `// 🌲 Issue 14:`.
+
+**Status**: Pending upstream — see [P11](#p11-retain-nested-type--cases-used-as-a-same-parent-property-type). NOTE: does not yet cover a *top-level* type used as a property type in a *different* type (tracked in the convergence ledger).
+
+---
+
+### 19. AssignOnlyPropertyReferenceEliminator: retain sole required class initializer ⟶ [Pending Upstream P12]
+
+**Purpose**: Prevent the only explicit initializer of a `class` from being removed when the class
+has stored properties with no default values (classes get no synthesized memberwise init).
+
+**Root cause**: An init with no external callers is flagged `unused`, but for a class with
+non-default stored properties it is structurally required; removing it makes the type
+un-initializable.
+
+**Fix**: `isRequiredClassInit(_:)` retains a `functionConstructor` that is the sole non-implicit
+init of a `class` parent and assigns at least one stored property (detected via setter or direct
+references from a `functionConstructor`).
+
+**Change**: `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift` — added the
+Issue-15 loop and `isRequiredClassInit(_:)` helper. Marked `// 🌲 Issue 15:`.
+
+**Status**: Pending upstream — see [P12](#p12-retain-sole-required-class-initializer).
+
+---
+
+### 20. CodablePropertyRetainer: retain the declared type of a retained Codable/Encodable property ⟶ [Pending Upstream P13]
+
+**Purpose**: Prevent a custom type used only as the declared type of a retained Codable/Encodable
+property from being removed, which leaves the property's annotation unresolvable.
+
+**Root cause**: `CodablePropertyRetainer` retains a Codable type's stored properties so synthesized
+coding keeps working, but did not retain the *types* those properties are declared as. A separate
+custom type with no other references then falls into `unusedDeclarations` and is removed.
+
+**Fix**: Added `retainDeclaredType(of:)`, called for each retained Codable/Encodable property. It
+resolves the property's sanitized `declaredType` to concrete type declarations (indexed graph-wide
+by simple name) and `markRetained`s them plus their descendants.
+
+**Change**: `Sources/SourceGraph/Mutators/CodablePropertyRetainer.swift` — added the type index in
+`mutate()`, the `retainDeclaredType(of:concreteTypesByName:)` calls, and the private helper.
+Marked `// 🌲`.
+
+**Status**: Pending upstream — see [P13](#p13-retain-the-declared-type-of-a-retained-codableencodable-property).
+
+---
+
 ---
 
 ## Pending Upstream Contributions
@@ -639,6 +704,78 @@ When contributing one of these upstream:
 **Why needed**: `let` stored properties can only be written in an init body. Removing such a property declaration while leaving the init body intact causes a build error (`self.x = x` references a nonexistent member). The existing `!property.isLetBinding` guard prevents `let` properties from entering the `assignOnlyProperty` path (correctly, since they have no getter for synthesized reads), but left them unprotected in the `unused` path.
 
 **Why general-purpose**: Any codebase with a `let` stored property that is written in an explicit `init` body but never read externally (e.g., stored for future use, documentation, or Codable conformance) will encounter this false positive. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P11. Retain nested type + cases used as a same-parent property type
+
+**File**: `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift`
+
+**Change**: In `mutate()`, iterate concrete types whose name matches a sibling property's
+sanitized `declaredType` (same parent) and `graph.markUsed` the type plus every
+`descendentDeclarations` entry (enum cases, members).
+
+**Why needed**: The Issue-13 walk protects such a nested type only when the parent is marked used.
+When the parent is itself unused, the nested type — and its enum cases — fall through to
+`unusedDeclarations`. Removing a case empties the enum, empty-container cleanup removes the enum,
+and the property's type annotation is orphaned. Marking descendants (not just the type) used
+prevents the cascade. `markUsed` is required over `markRetained` because nested decls are retained
+via a retained reference, which `ScanResultBuilder`'s final filter (checks `retainedDeclarations`
+only) does not see.
+
+**Why general-purpose**: Any codebase with a nested type used as a same-scope stored-property type
+inside an otherwise-unused parent hits this. Not Treeswift-specific.
+
+**Known gap**: Does not cover a *top-level* type used as a property type in a *different* type
+(its parent is the module). That generalization is still open — tracked in the convergence ledger.
+
+**Upstream branch**: `master`
+
+---
+
+### P12. Retain sole required class initializer
+
+**File**: `Sources/SourceGraph/Mutators/AssignOnlyPropertyReferenceEliminator.swift`
+
+**Change**: Added `isRequiredClassInit(_:)` and a loop in `mutate()` that `graph.markRetained`s a
+`functionConstructor` which is the sole non-implicit init of a `class` parent and assigns at least
+one stored property (detected via setter or direct references from a `functionConstructor`).
+
+**Why needed**: Classes get no synthesized memberwise initializer. An init with no external
+callers is flagged `unused`, but removing the only init of a class with non-default stored
+properties makes the type un-initializable → build error.
+
+**Why general-purpose**: Any codebase with a class whose sole initializer has no external callers
+(e.g. constructed only via a factory that is itself unused, or a fileprivate helper class) hits
+this. Not Treeswift-specific.
+
+**Upstream branch**: `master`
+
+---
+
+### P13. Retain the declared type of a retained Codable/Encodable property
+
+**File**: `Sources/SourceGraph/Mutators/CodablePropertyRetainer.swift`
+
+**Change**: For each Codable/Encodable property the retainer marks retained, also resolve its
+sanitized `declaredType` to concrete type declarations (graph-wide name index) and `markRetained`
+them + descendants (`retainDeclaredType(of:)`).
+
+**Why needed**: The retainer keeps Codable properties so synthesized coding works, but a custom
+type used only as such a property's type is otherwise unused → removed → the retained property's
+annotation no longer resolves → build error.
+
+**Why general-purpose**: Any codebase with a `Codable` type whose property uses a dedicated custom
+type (custom decoders, value wrappers, nested DTOs) hits this. Not Treeswift-specific.
+
+**Note**: Restricting to declared types of *retained* properties is deliberate — a graph-wide
+"any property type" sweep over-retains and perturbs `ignoreUnusedDescendents`, causing large
+over-removal regressions (observed and reverted; see the project convergence ledger).
+
+**Test gap**: Upstream `testRetainsCodableProperties` / `FixtureStruct14` only exercises a built-in
+(`Int`) property type. A new fixture with a custom-struct property type is owed upstream.
 
 **Upstream branch**: `master`
 

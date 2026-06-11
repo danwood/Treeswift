@@ -1018,6 +1018,30 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    // 🌲 Regression test: a custom type used only as a retained Codable property's type must itself
+    // be retained (PeripheryIssues.md #16 / README_Treeswift.md P13).
+    func testRetainsCodablePropertyCustomType() {
+        // Without Codable retention, the custom type is unreferenced.
+        analyze(
+            retainPublic: true,
+            retainCodableProperties: false
+        ) {
+            assertReferenced(.struct("FixtureStruct200"))
+            assertNotReferenced(.struct("FixtureStruct201"))
+        }
+
+        // With Codable retention, the property is retained — and so is its declared type.
+        analyze(
+            retainPublic: true,
+            retainCodableProperties: true
+        ) {
+            assertReferenced(.struct("FixtureStruct200")) {
+                self.assertReferenced(.varInstance("value"))
+            }
+            assertReferenced(.struct("FixtureStruct201"))
+        }
+    }
+
     func testRetainsFilesOption() {
         analyze(retainFiles: [testFixturePath.string]) {
             assertReferenced(.class("FixtureClass100"))

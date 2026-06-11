@@ -66,9 +66,109 @@ final class AssignOnlyPropertyReferenceEliminator: SourceGraphMutator {
                 graph.markRetained(property)
             }
         }
+
+        // 🌲 Issue 15: Retain a class initializer that is the sole non-implicit constructor
+        // of its parent class and assigns at least one stored property. Classes (unlike structs)
+        // do not receive a compiler-synthesized memberwise initializer. Removing the only explicit
+        // init of a class that has non-default stored properties leaves those properties
+        // un-initializable, breaking compilation.
+        for constructor in graph.declarations(ofKind: .functionConstructor) {
+            guard isRequiredClassInit(constructor) else { continue }
+            graph.markRetained(constructor)
+        }
+
+        // 🌲 Issue 14: Mark as used any nested type that is referenced as the declared type of
+        // a sibling stored property in the same parent type. Even when both the parent type and
+        // the nested type are unused, removing only the nested type leaves the sibling property's
+        // type annotation unresolvable, breaking compilation. We mark the nested type AND all of
+        // its descendants (enum cases, members) used — marking only the type is insufficient
+        // because an unused enum case is reported independently, and after its removal empty-
+        // container cleanup deletes the now-empty enum, re-orphaning the annotation. markUsed
+        // (not markRetained) is required because nested decls are retained via a retained
+        // reference, which ScanResultBuilder's final filter (checks retainedDeclarations only)
+        // does not see.
+        //
+        // NOTE: kept deliberately NARROW (same-parent nesting only). A broader "any type used as
+        // any property's declaredType" sweep over-marks types as used, which perturbs
+        // ignoreUnusedDescendents and causes large over-removal regressions. The cross-type case
+        // (e.g. a Codable property whose type is a separate top-level struct) is handled precisely
+        // by CodablePropertyRetainer retaining the property's declared type — not here.
+        for decl in graph.declarations(ofKinds: Declaration.Kind.concreteTypeKinds) {
+            guard let parent = decl.parent,
+                  Declaration.Kind.concreteTypeKinds.contains(parent.kind)
+            else { continue }
+            let typeName = decl.name
+            let usedAsSiblingPropertyType = parent.declarations.contains { sibling in
+                guard sibling.kind.isVariableKind, let declared = sibling.declaredType else { return false }
+                let baseName = PropertyTypeSanitizer.sanitize(declared)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+                return baseName == typeName
+            }
+            if usedAsSiblingPropertyType {
+                graph.markUsed(decl)
+                for descendant in decl.descendentDeclarations {
+                    graph.markUsed(descendant)
+                }
+            }
+        }
     }
 
     // MARK: - Private
+
+    /**
+     Returns true when a class initializer is the sole non-implicit constructor of its parent
+     class AND the class has at least one stored `var` or `let` property that is assigned in
+     any constructor of that class.
+
+     Classes do not receive a compiler-synthesized memberwise initializer (unlike structs).
+     If the only explicit init is removed, stored properties that require initialization (i.e.
+     assigned in init bodies) become un-initializable, breaking compilation.
+
+     Detection: parent must be a class, the constructor must be the only non-implicit init
+     in the parent, and at least one stored-variable child of the parent must have its setter
+     (or itself, for let bindings) referenced from a functionConstructor of the parent.
+     */
+    private func isRequiredClassInit(_ constructor: Declaration) -> Bool {
+        guard constructor.kind == .functionConstructor,
+              !constructor.isImplicit,
+              let parent = constructor.parent,
+              parent.kind == .class
+        else { return false }
+
+        // Must be the sole non-implicit init of the class
+        let explicitInits = parent.declarations.filter {
+            $0.kind == .functionConstructor && !$0.isImplicit
+        }
+        guard explicitInits.count == 1 else { return false }
+
+        // At least one stored property must be assigned in some constructor of this class.
+        // For `var` properties: check if the setter is referenced from any constructor.
+        // For `let` properties: check direct refs to property/getter from any constructor.
+        // Using `?.kind == .functionConstructor` (not identity) because init body assignments
+        // in the graph may reference through accessor children rather than directly.
+        for property in parent.declarations where property.kind.isVariableKind {
+            if let setter = property.declarations.first(where: { $0.kind == .functionAccessorSetter }),
+               graph.references(to: setter).contains(where: {
+                   $0.kind != .retained && $0.parent?.kind == .functionConstructor
+               })
+            {
+                return true
+            }
+            // Direct reference path (covers let properties and alternate codegen)
+            let accessors = property.declarations.filter {
+                $0.kind == .functionAccessorGetter || $0.kind == .functionAccessorSetter
+            }
+            for decl in [property] + Array(accessors) {
+                if graph.references(to: decl).contains(where: {
+                    $0.kind != .retained && $0.parent?.kind == .functionConstructor
+                }) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
 
     /**
      Returns true when a `let` stored property is assigned exclusively inside an init body.
