@@ -9,6 +9,7 @@ public struct ScanResult {
         case redundantPublicAccessibility(modules: Set<String>)
         case redundantInternalAccessibility(suggestedAccessibility: Accessibility?)
         case redundantFilePrivateAccessibility(containingTypeName: String?)
+        case redundantAccessibility(files: Set<SourceFile>)
         case superfluousIgnoreCommand
     }
 

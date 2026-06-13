@@ -72,6 +72,9 @@ struct ScanCommand: ParsableCommand {
     @Flag(help: "Show redundant internal/fileprivate accessibility warnings for nested declarations even when the containing type is already flagged")
     private var showNestedRedundantAccessibility: Bool = defaultConfiguration.$showNestedRedundantAccessibility.defaultValue
 
+    @Flag(help: "Disable identification of redundant access modifiers")
+    private var disableRedundantAccessAnalysis: Bool = defaultConfiguration.$disableRedundantAccessAnalysis.defaultValue
+
     @Flag(help: "Disable identification of unused imports")
     private var disableUnusedImportAnalysis: Bool = defaultConfiguration.$disableUnusedImportAnalysis.defaultValue
 
@@ -214,6 +217,7 @@ struct ScanCommand: ParsableCommand {
         configuration.apply(\.$disableRedundantInternalAnalysis, disableRedundantInternalAnalysis)
         configuration.apply(\.$disableRedundantFilePrivateAnalysis, disableRedundantFilePrivateAnalysis)
         configuration.apply(\.$showNestedRedundantAccessibility, showNestedRedundantAccessibility)
+        configuration.apply(\.$disableRedundantAccessAnalysis, disableRedundantAccessAnalysis)
         configuration.apply(\.$disableUnusedImportAnalysis, disableUnusedImportAnalysis)
         configuration.apply(\.$superfluousIgnoreComments, superfluousIgnoreComments)
         configuration.apply(\.$retainUnusedImportedModules, retainUnusedImportedModules)

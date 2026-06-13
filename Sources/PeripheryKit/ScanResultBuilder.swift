@@ -12,6 +12,7 @@ public enum ScanResultBuilder {
         let redundantPublicAccessibility = graph.redundantPublicAccessibility.filter { !removableDeclarations.contains($0.0) }
         let redundantInternalAccessibility = graph.redundantInternalAccessibility.filter { !removableDeclarations.contains($0.0) }
         let redundantFilePrivateAccessibility = graph.redundantFilePrivateAccessibility.filter { !removableDeclarations.contains($0.0) }
+        let redundantAccessibility = graph.redundantAccessibility.filter { !removableDeclarations.contains($0.0) }
 
         let annotatedRemovableDeclarations: [ScanResult] = removableDeclarations.flatMap { removableDeclaration in
             var extensionResults = [ScanResult]()
@@ -70,13 +71,17 @@ public enum ScanResultBuilder {
                 + superfluousParamResults
         }()
 
+        let annotatedRedundantAccessibility: [ScanResult] = redundantAccessibility.map {
+            .init(declaration: $0.0, annotation: .redundantAccessibility(files: $0.1))
+        }
         let allAnnotatedDeclarations = annotatedRemovableDeclarations +
             annotatedAssignOnlyProperties +
             annotatedRedundantProtocols +
             annotatedRedundantPublicAccessibility +
             annotatedRedundantInternalAccessibility +
             annotatedRedundantFilePrivateAccessibility +
-            annotatedSuperfluousIgnoreCommands
+            annotatedSuperfluousIgnoreCommands +
+            annotatedRedundantAccessibility
 
         return allAnnotatedDeclarations
             .filter { result in

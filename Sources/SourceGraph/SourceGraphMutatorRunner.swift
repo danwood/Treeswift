@@ -21,6 +21,7 @@ public final class SourceGraphMutatorRunner {
         // on properties that are used in extensions.
         RedundantInternalAccessibilityMarker.self,
         RedundantFilePrivateAccessibilityMarker.self,
+        RedundantAccessibilityMarker.self,
         // Must come before ProtocolConformanceReferenceBuilder because it removes references to
         // conformed protocols, which CodingKeyEnumReferenceBuilder needs to inspect before removal.
         // It must also come after ExtensionReferenceBuilder as some types may declare conformance

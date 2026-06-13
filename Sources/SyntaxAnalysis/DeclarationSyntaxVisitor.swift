@@ -28,7 +28,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
     private let sourceLocationBuilder: SourceLocationBuilder
     private let typeSyntaxInspector: TypeSyntaxInspector
     private let swiftVersion: SwiftVersion
-    private(set) var results: [Result] = []
+    private var results: [Result] = []
 
     public var resultsByLocation: [Location: Result] {
         results.reduce(into: [Location: Result]()) { dict, result in
@@ -353,7 +353,13 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         at position: AbsolutePosition,
         endPosition: AbsolutePosition? = nil
     ) {
-        let modifierNames = modifiers?.map(\.name.text) ?? []
+        let modifierNames: [String] = modifiers?.map { modifier in
+            let name = modifier.name.text
+            if let detail = modifier.detail?.detail.text {
+                return "\(name)(\(detail))"
+            }
+            return name
+        } ?? []
         let accessibility = modifierNames.mapFirst { Accessibility(rawValue: $0) }
 
         var parsedAttributes: Set<DeclarationAttribute> = []

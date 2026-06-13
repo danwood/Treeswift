@@ -89,6 +89,9 @@ public final class Configuration {
     @Setting(key: "show_nested_redundant_accessibility", defaultValue: false)
     public var showNestedRedundantAccessibility: Bool
 
+    @Setting(key: "disable_redundant_access_analysis", defaultValue: false)
+    public var disableRedundantAccessAnalysis: Bool
+
     @Setting(key: "disable_unused_import_analysis", defaultValue: false)
     public var disableUnusedImportAnalysis: Bool
 
@@ -237,7 +240,7 @@ public final class Configuration {
         $project, $schemes, $excludeTargets, $excludeTests, $indexExclude, $reportExclude, $reportInclude, $outputFormat,
         $retainPublic, $noRetainSPI, $retainFiles, $retainAssignOnlyProperties, $retainAssignOnlyPropertyTypes, $retainObjcAccessible,
         $retainObjcAnnotated, $retainUnusedProtocolFuncParams, $retainSwiftUIPreviews, $disableRedundantPublicAnalysis,
-        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility,
+        $disableRedundantInternalAnalysis, $disableRedundantFilePrivateAnalysis, $showNestedRedundantAccessibility, $disableRedundantAccessAnalysis,
         $disableUnusedImportAnalysis, $superfluousIgnoreComments, $retainUnusedImportedModules,
         $externalEncodableProtocols, $externalCodableProtocols, $externalTestCaseClasses, $verbose, $quiet, $color,
         $disableUpdateCheck, $strict, $indexStorePath,

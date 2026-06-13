@@ -39,6 +39,8 @@ extension OutputFormatter {
             "redundantFilePrivateAccessibility"
         case .superfluousIgnoreCommand:
             "superfluousIgnoreCommand"
+        case .redundantAccessibility:
+            "redundantAccessibility"
         }
     }
 
@@ -74,6 +76,9 @@ extension OutputFormatter {
         case let .redundantFilePrivateAccessibility(containingTypeName):
             let context = containingTypeName.map { "only used within \($0)" } ?? "not used outside of file"
             description += "Redundant fileprivate accessibility for \(kindDisplayName) '\(name)' (\(context); can be private)"
+        case .redundantAccessibility:
+            let accessLevel = result.declaration.accessibility.value.rawValue
+            description += "Redundant \(accessLevel) accessibility for \(kindDisplayName) '\(name)' (matches enclosing type's access level)"
         case .superfluousIgnoreCommand:
             description += "Superfluous ignore comment for \(kindDisplayName) '\(name)' (declaration is referenced and should not be ignored)"
         }

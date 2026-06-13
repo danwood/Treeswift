@@ -25,8 +25,8 @@ public extension FilePath {
 ///      For example, with the pattern "dir/**/*.ext" the file "dir/file.ext" is also included.
 ///    - When the pattern ends with a trailing slash, only directories are matched.
 private final class Glob {
-    private let excludedDirectories: [String]
-    private var isDirectoryCache: [String: Bool] = [:]
+    let excludedDirectories: [String]
+    var isDirectoryCache: [String: Bool] = [:]
 
     fileprivate var paths: Set<String> = []
 
@@ -55,11 +55,11 @@ private final class Glob {
 
     // MARK: - Private
 
-    private func executeGlob(pattern: UnsafePointer<CChar>, gt: UnsafeMutablePointer<glob_t>) -> Bool {
+    func executeGlob(pattern: UnsafePointer<CChar>, gt: UnsafeMutablePointer<glob_t>) -> Bool {
         glob(pattern, GLOB_TILDE | GLOB_BRACE | GLOB_MARK, nil, gt) == 0
     }
 
-    private func expandGlobstar(pattern: String) -> [String] {
+    func expandGlobstar(pattern: String) -> [String] {
         guard pattern.contains("**") else {
             return [pattern]
         }
@@ -93,7 +93,7 @@ private final class Glob {
         return results
     }
 
-    private func exploreDirectories(url: URL) -> [URL] {
+    func exploreDirectories(url: URL) -> [URL] {
         let subURLs = try? FileManager.default.contentsOfDirectory(atPath: url.path).flatMap { subPath -> [URL] in
             if excludedDirectories.contains(subPath) {
                 return []
@@ -111,7 +111,7 @@ private final class Glob {
         return [url] + (subURLs ?? [])
     }
 
-    private func isDirectory(path: String) -> Bool {
+    func isDirectory(path: String) -> Bool {
         if let isDirectory = isDirectoryCache[path] {
             return isDirectory
         }
@@ -123,11 +123,11 @@ private final class Glob {
         return isDirectory
     }
 
-    private func clearCaches() {
+    func clearCaches() {
         isDirectoryCache.removeAll()
     }
 
-    private func populateFiles(gt: glob_t, includeFiles: Bool) {
+    func populateFiles(gt: glob_t, includeFiles: Bool) {
         #if os(macOS)
             let matches = Int(gt.gl_matchc)
         #else

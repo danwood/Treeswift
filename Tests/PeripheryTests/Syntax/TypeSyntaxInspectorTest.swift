@@ -129,10 +129,10 @@ final class TypeSyntaxInspectorTest: XCTestCase {
 }
 
 private final class TypeSyntaxInspectorTestVisitor: SyntaxVisitor {
-    private let syntax: SourceFileSyntax
-    private let locationConverter: SourceLocationConverter
-    private let sourceLocationBuilder: SourceLocationBuilder
-    private let typeSyntaxInspector: TypeSyntaxInspector
+    let syntax: SourceFileSyntax
+    let locationConverter: SourceLocationConverter
+    let sourceLocationBuilder: SourceLocationBuilder
+    let typeSyntaxInspector: TypeSyntaxInspector
 
     typealias Result = (type: String, locations: [Location])
 
@@ -193,7 +193,7 @@ private final class TypeSyntaxInspectorTestVisitor: SyntaxVisitor {
         return .skipChildren
     }
 
-    private func addResult(for typeSyntax: TypeSyntax) {
+    func addResult(for typeSyntax: TypeSyntax) {
         let location = sourceLocationBuilder.location(at: typeSyntax.positionAfterSkippingLeadingTrivia)
         let type = typeSyntaxInspector.type(for: typeSyntax)
         let locations = typeSyntaxInspector.typeLocations(for: typeSyntax)

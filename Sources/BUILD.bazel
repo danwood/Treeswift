@@ -80,6 +80,7 @@ swift_library(
         "SourceGraph/Mutators/ProtocolConformanceReferenceBuilder.swift",
         "SourceGraph/Mutators/ProtocolExtensionReferenceBuilder.swift",
         "SourceGraph/Mutators/PubliclyAccessibleRetainer.swift",
+        "SourceGraph/Mutators/RedundantAccessibilityMarker.swift",
         "SourceGraph/Mutators/RedundantAccessibilityMarkerShared.swift",
         "SourceGraph/Mutators/RedundantExplicitPublicAccessibilityMarker.swift",
         "SourceGraph/Mutators/RedundantFilePrivateAccessibilityMarker.swift",

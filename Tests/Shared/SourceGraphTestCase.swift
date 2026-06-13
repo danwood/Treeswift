@@ -242,6 +242,30 @@ open class SourceGraphTestCase: XCTestCase {
         scopeStack.removeLast()
     }
 
+    func assertRedundantAccessibility(_ description: DeclarationDescription, scopedAssertions: (() -> Void)? = nil, file: StaticString = #file, line: UInt = #line) {
+        guard let declaration = materialize(description, in: Self.allIndexedDeclarations, file: file, line: line) else { return }
+
+        if !Self.results.redundantAccessibilityDeclarations.contains(declaration) {
+            XCTFail("Expected declaration to have redundant accessibility: \(declaration)", file: file, line: line)
+        }
+
+        scopeStack.append(.declaration(declaration))
+        scopedAssertions?()
+        scopeStack.removeLast()
+    }
+
+    func assertNotRedundantAccessibility(_ description: DeclarationDescription, scopedAssertions: (() -> Void)? = nil, file: StaticString = #file, line: UInt = #line) {
+        guard let declaration = materialize(description, in: Self.allIndexedDeclarations, file: file, line: line) else { return }
+
+        if Self.results.redundantAccessibilityDeclarations.contains(declaration) {
+            XCTFail("Expected declaration to not have redundant accessibility: \(declaration)", file: file, line: line)
+        }
+
+        scopeStack.append(.declaration(declaration))
+        scopedAssertions?()
+        scopeStack.removeLast()
+    }
+
     func assertUsedParameter(_ name: String, file: StaticString = #file, line: UInt = #line) {
         let declaration = materialize(.varParameter(name), fail: false, file: file, line: line)
 
@@ -439,6 +463,16 @@ private extension [ScanResult] {
     var superfluousIgnoreCommandDeclarations: Set<Declaration> {
         compactMapSet {
             if case .superfluousIgnoreCommand = $0.annotation {
+                return $0.declaration
+            }
+
+            return nil
+        }
+    }
+
+    var redundantAccessibilityDeclarations: Set<Declaration> {
+        compactMapSet {
+            if case .redundantAccessibility = $0.annotation {
                 return $0.declaration
             }
 
