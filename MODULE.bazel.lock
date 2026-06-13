@@ -226,19 +226,6 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//bazel:generated.bzl%generated": {
-      "general": {
-        "bzlTransitiveDigest": "nMR2FBcoRPImVocN9DNOnm2NQWyTbJPu7SHJgAXsLFw=",
-        "usagesDigest": "TcjgBJTi9SA5tJCGWIAErLSNYLIL94TrQhRpaZZGzRE=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "periphery_generated": {
-            "repoRuleId": "@@//bazel:generated.bzl%generated_repo",
-            "attributes": {}
-          }
-        }
-      }
-    },
     "@@rules_kotlin+//src/main/starlark/core/repositories:bzlmod_setup.bzl%rules_kotlin_extensions": {
       "general": {
         "bzlTransitiveDigest": "ABI1D/sbS1ovwaW/kHDoj8nnXjQ0oKU9fzmzEG4iT8o=",
@@ -489,25 +476,6 @@
                 ]
               },
               "toolchain_target_settings": {}
-            }
-          }
-        }
-      }
-    },
-    "@@swift-index-store+//:repositories.bzl%bzlmod_deps": {
-      "general": {
-        "bzlTransitiveDigest": "5SgzvK5bW1AjBEGcIZ+V8t1hdrKQxcL5liC+blXrOeo=",
-        "usagesDigest": "6gSsMFoZD8MOT1d3qLGp8z92CBXKqQI0zULrhGHXrow=",
-        "recordedInputs": [
-          "REPO_MAPPING:swift-index-store+,bazel_tools bazel_tools"
-        ],
-        "generatedRepoSpecs": {
-          "StaticIndexStore": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "url": "https://github.com/keith/StaticIndexStore/releases/download/5.7/libIndexStore.xcframework.zip",
-              "sha256": "da69bab932357a817aa0756e400be86d7156040bfbea8eded7a3acc529320731",
-              "build_file_content": "\nload(\"@build_bazel_rules_apple//apple:apple.bzl\", \"apple_static_xcframework_import\")\n\napple_static_xcframework_import(\n    name = \"libIndexStore\",\n    visibility = [\"//visibility:public\"],\n    xcframework_imports = glob([\"libIndexStore.xcframework/**\"]),\n)\n        "
             }
           }
         }

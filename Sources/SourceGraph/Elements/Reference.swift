@@ -78,7 +78,7 @@ extension Reference: CustomStringConvertible {
         "Reference(\(descriptionParts.joined(separator: ", ")))"
     }
 
-    var descriptionParts: [String] {
+    private var descriptionParts: [String] {
         let formattedName = "'\(name)'"
 
         return [kind.rawValue, declarationKind.rawValue, formattedName, "'\(usr)'", role.rawValue, location.shortDescription]

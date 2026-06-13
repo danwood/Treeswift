@@ -77,8 +77,42 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
 
     private func markExplicitPublicDescendentDeclarations(from decl: Declaration) {
         for descDecl in descendentPublicDeclarations(from: decl) {
+            // Skip members that implement public protocol requirements.
+            // Stripping public from these causes conformance errors (protocol requires public member).
+            guard !isProtocolRequirement(descDecl) else { continue }
+
             mark(descDecl)
         }
+    }
+
+    /// Checks if a declaration implements a protocol requirement.
+    private func isProtocolRequirement(_ decl: Declaration) -> Bool {
+        // Direct protocol member
+        if let parent = decl.parent, parent.kind == .protocol {
+            return true
+        }
+        // Conformance: has .related references pointing to protocol members
+        let relatedReferences = graph.references(to: decl).filter { $0.kind == .related }
+        for ref in relatedReferences {
+            if let protocolDecl = graph.declaration(withUsr: ref.usr),
+               protocolDecl.kind.isProtocolMemberKind || protocolDecl.kind == .associatedtype
+            {
+                return true
+            }
+        }
+        // External protocol conformance: .related refs FROM this decl to protocol members
+        for ref in decl.related where ref.declarationKind.isProtocolMemberConformingKind {
+            if let referencedDecl = graph.declaration(withUsr: ref.usr) {
+                if let referencedParent = referencedDecl.parent,
+                   referencedParent.kind == .protocol
+                {
+                    return true
+                }
+            } else if ref.name == decl.name {
+                return true
+            }
+        }
+        return false
     }
 
     private func isExposedPubliclyByAnotherDeclaration(_ decl: Declaration) -> Bool {
@@ -198,7 +232,8 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
     }
 
     private func descendentPublicDeclarations(from decl: Declaration) -> Set<Declaration> {
-        let publicDeclarations = decl.declarations.filter { !$0.isImplicit && $0.accessibility.isExplicitly(.public) }
-        return publicDeclarations.flatMapSet { descendentPublicDeclarations(from: $0) }.union(publicDeclarations)
+        decl.descendentDeclarations(matching: {
+            !$0.isImplicit && $0.accessibility.isExplicitly(.public)
+        })
     }
 }

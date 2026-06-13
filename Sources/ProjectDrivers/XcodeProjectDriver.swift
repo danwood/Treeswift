@@ -82,7 +82,7 @@
             )
         }
 
-        init(
+        private init(
             logger: Logger,
             configuration: Configuration,
             xcodebuild: Xcodebuild,

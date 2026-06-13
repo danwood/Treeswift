@@ -219,6 +219,24 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     at: binding.positionAfterSkippingLeadingTrivia,
                     endPosition: binding.endPosition
                 )
+                // For bindings preceded by modifiers (e.g. `static let`), the index store may record
+                // the declaration at the modifier keyword rather than the binding identifier. Register
+                // a second result at the node position so such declarations still receive their
+                // syntax metadata, preventing spurious redundant accessibility results.
+                let nodePosition = node.positionAfterSkippingLeadingTrivia
+                if nodePosition != binding.positionAfterSkippingLeadingTrivia {
+                    parse(
+                        modifiers: node.modifiers,
+                        attributes: node.attributes,
+                        trivia: node.commentCommandTrivia,
+                        variableType: binding.typeAnnotation?.type,
+                        closureParameterClause: closureParameters,
+                        returnClause: closureSignature?.returnClause,
+                        variableInitFunctionCallExpr: functionCallExpr,
+                        variableInitExpr: binding.initializer?.value,
+                        at: nodePosition
+                    )
+                }
             } else if let tuplePatternSyntax = binding.pattern.as(TuplePatternSyntax.self) {
                 visitVariableTupleBinding(
                     node: node,
@@ -238,7 +256,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         }
     }
 
-    func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?) {
+    private func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?) {
         let elements = Array(pattern.elements)
         let types: [TupleTypeElementSyntax?] = typeTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)
         let initializers: [LabeledExprSyntax?] = initializerTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)

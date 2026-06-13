@@ -2,7 +2,7 @@ import Configuration
 import Foundation
 import Shared
 
-enum AssignOnlyPropertyAnalyzer {
+private enum AssignOnlyPropertyAnalyzer {
     static func isAssignOnlyProperty(
         _ property: Declaration,
         graph: SourceGraph,
