@@ -1031,7 +1031,12 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             }
 
             assertReferenced(.class("FixtureClass222")) {
-                self.assertAssignOnlyProperty(.varInstance("unused"))
+                // The class has a single explicit initializer, which is retained because removing it
+                // would make the class unconstructable. That initializer assigns `unused`, so the
+                // property cannot be removed without orphaning the assignment, and it is retained
+                // rather than reported as assign-only.
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
             }
         }
     }
@@ -1056,6 +1061,25 @@ final class RetentionTest: FixtureSourceGraphTestCase {
                 self.assertNotReferenced(.functionConstructor("init(unused:)"))
                 self.assertReferenced(.varInstance("unused"))
                 self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsInitializedConstantProperties() {
+        analyze(retainPublic: true, retainAssignOnlyProperties: false) {
+            // The initializer is used, so its assignment and parameter are load-bearing and the
+            // `let` property must be retained rather than reported as assign-only.
+            assertReferenced(.struct("FixtureStruct230")) {
+                self.assertReferenced(.functionConstructor("init(identifier:)"))
+                self.assertReferenced(.varInstance("identifier"))
+                self.assertNotAssignOnlyProperty(.varInstance("identifier"))
+            }
+
+            // The initializer is never called, so the `let` property remains safely removable and
+            // is still reported as assign-only.
+            assertReferenced(.struct("FixtureStruct231")) {
+                self.assertNotReferenced(.functionConstructor("init(identifier:)"))
+                self.assertAssignOnlyProperty(.varInstance("identifier"))
             }
         }
     }

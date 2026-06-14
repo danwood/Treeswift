@@ -22,7 +22,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         functionCallMetatypeArgumentLocations: Set<Location>,
         typeInitializerLocations: Set<Location>,
         variableInitExprLocations: Set<Location>,
-        hasGenericFunctionReturnedMetatypeParameters: Bool
+        hasGenericFunctionReturnedMetatypeParameters: Bool,
+        isLetBinding: Bool
     )
 
     private let sourceLocationBuilder: SourceLocationBuilder
@@ -202,6 +203,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
     }
 
     public func visitPost(_ node: VariableDeclSyntax) {
+        let isLetBinding = node.bindingSpecifier.tokenKind == .keyword(.let)
+
         for binding in node.bindings {
             if binding.pattern.is(IdentifierPatternSyntax.self) {
                 let closureSignature = binding.initializer?.value.as(ClosureExprSyntax.self)?.signature
@@ -216,6 +219,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     returnClause: closureSignature?.returnClause,
                     variableInitFunctionCallExpr: functionCallExpr,
                     variableInitExpr: binding.initializer?.value,
+                    isLetBinding: isLetBinding,
                     at: binding.positionAfterSkippingLeadingTrivia,
                     endPosition: binding.endPosition
                 )
@@ -234,6 +238,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                         returnClause: closureSignature?.returnClause,
                         variableInitFunctionCallExpr: functionCallExpr,
                         variableInitExpr: binding.initializer?.value,
+                        isLetBinding: isLetBinding,
                         at: nodePosition
                     )
                 }
@@ -242,13 +247,15 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     node: node,
                     pattern: tuplePatternSyntax,
                     typeTuple: binding.typeAnnotation?.type.as(TupleTypeSyntax.self)?.elements,
-                    initializerTuple: binding.initializer?.value.as(TupleExprSyntax.self)?.elements
+                    initializerTuple: binding.initializer?.value.as(TupleExprSyntax.self)?.elements,
+                    isLetBinding: isLetBinding
                 )
             } else {
                 parse(
                     modifiers: node.modifiers,
                     attributes: node.attributes,
                     trivia: node.leadingTrivia.merging(node.trailingTrivia),
+                    isLetBinding: isLetBinding,
                     at: binding.positionAfterSkippingLeadingTrivia,
                     endPosition: binding.endPosition
                 )
@@ -256,7 +263,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         }
     }
 
-    private func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?) {
+    private func visitVariableTupleBinding(node: VariableDeclSyntax, pattern: TuplePatternSyntax, typeTuple: TupleTypeElementListSyntax?, initializerTuple: LabeledExprListSyntax?, isLetBinding: Bool) {
         let elements = Array(pattern.elements)
         let types: [TupleTypeElementSyntax?] = typeTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)
         let initializers: [LabeledExprSyntax?] = initializerTuple?.map(\.self) ?? Array(repeating: nil, count: elements.count)
@@ -270,7 +277,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     node: node,
                     pattern: elementTuplePattern,
                     typeTuple: typeTuple,
-                    initializerTuple: initializerTuple
+                    initializerTuple: initializerTuple,
+                    isLetBinding: isLetBinding
                 )
             } else {
                 parse(
@@ -279,6 +287,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     trivia: node.commentCommandTrivia,
                     variableType: type?.type,
                     variableInitFunctionCallExpr: initializer?.expression.as(FunctionCallExprSyntax.self),
+                    isLetBinding: isLetBinding,
                     at: element.positionAfterSkippingLeadingTrivia,
                     endPosition: element.endPosition
                 )
@@ -350,6 +359,7 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         variableInitFunctionCallExpr: FunctionCallExprSyntax? = nil,
         variableInitExpr: ExprSyntax? = nil,
         typeInitializerClause: TypeInitializerClauseSyntax? = nil,
+        isLetBinding: Bool = false,
         at position: AbsolutePosition,
         endPosition: AbsolutePosition? = nil
     ) {
@@ -414,7 +424,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             functionCallMetatypeArgumentLocations: functionCallMetatypeArgumentLocations(for: variableInitFunctionCallExpr),
             typeInitializerLocations: typeLocations(for: typeInitializerClause?.value),
             variableInitExprLocations: memberBaseLocations(for: variableInitExpr),
-            hasGenericFunctionReturnedMetatypeParameters: hasGenericFunctionReturnedMetatypeParameters
+            hasGenericFunctionReturnedMetatypeParameters: hasGenericFunctionReturnedMetatypeParameters,
+            isLetBinding: isLetBinding
         ))
     }
 

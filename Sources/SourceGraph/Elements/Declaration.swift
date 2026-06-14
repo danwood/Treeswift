@@ -235,6 +235,7 @@ public final class Declaration: @unchecked Sendable {
     public var related: Set<Reference> = []
     public var isImplicit: Bool = false
     public var isObjcAccessible: Bool = false
+    public var isLetBinding: Bool = false
     public var referencedFiles: Set<SourceFile>
 
     private let hashValueCache: Int
