@@ -20,7 +20,7 @@ When a new upstream Periphery release comes out, `combine` (the branch the Trees
 |---|---|---|
 | `treeswift-observable-protocol-retainers` (branch) | ObservableMacroRetainer (F1) + ProtocolConformanceRetainer (F3) | Treeswift-only (F1 inert upstream, F3 conflicts with redundant-protocol diagnostic) |
 | `treeswift-used-marking-walks` (branch) | the full 5 UsedDeclarationMarker propagation walks | only 1 walk upstreamable (#1137); the rest are recall-over-precision |
-| tag `treeswift-assignonly-fix` (commit `81219d1`) | retain initialized constant assign-only properties | entangled with glue + #1132's `isLetBinding` plumbing — captured by TAG, not a standalone branch (won't cherry-pick onto bare upstream) |
+| `treeswift-assignonly-retention` (branch, **stacked on #1132 + glue**) | retain initialized constant assign-only properties | entangled with glue + #1132's `isLetBinding` plumbing, so this branch is NOT based on bare upstream — it is built on `redundant-internal-fileprivate` (#1132) with `treeswift-glue` merged in, then the fix on top. (related upstream PR: #1136) |
 
 The whole thing is also pinned by tag `treeswift-combine-2026-06-14` → use it as the ultimate reference if a rebuild goes sideways.
 
@@ -53,16 +53,11 @@ git fetch origin
    git merge redundant-nested        # take #1132's marker files on conflict; nested is additive
    git merge treeswift-observable-protocol-retainers
    git merge treeswift-used-marking-walks
+   git merge treeswift-assignonly-retention   # already stacked on #1132+glue; merge AFTER those two are in
    ```
-   Conflict guidance: glue + #1132 overlap in ~8 files (Declaration, OutputFormatter, ScanResult, DeclarationSyntaxVisitor, SourceGraphMutatorRunner, etc.) — UNION both sides (glue adds end-position/progress/public-API, the features add analysis). Keep glue's decision that end positions are EXCLUDED from `Location` equality/hash (else ~58 parameter-lookup tests fail).
+   Conflict guidance: glue + #1132 overlap in ~8 files (Declaration, OutputFormatter, ScanResult, DeclarationSyntaxVisitor, SourceGraphMutatorRunner, etc.) — UNION both sides (glue adds end-position/progress/public-API, the features add analysis). Keep glue's decision that end positions are EXCLUDED from `Location` equality/hash (else ~58 parameter-lookup tests fail). For `treeswift-assignonly-retention`, the correct merged `DeclarationSyntaxVisitor`/`Declaration` has BOTH `isLetBinding` (from #1132) AND the `endPosition`/`location(from:to:)` glue code — that branch already carries the resolved versions, so prefer them on conflict.
 
-3. **Re-apply the assign-only fix** (the tagged, entangled commit). After `redundant-internal-fileprivate` + `treeswift-glue` are both in `combine`, cherry-pick it:
-   ```sh
-   git cherry-pick treeswift-assignonly-fix
-   ```
-   It needs both #1132's `isLetBinding` plumbing and glue's end-position visitor present, which they now are. If the `DeclarationSyntaxVisitor`/`Declaration` plumbing conflicts, the correct merged file has BOTH `isLetBinding` AND the `endPosition`/`location(from:to:)` glue code.
-
-4. **Build + full test**: `swift build && swift test`. Then run the upstream self-scan gate: `./.build/debug/periphery scan --quiet --clean-build --strict` → "No unused code detected". Lint: `mise exec -- swiftformat --quiet --strict . && mise exec -- swiftlint lint --quiet --strict`.
+3. **Build + full test**: `swift build && swift test`. Then run the upstream self-scan gate: `./.build/debug/periphery scan --quiet --clean-build --strict` → "No unused code detected". Lint: `mise exec -- swiftformat --quiet --strict . && mise exec -- swiftlint lint --quiet --strict`.
 
 5. **Re-prove convergence** (the real acceptance test) — see [periphery-operation-status.md](periphery-operation-status.md) for the forceRemoveAll→rebuild probe against the four Prodcore baselines (R5/R4/R-May/R3). Each must rebuild with **zero build errors** after a full unused-code removal. This is what validates that combine's recall-tuned analysis is still safe.
 

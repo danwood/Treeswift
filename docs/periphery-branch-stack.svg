@@ -1,6 +1,6 @@
 <svg viewBox="0 0 820 780" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
 <title>Periphery branch architecture: upstream base to Treeswift subtree</title>
-<desc>Layered stack: upstream master base, danwood master mirror, home branches (glue, feature/fix branches, Treeswift-only retainers) plus the assign-only tag, all merged into the combine branch, consumed by the Treeswift git subtree.</desc>
+<desc>Layered stack: upstream master base, danwood master mirror, home branches (glue, feature/fix branches, Treeswift-only retainers), all merged into the combine branch, consumed by the Treeswift git subtree.</desc>
 <style>
   .h{font-size:18px;font-weight:700;fill:#1a1a1a}
   .lbl{font-size:13px;font-weight:700;fill:#1a1a1a}
@@ -24,7 +24,7 @@
 <!-- COMBINE (full width) -->
 <rect x="30" y="128" width="760" height="52" rx="9" fill="#1976d2" stroke="#0d47a1" stroke-width="2"/>
 <text x="44" y="150" class="wlbl">combine  (origin/combine · tag treeswift-combine-2026-06-14)</text>
-<text x="44" y="169" class="sub" fill="#e3f2fd">merge of all branches below + the assign-only tag · converges all 4 Prodcore baselines (0 errors)</text>
+<text x="44" y="169" class="sub" fill="#e3f2fd">merge of all the branches below · converges all 4 Prodcore baselines (0 errors)</text>
 
 <!-- arrows into combine -->
 <g stroke="#90a4ae" stroke-width="1.3" fill="none">
@@ -82,10 +82,10 @@
 <text x="695" y="368" class="tiny" text-anchor="middle">F1+F3 · Treeswift-only</text>
 <line x1="695" y1="318" x2="695" y2="308" stroke="#c2185b" stroke-width="1.3"/>
 
-<!-- assignOnly TAG (special, depends on glue+#1132) -->
-<rect x="346" y="404" width="296" height="46" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="1.5" stroke-dasharray="5 3"/>
-<text x="494" y="423" class="sub" font-weight="700" text-anchor="middle" fill="#bf360c">tag treeswift-assignonly-fix  (commit 81219d1)</text>
-<text x="494" y="438" class="tiny" text-anchor="middle">entangled with glue + #1132 plumbing → cherry-picked into combine, not a standalone branch.  PR #1136 = related.</text>
+<!-- assignOnly BRANCH (stacked on #1132 + glue) -->
+<rect x="346" y="404" width="296" height="46" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="2"/>
+<text x="494" y="423" class="sub" font-weight="700" text-anchor="middle" fill="#bf360c">treeswift-assignonly-retention  (branch)</text>
+<text x="494" y="438" class="tiny" text-anchor="middle">STACKED on #1132 + glue (needs their plumbing) → not based on bare upstream.  PR #1136 = related.</text>
 
 <!-- arrows from row2 down to master -->
 <g stroke="#bbb" stroke-width="1.2" fill="none">
@@ -118,7 +118,7 @@
 <rect x="44" y="663" width="11" height="9" fill="#fdeef0" stroke="#c2185b"/>
 <text x="74" y="671" class="tiny">pink = Treeswift-ONLY fixes. They make combine converge on Prodcore, but can't go upstream — they trade upstream's dead-code</text>
 <text x="74" y="684" class="tiny">precision for recall (catch everything safely). The 2 pink branches are independent of each other; both fork off upstream.</text>
-<text x="44" y="700" class="tiny">• The assign-only fix is a TAG, not a branch (entangled with glue+#1132) — re-applied during a combine rebuild after those merge.</text>
+<text x="44" y="700" class="tiny">• treeswift-assignonly-retention is STACKED on #1132 + glue (it needs their plumbing), so it forks off #1132, not bare upstream.</text>
 <text x="44" y="716" class="tiny">• combine = all of the above merged. INTERNAL only, never pushed upstream. Tag treeswift-combine-&lt;date&gt; pins each rebuild.</text>
 <text x="44" y="732" class="tiny">• Treeswift subtree = an exact copy of combine, vendored (self-contained build). Rebuild recipe: docs/periphery-combine-rebuild.md.</text>
 <text x="44" y="748" class="tiny">• As upstream merges the PR'd subset, drop those branches from combine → it shrinks toward glue + the pink Treeswift-only retainers.</text>
