@@ -4,6 +4,8 @@
 
 ## ✅ Accomplished
 
+**5 upstream PRs now open:** #1132, #1133, #1134, #1136, #1137 (all draft/open, CI-green).
+
 - **4 upstream PRs open, all CI-green:**
   - [#1132](https://github.com/peripheryapp/periphery/pull/1132) — redundant internal/fileprivate accessibility
   - [#1133](https://github.com/peripheryapp/periphery/pull/1133) — skip unresolvable subproject refs
@@ -30,9 +32,14 @@
 
 ## 🔨 Remaining our work
 
-- **A — Real subtree merge of combine into Treeswift** (+ 5 app-side API adaptations). Converts proven scratch work into Treeswift's actual base. [IN PROGRESS / status below]
-- **B — Subtree → pinned Swift package** (runbook: [subtree-to-package-migration.md](../Prodcore-cleanup/subtree-to-package-migration.md)). Kills drift, drops 1.7GB.
-- **C — Upstream PRs for 3 still-un-PR'd restored fixes:** Observable (F1), Protocol (F3), UsedDeclarationMarker walks (F5/F7/F9/F11/F13). Need real-pattern tests. [DRAFT PRs being prepared]
+- **A — Real subtree merge of combine into Treeswift** ✅ DONE (committed 9f67b173, pushed to danwood/Treeswift main). Subtree = combine @ 055609f + 5 app-side API adaptations; real Treeswift builds clean; Package.resolved updated (swift-index-store).
+- **B — Subtree → pinned Swift package — TRIED then REVERTED (decision: keep the subtree).** The package migration worked (drift-proof, builds+runs), but it gave up the subtree's self-contained "clone-and-build" property (offline build; a fresh checkout needs no network). The 1.7GB "bloat" reason for migrating was unfounded — that was gitignored `.build` artifacts, never in git (real subtree source ≈ 900KB). So the subtree's only real cost is drift-risk (guardable with a CI check), which doesn't outweigh self-containment. Reverted to the git subtree at the combine content. Tag `treeswift-combine-2026-06-14` (commit 055609f) retained as a marker of what the subtree equals.
+- **C — Upstream PRs for the restored fixes:** [IN PROGRESS]
+  - **Observable (F1) — NOT upstreamable standalone.** Does not reproduce on upstream toolchain (Swift 6.3.2 emits direct property→type refs; custom type already `used` without the retainer). No falsifiable test possible. Value lives in combine (forceRemove convergence bar), not as a standalone PR.
+  - **Protocol (F3) — NOT upstream-appropriate.** ProtocolConformanceRetainer marks conformed protocols "retained", which suppresses upstream's redundant-protocol diagnostic (fails testSimpleRedundantProtocol + 2 siblings). STAYS Treeswift-only in combine. An upstream version needs reshaping RedundantProtocolMarker, not a lift — deferred design decision.
+  - **UsedDeclarationMarker walks — only 1 of 5 upstreamable.** PR #1137 (draft) ships the returnType/parameterType walk (clean, reproduces, 0 regressions). The other 4 walks REGRESS upstream's dead-code precision or are moot on Swift 6.3.2 — they stay Treeswift-only in combine. Combine's full walk set is a deliberate recall-over-precision tradeoff: correct for Treeswift's aggressive cleanup, wrong for upstream's precise detection.
+  - **C verdict:** of the 3 restored fixes, only ONE narrow walk upstreams cleanly (#1137). F1 (Observable) inert on current toolchain; F3 (Protocol) conflicts with redundant-protocol diagnostic; 4/5 UsedDecl walks regress precision. All 3 fixes correctly LIVE in combine (proven by forceRemove convergence) — they just don't translate to standalone upstream PRs. This is expected: combine optimizes recall (catch all Prodcore dead code safely), upstream optimizes precision.
+  - LESSON: never run concurrent agents in one git checkout (they branch-switch under each other). Run serially.
 - **D — Clean nested/private(set) #1048 PR** — gated on ileitch's flag answer.
 
 ## 🏁 Definition of done + success
