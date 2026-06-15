@@ -69,6 +69,20 @@ struct ContentColumnView: View {
 					ScanErrorView(errorMessage: error)
 				}
 
+				if !scanState.isScanning, let toolchainInfo = scanState.toolchainInfo {
+					HStack(spacing: 6) {
+						Image(systemName: "hammer")
+							.imageScale(.small)
+						Text(toolchainInfo)
+							.textSelection(.enabled)
+						Spacer()
+					}
+					.foregroundStyle(.secondary)
+					.font(.caption)
+					.padding(.horizontal, 20)
+					.padding(.vertical, 6)
+				}
+
 				if !scanState.scanResults.isEmpty || scanState.sourceGraph != nil || scanState.isRestoredFromCache {
 					ResultsTabView(
 						treeNodes: scanState.treeNodes,

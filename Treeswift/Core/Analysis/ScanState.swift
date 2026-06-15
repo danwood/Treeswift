@@ -44,6 +44,9 @@ final class ScanState {
 	var scanStatus: String = "Scanning…"
 	var errorMessage: String?
 
+	// Active Xcode/Swift toolchain that drove the most recent scan.
+	var toolchainInfo: String?
+
 	// Log buffers for automation API
 	var scanLogBuffer: [String] = []
 	var removalLogBuffer: [String] = []
@@ -127,8 +130,13 @@ final class ScanState {
 				) {
 					switch progress {
 					case let .statusUpdate(status):
-						// Update UI status and log to console
-						scanStatus = status
+						// Capture the toolchain readout for display rather than treating it as
+						// transient progress; everything else updates the live status line.
+						if status.hasPrefix("Toolchain: ") {
+							toolchainInfo = status
+						} else {
+							scanStatus = status
+						}
 						let statusLine = "* \(status)"
 						statusLine.logToConsole()
 						scanLogBuffer.append(statusLine)

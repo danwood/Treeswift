@@ -163,6 +163,33 @@ final class PeripheryScanRunner: Sendable {
 		}
 	}
 
+	// MARK: - Toolchain Identification
+
+	/// Describes the active Xcode and Swift toolchain driving the scan.
+	///
+	/// SwiftUI's `@State` implementation changed from a property wrapper to a macro in Xcode 27 /
+	/// Swift 6.4, which alters how the source graph sees projected-value-only reads. Recording the
+	/// exact toolchain with each scan makes it unambiguous which form a given run encountered.
+	private nonisolated static func activeToolchainDescription() -> String {
+		let shell = GUIShell(logger: Logger(quiet: true, verbose: false, colorMode: .never))
+
+		let developerDir = (try? shell.exec(["xcode-select", "-p"]))?
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+		let xcodePath = developerDir.flatMap { dir -> String? in
+			// Map ".../Xcode-27.0.0-Beta.app/Contents/Developer" back to the app bundle name.
+			guard let range = dir.range(of: ".app") else { return nil }
+			return URL(fileURLWithPath: String(dir[..<range.upperBound])).lastPathComponent
+		}
+
+		let swiftVersion = (try? shell.exec(["swift", "-version"]))?
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+
+		let xcodePart = xcodePath ?? developerDir ?? "unknown Xcode"
+		let swiftPart = swiftVersion ?? "unknown Swift version"
+
+		return "Toolchain: \(xcodePart) — \(swiftPart)"
+	}
+
 	// MARK: - Full Configuration API
 
 	/// Run a scan with full Periphery configuration
@@ -237,6 +264,10 @@ final class PeripheryScanRunner: Sendable {
 							FileManager.default.changeCurrentDirectoryPath(originalDirectory)
 						}
 					}
+
+					// Report the active toolchain up front so each scan records which
+					// Xcode and Swift version drove it.
+					continuation.yield(.statusUpdate(Self.activeToolchainDescription()))
 
 					// Phase 1: Run scan with progress updates
 					let (results, sourceGraph) = try await self.runScan(
