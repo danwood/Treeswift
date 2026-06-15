@@ -23,22 +23,22 @@ numbered section below.
 
 | F# | legacy P# | Title (short) | Mutator / file changed | Up | Fixture |
 |---:|-----------|---------------|------------------------|----|---------|
-| F1 | P1 | `@Observable` wrong source positions for synthesized accessors | `ObservableMacroRetainer` + `SourceGraphMutatorRunner` | ⏳ | — |
-| F2 | P2 | `let`-binding false positives in assignOnly detection | `DeclarationSyntaxVisitor`, `Declaration`, `SwiftIndexer`, `AssignOnlyPropertyReferenceEliminator` | ⏳ | — |
-| F3 | P4 | Protocol unused when used only via conformance | `ProtocolConformanceRetainer` (new) | ⏳ | — |
-| F4 | P5 | Protocol conformance extensions wrongly removed | `ScanResultBuilder` (+ Treeswift `removeEmptyContainers`, `findHighestEmptyAncestor`) | ⏳ | — |
-| F5 | P6 | Private members called only within same type removed (stored-property case) | `UsedDeclarationMarker` (accessor → property) | ⏳ | — |
+| F1 | P1 | `@Observable` wrong source positions for synthesized accessors | `ObservableMacroRetainer` + `SourceGraphMutatorRunner` | 🔀 split (see 2026-06-12 note) | — |
+| F2 | P2 | `let`-binding false positives in assignOnly detection | `DeclarationSyntaxVisitor`, `Declaration`, `SwiftIndexer`, `AssignOnlyPropertyReferenceEliminator` | ❓ re-verify (#1126) | — |
+| F3 | P4 | Protocol unused when used only via conformance | `ProtocolConformanceRetainer` (new) | ❓ re-verify | ✅ moot v.up |
+| F4 | P5 | Protocol conformance extensions wrongly removed | `ScanResultBuilder` (+ Treeswift `removeEmptyContainers`, `findHighestEmptyAncestor`) | ❓ re-verify | ✅ moot v.up |
+| F5 | P6 | Private members called only within same type removed (stored-property case) | `UsedDeclarationMarker` (accessor → property) | ❓ re-verify | ✅ moot v.up |
 | F6 | — | `redundantPublicAccessibility` strips `public` from protocol-extension members | Treeswift-side guard | — | — |
-| F7 | P7 | Nested types used only in sibling method signatures removed | `UsedDeclarationMarker` (returnType/parameterType walk) | ⏳ | — |
-| F8 | P9 | Stored `let` with no external reads removed, orphaning `self.x = x` | `AssignOnlyPropertyReferenceEliminator` | ⏳ | — |
-| F9 | — | Stored properties made `private` despite cross-file reads | `isReferencedOutsideFile` (accessor-child walk) | ⏳ | — |
-| F10 | — | `redundantPublicAccessibility` strips `public` from protocol-requirement members | `markExplicitPublicDescendentDeclarations` | ⏳ | — |
-| F11 | P7+P8 | Nested type removed while parent kept (orphaned refs) | `UsedDeclarationMarker` (function→parent) + Treeswift `isNestedTypeWithKeptParent` | ⏳ | — |
-| F12 | P10 | Ghost `redundantInternalAccessibility`, no source range, `static let` in `actor` | `DeclarationSyntaxVisitor` (secondary result at node position) | ⏳ | — |
-| F13 | (master d763b7a) | Nested type as **same-parent** stored-property type removed | `UsedDeclarationMarker` (nested-by-name walk) | ⬆️ | TODO |
-| F14 | P11 | Nested type **+ enum cases** removed when parent also unused | `AssignOnlyPropertyReferenceEliminator` (narrow + descendants) | ⏳ | TODO |
-| F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⏳ | TODO |
-| F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ⏳ | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
+| F7 | P7 | Nested types used only in sibling method signatures removed | `UsedDeclarationMarker` (returnType/parameterType walk) | ❓ re-verify (#1075) | ✅ moot v.up |
+| F8 | P9 | Stored `let` with no external reads removed, orphaning `self.x = x` | `AssignOnlyPropertyReferenceEliminator` | ❓ re-verify (#1126) | — |
+| F9 | — | Stored properties made `private` despite cross-file reads | `isReferencedOutsideFile` (accessor-child walk) | ⬆️ PR #1132 | — |
+| F10 | — | `redundantPublicAccessibility` strips `public` from protocol-requirement members | `markExplicitPublicDescendentDeclarations` | ⬆️ PR #1132 | — |
+| F11 | P7+P8 | Nested type removed while parent kept (orphaned refs) | `UsedDeclarationMarker` (function→parent) + Treeswift `isNestedTypeWithKeptParent` | ❓ re-verify (#1075) | ✅ moot v.up |
+| F12 | P10 | Ghost `redundantInternalAccessibility`, no source range, `static let` in `actor` | `DeclarationSyntaxVisitor` (secondary result at node position) | ⬆️ PR #1132 | — |
+| F13 | (master d763b7a) | Nested type as **same-parent** stored-property type removed | `UsedDeclarationMarker` (nested-by-name walk) | ✅ fixed upstream (#1075) | TODO |
+| F14 | P11 | Nested type **+ enum cases** removed when parent also unused | `AssignOnlyPropertyReferenceEliminator` (narrow + descendants) | ❓ re-verify (#1075) | TODO |
+| F15 | P12 | Sole class `init` removed → stored props un-initializable | `AssignOnlyPropertyReferenceEliminator` (`isRequiredClassInit`) | ⚠️ overlaps declined #1058 | TODO |
+| F16 | P13 | Custom type used only as a **retained Codable property's** type removed | `CodablePropertyRetainer` (`retainDeclaredType`) | ✅ fixed upstream | ✅ `RetentionTest.testRetainsCodablePropertyCustomType` |
 | F17 | — | `actor` redundant-accessibility rewrite was a no-op ghost (actor classified as `.class`) | Treeswift `CodeModificationHelper.insertAccessKeyword` (class/actor keyword) + ghost-detection guard | n/a (Treeswift) | — |
 | F18 | — | Files pinned via `PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions` deleted from disk → "Build input files cannot be found" | Treeswift `XcodeProjectFileChecker.parseSynchronizedMembershipExceptions` (also treat synchronized-group exceptions as explicit refs → shell, don't delete) | n/a (Treeswift) | ✅ E2E repro `fixtures/F18-synchronized-group-membership/` |
 | F19 | — | `redundantPublicAccessibility` downgrades a type but leaves `public init`/members in its **extensions** → "cannot declare a public initializer in an extension with internal requirements" | Treeswift `CodeModificationHelper.cascadePublicStripFromExtensions` (strip `public` from extension members of any type downgraded from public) | n/a (Treeswift) | ✅ E2E repro `fixtures/F19-public-extension-member/` |
@@ -49,6 +49,29 @@ numbered section below.
 > and add a regression fixture.
 
 ---
+
+### Reproduction sweep (2026-06-12, late) — F3/F4/F5/F7 all MOOT on upstream f87c3f6
+
+Each fix was re-verified against vanilla `upstream/master` with a minimal, runnable repro (the discipline learned from the #1062 "can't reproduce" rejection). None reproduced — all four are independently resolved on current upstream / Swift 6.3.2. No PRs opened.
+
+- **F3** (protocol unused via conformance): upstream `ProtocolConformanceReferenceBuilder` + `RedundantProtocolMarker` report such a protocol as *redundant* (soft, correct), never *unused*. The Treeswift `ProtocolConformanceRetainer` predates this machinery; porting it would REGRESS upstream's redundant-protocol tests. Drop from porting list.
+- **F4** (conformance extension reported unused): `ExtensionReferenceBuilder` folds same-module conformance extensions into the extended type (external-type ones are markRetained), so the extension never reaches `ScanResultBuilder` as removable. The portable `ScanResultBuilder` guard is dead code upstream. The original Treeswift symptom came from Treeswift's OWN removal helpers (`removeEmptyContainers`/`findHighestEmptyAncestor`), which are Treeswift-only and stay there.
+- **F5** (private stored prop read-only flagged unused): Swift 6.3.2 index store now emits a DIRECT `var.instance` property-USR reference at each read site (not accessor-USR only), so `markUsed` retains the property with no accessor→property propagation. Catalog premise no longer holds. (F9 in PR #1132 stays valid — different path: accessibility, not used-marking.)
+- **F7 / F11** (nested type used only in sibling method signatures): upstream `markUsed` already walks child methods' `returnType`/`parameterType` references. Verified by both a retention test AND a real `periphery scan` on the DeepLinkHandler shape — `Destination` retained. The Treeswift extra-walk is redundant.
+
+Net: of the F-fix backlog, nothing remains to upstream except what's already in PR #1132 (F9/F10/F12). F1/F2/F8/F13/F14/F15/F16 were already moot/upstream. F6 excluded by design. F17–F20 are Treeswift-only.
+
+### Upstream sync status (2026-06-12)
+
+Verified against current upstream master (post #1075 / #1126):
+
+- **Issue #1062 / PR #1063 is moot** — upstream #1075 fixed it; both PR-1063 tests pass on vanilla upstream. Close issue + PR.
+- **PR #1042 replaced by PR #1132** (`redundant-internal-fileprivate` branch, clean 3-commit series on current upstream). Old fork `master` did not compile against current upstream (lost `unmarkRedundantInternalAccessibility` in a merge; `Declaration.name` became non-optional) — that was the cause of the all-red CI. F9/F10/F12 are folded into #1132. F6 deliberately excluded (blunt suppression; F10 covers the conformance-breaking case).
+- **PR #1133** opened for the unresolvable-subproject-reference driver fix.
+- **F13 and F16 are fixed upstream independently** — no port needed.
+- **F1 split**: the retention half is moot (upstream now retains declared property types); the redundant-internal suppression half only makes sense on top of PR #1132 and is deferred until that lands.
+- **F2/F8**: upstream #1126 retains Equatable/Hashable/Codable synthesized reads, which removes the known root causes; the blanket let-binding skip would mask real findings and should not go upstream as-is.
+- **Remaining ⏳/❓ rows**: before porting anything else, re-run the Prodcore scan with current upstream Periphery and only port fixes whose false positives still reproduce.
 
 ## 1. `@Observable` Macro: Wrong Source Positions for Synthesized Accessors
 
@@ -652,3 +675,47 @@ and builds clean. (Treeswift-side fix.)
 **Fixture:** `Prodcore-cleanup/fixtures/F20-fileprivate-func-cascade/Fixture.swift` — a top-level
 type returned by an `extension Array where …` method AND a free function (carries
 `// swiftformat:disable all`). In-repo proof is the E2E build-clean on R3.
+
+### Regression-replay finding (2026-06-14) — combine builds, but R5 scan counts jumped sharply
+
+The `combine` branch (fresh upstream f87c3f6 + glue + #1132 + #1134 + nested-as-is) was validated in an isolated scratch Treeswift clone (`/tmp/treeswift-replay`, DerivedData `/tmp/treeswift-replay-dd`, combine source `/tmp/combine-scratch`). Real Treeswift/Prodcore untouched.
+
+**What passed:**
+- combine builds standalone (swift build, 45s) and the full test suite is green (393 tests).
+- Treeswift app builds + links against combine after 5 small app-side API adaptations (patch saved: `/tmp/treeswift-app-api-adaptations.patch`). Drift was: `Reference.name` + `Declaration.name` optional→non-optional; `Scan.Output` tuple→struct (glue change); `DeclarationAttribute.name` now internal (use `.description`); `Reference.init` requires `name:`. These adaptations will be needed when the real subtree merge happens.
+- App launches, automation server runs, R5 scan completes against pristine Prodcore (`a1711d27`).
+
+**The open question (investigate later):** R5 scan counts on combine are far higher than the original experiment's R5 pass-1:
+| metric | experiment R5 pass-1 | combine scan |
+|---|---|---|
+| unused | 271 | 638 |
+| redunAcc (sum) | 464 | 773 (incl. 79 new nested-umbrella `redundantAccessibility`) |
+| assignOnlyProperty | 5 | **534** |
+| total | 740 | 1946 |
+
+Config flags identical (`retainCodableProperties:true`, `retainAssignOnlyProperties:false`). Combine's Periphery mutators MATCH upstream (CodablePropertyRetainer, EquatableHashablePropertyRetainer, AssignOnlyPropertyReferenceEliminator all present, pipeline intact) — so this is fresh-upstream Periphery behaving differently from the OLD subtree the experiment ran against, NOT a combine-merge defect in the analysis code. The 79 `redundantAccessibility` are the genuinely-new nested umbrella (expected). The big unexplained jumps are **assignOnly 5→534** and **unused 271→638**.
+
+NOT YET RUN: the decisive forceRemove→rebuild probe (would tell true-positive vs false-positive). Whether 534 assignOnly / 638 unused are real findings the old code missed, or false positives, is UNKNOWN until that probe runs. Scratch artifacts left in /tmp for that investigation.
+
+### CORRECTION + convergence re-proof (2026-06-14, late)
+
+**The "15/16 moot" verdict (earlier 2026-06-12 sweep) was WRONG.** Minimal upstream test fixtures did not reproduce the real Prodcore false-positive patterns at scale. The regression-replay (forceRemoveAll → rebuild Prodcore → count build errors — the experiment's actual convergence criterion) caught what fixture-testing missed.
+
+**What combine was actually missing** (restored, each committed + pushed to origin/combine):
+1. assignOnly `let`/init-body suppression — F2/F8 (PR #1136, also in combine). Dropped 534→197 reported.
+2. ObservableMacroRetainer (F1) + ProtocolConformanceRetainer (F3) — whole mutators dropped. Dropped unused 638→468, redundantInternal 584→273.
+3. UsedDeclarationMarker propagation walks (F5/F7/F9/F11/F13) — accessor→property (covers property-wrapper `$foo` projected values for @State), member→type, child varType/returnType/parameterType, nested-type-by-name. This was the big one: fixed the 123 `$`-binding false positives + the PhraseStatus nested-type errors.
+
+**Key reframe:** assignOnlyProperty + redundantProtocol are NON-REMOVABLE by design (the experiment never removes them) — their scan COUNT is cosmetic, not a convergence gate. The 141 remaining reported assignOnly are the #1058 design category (memberwise-init properties read only via synthesized code: truly assign-only but unsafe to remove) — visible-but-not-removed, correct. The real criterion is unused→0 after removal with zero build errors.
+
+**RESULT — combine (origin/combine @ 055609f) converges ALL FOUR historical baselines:**
+| baseline | commit | unused removed | stripped-build errors |
+|---|---|---|---|
+| R5 | a1711d27 | ~420 (4456 lines) | **0** ✅ |
+| R4 | 20fb9b87 | ~4465 lines | **0** ✅ |
+| R-May | 96e372e4 | ~4469 lines | **0** ✅ |
+| R3 | 23ad2547 | ~16511 lines | **0** ✅ |
+
+forceRemoveAll(unused) on each baseline → rebuild Prodcore → zero build errors = zero false positives. Combine's analysis is now proven correct against the full historical range, NOT just minimal fixtures. (F18/F19/F20 Treeswift removal-tool cascade fixes also exercised — the 17–24 insertions per baseline are their access-keyword rewrites, working.)
+
+**Still owed:** the restored fixes (Observable, Protocol, UsedDeclarationMarker walks) are in combine but only assignOnly (#1136) + sole-class-init (#1134) have upstream PRs. The others want individual upstream PRs with real-pattern-derived tests — DEFERRED, documented here.

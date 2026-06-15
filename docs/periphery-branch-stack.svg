@@ -1,0 +1,107 @@
+<svg viewBox="0 0 760 700" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Periphery branch architecture from upstream base to Treeswift subtree</title>
+<desc>Layered stack: upstream master base, danwood master mirror, feature branches with redundant-nested stacked above redundant-internal-fileprivate, a full-width combine branch, and the Treeswift subtree which is an exact copy of combine.</desc>
+<style>
+  .h{font-size:18px;font-weight:700;fill:#1a1a1a}
+  .lbl{font-size:13.5px;font-weight:700;fill:#1a1a1a}
+  .sub{font-size:10.5px;fill:#555}
+  .tiny{font-size:9.5px;fill:#777}
+  .wlbl{font-size:13px;font-weight:700;fill:#fff}
+</style>
+<rect x="0" y="0" width="760" height="700" fill="#ffffff"/>
+
+<text x="30" y="26" class="h">Periphery branch stack — base to Treeswift</text>
+
+<!-- TREESWIFT SUBTREE (top) -->
+<rect x="30" y="42" width="700" height="56" rx="9" fill="#e8eaf6" stroke="#3949ab" stroke-width="2"/>
+<text x="44" y="65" class="lbl" fill="#283593">Treeswift subtree — PeripherySource/periphery</text>
+<text x="44" y="83" class="sub">EXACT COPY of combine (glue now lives in combine, no separate subtree edits) · pulled into Treeswift repo</text>
+
+<!-- equals sign between subtree and combine -->
+<line x1="372" y1="114" x2="388" y2="114" stroke="#3949ab" stroke-width="2.5"/>
+<line x1="372" y1="120" x2="388" y2="120" stroke="#3949ab" stroke-width="2.5"/>
+<text x="396" y="121" class="tiny" fill="#3949ab" font-weight="700">identical content</text>
+
+<!-- COMBINE (full width) -->
+<rect x="30" y="128" width="700" height="52" rx="9" fill="#1976d2" stroke="#0d47a1" stroke-width="2"/>
+<text x="44" y="150" class="wlbl">combine  (origin/combine)</text>
+<text x="44" y="169" class="sub" fill="#e3f2fd">merge of glue + the branch-stack tops below · this IS what the subtree contains</text>
+
+<!-- converging arrows into combine, from the TOP of each stack -->
+<g stroke="#90a4ae" stroke-width="1.5" fill="none">
+  <path d="M115 250 L115 196 L380 196"/>
+  <path d="M275 250 L275 196"/>
+  <path d="M435 318 L435 196 L380 196"/>
+  <path d="M595 318 L595 196 L380 196"/>
+</g>
+<polygon points="380,182 374,192 386,192" fill="#90a4ae"/>
+
+<!-- DEPENDENT: redundant-nested stacked ABOVE #1132 -->
+<rect x="200" y="250" width="150" height="58" rx="8" fill="#e3f2fd" stroke="#1976d2" stroke-width="1.5"/>
+<text x="275" y="272" class="sub" font-weight="700" text-anchor="middle" fill="#0d47a1">redundant-nested</text>
+<text x="275" y="288" class="tiny" text-anchor="middle">future #1048</text>
+<text x="275" y="301" class="tiny" text-anchor="middle">(combine takes THIS)</text>
+
+<!-- glue (same row as nested top, leftmost) -->
+<rect x="40" y="250" width="150" height="58" rx="8" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.5"/>
+<text x="115" y="272" class="sub" font-weight="700" text-anchor="middle" fill="#5e35b1">treeswift-glue</text>
+<text x="115" y="288" class="tiny" text-anchor="middle">library integration</text>
+<text x="115" y="301" class="tiny" text-anchor="middle">(permanent, not upstream)</text>
+
+<!-- arrow nested -> #1132 (dependency, flows UP) -->
+<line x1="275" y1="318" x2="275" y2="260" stroke="#1976d2" stroke-width="1.5"/>
+<polygon points="275,250 269,260 281,260" fill="#1976d2"/>
+
+<!-- #1132 (below nested) -->
+<rect x="200" y="318" width="150" height="58" rx="8" fill="#e8f5e9" stroke="#4caf50" stroke-width="1.5"/>
+<text x="275" y="340" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">redundant-internal-</text>
+<text x="275" y="354" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">fileprivate</text>
+<text x="275" y="369" class="tiny" text-anchor="middle">PR #1132 · green</text>
+
+<!-- #1133 -->
+<rect x="360" y="318" width="150" height="58" rx="8" fill="#e8f5e9" stroke="#4caf50" stroke-width="1.5"/>
+<text x="435" y="340" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">fix-unresolvable-</text>
+<text x="435" y="354" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">subproject-refs</text>
+<text x="435" y="369" class="tiny" text-anchor="middle">PR #1133 · green</text>
+
+<!-- #1134 -->
+<rect x="520" y="318" width="150" height="58" rx="8" fill="#fff8e1" stroke="#f9a825" stroke-width="1.5"/>
+<text x="595" y="340" class="sub" font-weight="700" text-anchor="middle" fill="#e65100">fix-sole-class-init</text>
+<text x="595" y="356" class="tiny" text-anchor="middle">PR #1134 · draft</text>
+<text x="595" y="369" class="tiny" text-anchor="middle">(F15, 1 survivor)</text>
+
+<!-- note: nested depends on 1132 -->
+<text x="358" y="295" class="tiny" fill="#1976d2">depends on</text>
+<text x="358" y="307" class="tiny" fill="#1976d2">#1132 ↓</text>
+
+<!-- arrows from branch bottoms down to danwood master -->
+<g stroke="#bbb" stroke-width="1.3" fill="none">
+  <path d="M115 308 L115 412"/>
+  <path d="M275 376 L275 412"/>
+  <path d="M435 376 L435 412"/>
+  <path d="M595 376 L595 412"/>
+</g>
+<text x="688" y="400" class="tiny" text-anchor="end" fill="#999" font-style="italic">each forks off danwood master ↓</text>
+
+<!-- DANWOOD MASTER -->
+<rect x="30" y="414" width="700" height="40" rx="8" fill="#cfd8dc" stroke="#607d8b" stroke-width="2"/>
+<text x="44" y="439" class="lbl" fill="#37474f">danwood/master — exact mirror of upstream (f87c3f6)</text>
+
+<line x1="380" y1="470" x2="380" y2="454" stroke="#607d8b" stroke-width="2"/>
+<polygon points="380,470 374,460 386,460" fill="#607d8b"/>
+
+<!-- UPSTREAM MASTER (base) -->
+<rect x="30" y="470" width="700" height="60" rx="9" fill="#90a4ae" stroke="#455a64" stroke-width="2"/>
+<text x="44" y="496" class="wlbl">peripheryapp/periphery — upstream master  (f87c3f6)</text>
+<text x="44" y="516" class="sub" fill="#eceff1">the shared base everything builds on</text>
+
+<!-- legend -->
+<rect x="30" y="548" width="700" height="138" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="44" y="570" class="sub" font-weight="700">Reading bottom→top (dependencies all flow upward):</text>
+<text x="44" y="590" class="tiny">• Base = upstream. danwood/master just mirrors it.</text>
+<text x="44" y="606" class="tiny">• Each feature/bugfix branch forks off master. redundant-nested sits ON redundant-internal-fileprivate (#1132),</text>
+<text x="58" y="620" class="tiny">so combine pulls redundant-nested (the stack top), which already contains #1132.</text>
+<text x="44" y="636" class="tiny">• combine = glue + the stack tops, merged. INTERNAL only — never pushed upstream.</text>
+<text x="44" y="652" class="tiny">• Treeswift subtree = an EXACT copy of combine. Glue lives in combine now, so the subtree has no separate edits.</text>
+<text x="44" y="668" class="tiny">• As each PR merges upstream, its layer drops from combine → subtree shrinks toward glue-only over time.</text>
+</svg>
