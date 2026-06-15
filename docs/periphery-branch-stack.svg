@@ -1,125 +1,71 @@
-<svg viewBox="0 0 820 780" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
-<title>Periphery branch architecture: upstream base to Treeswift subtree</title>
-<desc>Layered stack: upstream master base, danwood master mirror, home branches (glue, feature/fix branches, Treeswift-only retainers), all merged into the combine branch, consumed by the Treeswift git subtree.</desc>
+<svg viewBox="0 0 680 480" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Periphery branch structure (simplified)</title>
+<desc>combine = upstream plus four branches: three independent PR/feature branches and one treeswift-extras bundle holding all Treeswift-only code. Consumed by the Treeswift git subtree.</desc>
 <style>
-  .h{font-size:18px;font-weight:700;fill:#1a1a1a}
-  .lbl{font-size:13px;font-weight:700;fill:#1a1a1a}
-  .sub{font-size:10.5px;fill:#555}
-  .tiny{font-size:9px;fill:#777}
-  .wlbl{font-size:13px;font-weight:700;fill:#fff}
-  .pr{font-size:8.5px;font-weight:700}
+  .h{font-size:15px;font-weight:700;fill:#1a1a1a}
+  .n{font-size:11px;font-weight:600;fill:#222}
+  .s{font-size:9px;fill:#666}
+  .t{font-size:9px;fill:#777}
+  .ts{font-size:8.5px;fill:#aaa}
 </style>
-<rect x="0" y="0" width="820" height="780" fill="#ffffff"/>
-<text x="30" y="26" class="h">Periphery branch stack — base to Treeswift subtree</text>
+<rect x="0" y="0" width="680" height="480" fill="#ffffff"/>
+<text x="20" y="24" class="h">Periphery branches — how combine is built</text>
+<text x="660" y="24" class="ts" text-anchor="end">2026-06-15</text>
 
-<!-- TREESWIFT SUBTREE (top) -->
-<rect x="30" y="42" width="760" height="54" rx="9" fill="#e8eaf6" stroke="#3949ab" stroke-width="2"/>
-<text x="44" y="65" class="lbl" fill="#283593">Treeswift git subtree — PeripherySource/periphery</text>
-<text x="44" y="83" class="sub">EXACT COPY of combine, vendored in the Treeswift repo (self-contained clone-and-build). Update via git subtree pull.</text>
+<!-- subtree on top -->
+<rect x="170" y="44" width="340" height="40" rx="8" fill="#e8eaf6" stroke="#3949ab" stroke-width="2"/>
+<text x="340" y="62" class="n" text-anchor="middle" fill="#283593">Treeswift git subtree (PeripherySource/periphery)</text>
+<text x="340" y="77" class="s" text-anchor="middle">= exact copy of combine · self-contained build</text>
+<text x="340" y="100" class="t" text-anchor="middle">↑ git subtree pull</text>
 
-<line x1="402" y1="114" x2="418" y2="114" stroke="#3949ab" stroke-width="2.5"/>
-<line x1="402" y1="120" x2="418" y2="120" stroke="#3949ab" stroke-width="2.5"/>
-<text x="426" y="121" class="tiny" fill="#3949ab" font-weight="700">identical content</text>
-
-<!-- COMBINE (full width) -->
-<rect x="30" y="128" width="760" height="52" rx="9" fill="#1976d2" stroke="#0d47a1" stroke-width="2"/>
-<text x="44" y="150" class="wlbl">combine  (origin/combine)</text>
-<text x="44" y="169" class="sub" fill="#e3f2fd">a SERIES of merges of the branches below (some conflict → union-resolve) · converges all 4 Prodcore baselines (0 errors)</text>
+<!-- combine -->
+<rect x="170" y="108" width="340" height="40" rx="8" fill="#1976d2" stroke="#0d47a1" stroke-width="2"/>
+<text x="340" y="126" class="n" text-anchor="middle" fill="#fff">combine  (origin/combine)</text>
+<text x="340" y="140" class="s" text-anchor="middle" fill="#e3f2fd">= upstream + the 4 boxes below, merged in</text>
 
 <!-- arrows into combine -->
-<g stroke="#90a4ae" stroke-width="1.3" fill="none">
-  <path d="M105 250 L105 196 L410 196"/>
-  <path d="M255 250 L255 196"/>
-  <path d="M410 318 L410 196"/>
-  <path d="M560 318 L560 196 L410 196"/>
-  <path d="M695 250 L695 196 L410 196"/>
+<g stroke="#90a4ae" stroke-width="1.4" fill="none">
+  <path d="M105 230 L105 168 L330 168"/>
+  <path d="M255 230 L255 168"/>
+  <path d="M425 230 L425 168"/>
+  <path d="M575 230 L575 168 L350 168"/>
 </g>
-<polygon points="410,182 404,192 416,192" fill="#90a4ae"/>
+<polygon points="340,154 334,164 346,164" fill="#90a4ae"/>
 
-<!-- ROW 1 (tops): glue, redundant-nested(dep), used-marking, observable-protocol -->
-<!-- glue -->
-<rect x="34" y="250" width="142" height="58" rx="8" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.5"/>
-<text x="105" y="270" class="sub" font-weight="700" text-anchor="middle" fill="#5e35b1">treeswift-glue</text>
-<text x="105" y="285" class="tiny" text-anchor="middle">library integration</text>
-<text x="105" y="298" class="tiny" text-anchor="middle">(never upstream)</text>
+<!-- 4 ingredient boxes -->
+<rect x="40" y="230" width="130" height="58" rx="7" fill="#e8f5e9" stroke="#4caf50"/>
+<text x="105" y="252" class="n" text-anchor="middle" fill="#2e7d32">#1133</text>
+<text x="105" y="268" class="s" text-anchor="middle">subproject-refs</text>
+<text x="105" y="281" class="t" text-anchor="middle">PR → upstream</text>
 
-<!-- redundant-nested (dep, above #1132) -->
-<rect x="190" y="250" width="142" height="58" rx="8" fill="#e3f2fd" stroke="#1976d2" stroke-width="1.5"/>
-<text x="261" y="270" class="sub" font-weight="700" text-anchor="middle" fill="#0d47a1">redundant-nested</text>
-<text x="261" y="285" class="tiny" text-anchor="middle">future #1048</text>
-<text x="261" y="298" class="tiny" text-anchor="middle">(on #1132 ↓)</text>
-<line x1="261" y1="318" x2="261" y2="260" stroke="#1976d2" stroke-width="1.3"/>
-<polygon points="261,250 256,260 266,260" fill="#1976d2"/>
+<rect x="190" y="230" width="130" height="58" rx="7" fill="#fff8e1" stroke="#f9a825"/>
+<text x="255" y="252" class="n" text-anchor="middle" fill="#e65100">#1134</text>
+<text x="255" y="268" class="s" text-anchor="middle">sole-class-init</text>
+<text x="255" y="281" class="t" text-anchor="middle">PR → upstream</text>
 
-<!-- used-marking walks -->
-<rect x="624" y="250" width="142" height="58" rx="8" fill="#fdeef0" stroke="#c2185b" stroke-width="1.5"/>
-<text x="695" y="268" class="sub" font-weight="700" text-anchor="middle" fill="#ad1457">used-marking-walks</text>
-<text x="695" y="283" class="tiny" text-anchor="middle">5 walks; 1 → #1137</text>
-<text x="695" y="296" class="tiny" text-anchor="middle">rest Treeswift-only</text>
+<rect x="360" y="230" width="130" height="58" rx="7" fill="#e3f2fd" stroke="#1976d2"/>
+<text x="425" y="252" class="n" text-anchor="middle" fill="#0d47a1">redundant-nested</text>
+<text x="425" y="268" class="s" text-anchor="middle">#1048 feature</text>
+<text x="425" y="281" class="t" text-anchor="middle">future PR</text>
 
-<!-- ROW 2: #1132, #1133, #1134, observable-protocol -->
-<!-- #1132 (below nested) -->
-<rect x="190" y="318" width="142" height="58" rx="8" fill="#e8f5e9" stroke="#4caf50" stroke-width="1.5"/>
-<text x="261" y="336" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">redundant-internal-</text>
-<text x="261" y="349" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">fileprivate</text>
-<text x="261" y="368" class="pr" text-anchor="middle" fill="#2e7d32">PR #1132 · green</text>
+<rect x="510" y="230" width="130" height="58" rx="7" fill="#fdeef0" stroke="#c2185b" stroke-width="2"/>
+<text x="575" y="250" class="n" text-anchor="middle" fill="#ad1457">treeswift-extras</text>
+<text x="575" y="265" class="s" text-anchor="middle">#1132 + ALL</text>
+<text x="575" y="278" class="s" text-anchor="middle">Treeswift-only fixes</text>
 
-<!-- #1133 -->
-<rect x="346" y="318" width="142" height="58" rx="8" fill="#e8f5e9" stroke="#4caf50" stroke-width="1.5"/>
-<text x="417" y="336" class="sub" font-weight="700" text-anchor="middle" fill="#2e7d32">subproject-refs</text>
-<text x="417" y="368" class="pr" text-anchor="middle" fill="#2e7d32">PR #1133 · green</text>
-
-<!-- #1134 -->
-<rect x="502" y="318" width="142" height="58" rx="8" fill="#fff8e1" stroke="#f9a825" stroke-width="1.5"/>
-<text x="573" y="336" class="sub" font-weight="700" text-anchor="middle" fill="#e65100">sole-class-init</text>
-<text x="573" y="352" class="tiny" text-anchor="middle">(F15)</text>
-<text x="573" y="368" class="pr" text-anchor="middle" fill="#e65100">PR #1134 · draft</text>
-
-<!-- observable-protocol (right, spans toward combine) -->
-<rect x="624" y="318" width="142" height="58" rx="8" fill="#fdeef0" stroke="#c2185b" stroke-width="1.5"/>
-<text x="695" y="336" class="sub" font-weight="700" text-anchor="middle" fill="#ad1457">observable-protocol-</text>
-<text x="695" y="349" class="sub" font-weight="700" text-anchor="middle" fill="#ad1457">retainers</text>
-<text x="695" y="368" class="tiny" text-anchor="middle">F1+F3 · Treeswift-only</text>
-<line x1="695" y1="318" x2="695" y2="308" stroke="#c2185b" stroke-width="1.3"/>
-
-<!-- assignOnly BRANCH (stacked on #1132 + glue) -->
-<rect x="346" y="404" width="296" height="46" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="2"/>
-<text x="494" y="423" class="sub" font-weight="700" text-anchor="middle" fill="#bf360c">treeswift-assignonly-retention  (branch)</text>
-<text x="494" y="438" class="tiny" text-anchor="middle">STACKED on #1132 + glue (needs their plumbing) → not based on bare upstream.  PR #1136 = related.</text>
-
-<!-- arrows from row2 down to master -->
+<!-- all sit on upstream -->
 <g stroke="#bbb" stroke-width="1.2" fill="none">
-  <path d="M105 308 L105 470"/>
-  <path d="M261 376 L261 470"/>
-  <path d="M417 376 L417 470"/>
-  <path d="M573 376 L573 470"/>
-  <path d="M695 376 L695 470"/>
+  <path d="M105 288 L105 386"/>
+  <path d="M255 288 L255 386"/>
+  <path d="M425 288 L425 386"/>
+  <path d="M575 288 L575 386"/>
 </g>
-<text x="760" y="392" class="tiny" text-anchor="end" fill="#999" font-style="italic">all fork off danwood master ↓</text>
 
-<!-- DANWOOD MASTER -->
-<rect x="30" y="472" width="760" height="38" rx="8" fill="#cfd8dc" stroke="#607d8b" stroke-width="2"/>
-<text x="44" y="496" class="lbl" fill="#37474f">danwood/master — exact mirror of upstream (f87c3f6)</text>
+<rect x="170" y="388" width="340" height="40" rx="8" fill="#90a4ae" stroke="#455a64" stroke-width="2"/>
+<text x="340" y="412" class="n" text-anchor="middle" fill="#fff">upstream/master (peripheryapp · f87c3f6)</text>
 
-<line x1="410" y1="528" x2="410" y2="510" stroke="#607d8b" stroke-width="2"/>
-<polygon points="410,528 404,518 416,518" fill="#607d8b"/>
-
-<!-- UPSTREAM MASTER -->
-<rect x="30" y="528" width="760" height="56" rx="9" fill="#90a4ae" stroke="#455a64" stroke-width="2"/>
-<text x="44" y="553" class="wlbl">peripheryapp/periphery — upstream master  (f87c3f6)</text>
-<text x="44" y="572" class="sub" fill="#eceff1">the shared base everything builds on</text>
-
-<!-- legend bottom -->
-<rect x="30" y="600" width="760" height="166" rx="8" fill="#fafafa" stroke="#ddd"/>
-<text x="44" y="621" class="sub" font-weight="700">Reading bottom→top (dependencies flow upward):</text>
-<text x="44" y="639" class="tiny">• Base = upstream. Most branches fork INDEPENDENTLY off master (not stacked); redundant-nested depends on #1132, assignonly is stacked on #1132+glue.</text>
-<rect x="44" y="647" width="11" height="9" fill="#e8f5e9" stroke="#4caf50"/><rect x="57" y="647" width="11" height="9" fill="#fff8e1" stroke="#f9a825"/>
-<text x="74" y="655" class="tiny">green/yellow = open upstream PRs (#1132/#1133/#1134; #1136/#1137 cover parts of assignOnly + used-marking).</text>
-<rect x="44" y="663" width="11" height="9" fill="#fdeef0" stroke="#c2185b"/>
-<text x="74" y="671" class="tiny">pink = Treeswift-ONLY fixes. They make combine converge on Prodcore, but can't go upstream — they trade upstream's dead-code</text>
-<text x="74" y="684" class="tiny">precision for recall (catch everything safely). The 2 pink branches are independent of each other; both fork off upstream.</text>
-<text x="44" y="700" class="tiny">• treeswift-assignonly-retention is STACKED on #1132 + glue (it needs their plumbing), so it forks off #1132, not bare upstream.</text>
-<text x="44" y="716" class="tiny">• combine = the above merged in sequence (glue+#1132, redundant-nested, and assignonly conflict → resolve by union / take prior combine). INTERNAL only.</text>
-<text x="44" y="732" class="tiny">• Treeswift subtree = an exact copy of combine, vendored (self-contained build). Rebuild recipe: docs/periphery-combine-rebuild.md.</text>
-<text x="44" y="748" class="tiny">• As upstream merges the PR'd subset, drop those branches from combine → it shrinks toward glue + the pink Treeswift-only retainers.</text>
+<!-- legend -->
+<rect x="20" y="440" width="640" height="34" rx="6" fill="#fafafa" stroke="#ddd"/>
+<text x="30" y="457" class="t">All 4 ingredient branches fork off upstream and merge into combine — no loops, no stacking. green/yellow/blue = real upstream</text>
+<text x="30" y="468" class="t">PRs / feature. pink treeswift-extras = every Treeswift-only fix in ONE branch (it also carries #1132, which the assign-only fix needs).</text>
 </svg>

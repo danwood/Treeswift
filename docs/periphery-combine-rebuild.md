@@ -1,28 +1,33 @@
 # Rebuilding the `combine` branch on a new upstream Periphery
 
-When a new upstream Periphery release comes out, `combine` (the branch the Treeswift subtree tracks) must be rebuilt on top of it. This is the periodic, non-trivial maintenance task. All work happens in the fork clone `danwood/periphery` (not in Treeswift).
+When a new upstream Periphery release comes out, `combine` (the branch the Treeswift subtree tracks) must be rebuilt on top of it. This is the periodic maintenance task. All work happens in the fork clone `danwood/periphery` (not in Treeswift).
 
 ## What `combine` is made of
 
-`combine` = current `upstream/master` + four merged feature branches + a stack of glue/fix commits on top. Verified composition (as of combine `055609f`):
+`combine` = current `upstream/master` + **four** branches merged in. That's it — no loops, no separately-stacked fix commits.
 
-**Merged branches** (each based on `upstream/master`):
 | branch | what | upstream PR |
 |---|---|---|
-| `treeswift-glue` | library-integration glue (Package.swift product split, end-position tracking, ScanProgressDelegate, task-cancellation, public API) | none (never upstream) |
 | `fix-unresolvable-subproject-refs` | `try?` driver fix | #1133 |
 | `fix-sole-class-init` | retain sole class init | #1134 |
-| `redundant-internal-fileprivate` | redundant internal/fileprivate analysis | #1132 |
 | `redundant-nested` | redundant nested access (#1048 feature) | not yet |
+| `treeswift-extras` | **#1132's redundant internal/fileprivate analysis PLUS every Treeswift-only fix**, all in one branch | mixed (see below) |
 
-**Fix commits/branches layered on top** (these are the ones the replay proved necessary — they are NOT all upstreamable; combine optimizes recall, upstream precision):
-| source | what | status |
-|---|---|---|
-| `treeswift-observable-protocol-retainers` (branch) | ObservableMacroRetainer (F1) + ProtocolConformanceRetainer (F3) | Treeswift-only (F1 inert upstream, F3 conflicts with redundant-protocol diagnostic) |
-| `treeswift-used-marking-walks` (branch) | the full 5 UsedDeclarationMarker propagation walks | only 1 walk upstreamable (#1137); the rest are recall-over-precision |
-| `treeswift-assignonly-retention` (branch, **stacked on #1132 + glue**) | retain initialized constant assign-only properties | entangled with glue + #1132's `isLetBinding` plumbing, so this branch is NOT based on bare upstream — it is built on `redundant-internal-fileprivate` (#1132) with `treeswift-glue` merged in, then the fix on top. (related upstream PR: #1136) |
+### Inside `treeswift-extras`
 
-Before rebuilding, keep a ref to the current combine (e.g. `git branch combine-prev origin/combine`) — it's both the conflict-resolution source (step 2) and the fallback if a rebuild goes sideways.
+This one branch bundles all the Treeswift-specific code so the rest of the graph stays simple. It is built **on top of `redundant-internal-fileprivate` (#1132)** — because the assign-only fix needs #1132's `isLetBinding` plumbing — with everything else merged in. Contents:
+
+- the **glue** (library integration: Package.swift product split, end-position tracking, ScanProgressDelegate, task-cancellation, public API) — never upstream
+- **ObservableMacroRetainer (F1)** + **ProtocolConformanceRetainer (F3)** — Treeswift-only (F1 inert on current upstream toolchain, F3 conflicts with upstream's redundant-protocol diagnostic)
+- the full **UsedDeclarationMarker propagation walks (F5/F7/F9/F11/F13)** — only one walk is upstreamable (that's PR #1137, a *separate* `fix-used-marking-propagation` branch); the rest are recall-over-precision
+- the **assign-only retention** fix (related upstream PR: #1136, a *separate* `fix-assignonly-init-retained` branch)
+- and it carries **#1132** as its base.
+
+So `treeswift-extras` is the single home for everything that is correct for Treeswift's aggressive cleanup but wrong (or moot) for upstream. The clean upstream PRs (#1132/#1133/#1134/#1136/#1137) live on their own separate branches and are NOT folded in here.
+
+## Why a separate `treeswift-extras` instead of stacking everything
+
+Each upstream PR branch must sit on **bare upstream** so it's a clean pull request. But several Treeswift-only fixes depend on each other (the assign-only fix needs #1132). If those dependencies were drawn as independent branches that "secretly contain" each other, the graph became a tangle of loops. Folding all the Treeswift-only code into one branch (`treeswift-extras`) — which is allowed to carry #1132 because it never goes upstream — removes the loops entirely. The result: 4 simple ingredient branches, all off upstream, merged into combine.
 
 ## Rebuild procedure
 
@@ -30,49 +35,41 @@ Before rebuilding, keep a ref to the current combine (e.g. `git branch combine-p
 cd /Users/dwood/code/periphery-dan-private
 git fetch upstream
 git fetch origin
+git branch -f combine-prev origin/combine    # fallback + conflict-resolution source; keep until done
 ```
 
-1. **Rebase each feature/glue branch onto the new upstream** (or recreate if a rebase is messy). Order doesn't matter for the independent ones; do them one at a time and fix any conflicts from upstream API changes:
+1. **Rebase each ingredient branch onto the new upstream.** The three PR/feature branches rebase straightforwardly; `treeswift-extras` is the involved one (it carries #1132 + glue + the fixes, so expect conflicts from upstream API drift):
    ```sh
-   for b in treeswift-glue fix-unresolvable-subproject-refs fix-sole-class-init \
-            redundant-internal-fileprivate redundant-nested \
-            treeswift-observable-protocol-retainers treeswift-used-marking-walks; do
-     git checkout "$b" && git rebase upstream/master   # resolve, build, test
+   for b in fix-unresolvable-subproject-refs fix-sole-class-init redundant-nested redundant-internal-fileprivate; do
+     git checkout "$b" && git rebase upstream/master   # resolve, build
    done
+   # treeswift-extras is built ON redundant-internal-fileprivate; rebuild it after #1132 is rebased:
+   git checkout treeswift-extras && git rebase upstream/master   # heavier; resolve carefully, build + test
    ```
-   Build each after rebasing (`DEVELOPER_DIR=/Applications/Xcode-26.5.0.app/Contents/Developer swift build`). Upstream API drift is the usual conflict source.
+   Build each after rebasing (`DEVELOPER_DIR=/Applications/Xcode-26.5.0.app/Contents/Developer swift build`).
 
-2. **Recreate `combine`** off the new upstream and merge the branches in. Most branches fork independently off upstream, so this is a series of merges — NOT a clean fast-forward chain. Several conflict (the branches edit overlapping files); the verified resolution is below.
+2. **Recreate `combine`** off the new upstream and merge the four branches:
    ```sh
-   git branch -f combine upstream/master
-   git checkout combine
-   git merge treeswift-glue                    # clean
-   git merge fix-unresolvable-subproject-refs  # clean
-   git merge fix-sole-class-init               # clean
-   git merge redundant-internal-fileprivate    # CONFLICT ~2 files (Project.swift, main.swift) — glue vs #1132 public-API
-   git merge redundant-nested                  # CONFLICT ~19 files — redundant-nested carries an OLDER copy of the int/fileprivate feature
-   git merge treeswift-observable-protocol-retainers  # clean
-   git merge treeswift-used-marking-walks      # clean
-   git merge treeswift-assignonly-retention    # CONFLICT ~1 file (Declaration.swift) — stacked on #1132+glue, merge AFTER those
+   git checkout combine && git reset --hard upstream/master
+   git merge fix-unresolvable-subproject-refs   # clean
+   git merge fix-sole-class-init                # clean
+   git merge redundant-nested                   # usually clean
+   git merge treeswift-extras                   # CONFLICTS (~20 files) — it overlaps the others heavily
    ```
+   **Conflict resolution (verified to reproduce combine exactly):** for every conflicted file, take the previous combine's already-resolved version — `git checkout combine-prev -- <file>` then `git add` + commit. The prior combine encodes all the correct unions. (The hard invariant inside those files: end positions stay EXCLUDED from `Location` equality/hash, else ~58 parameter-lookup tests fail.)
 
-   **Conflict resolution (verified — this dry-run reproduces combine exactly):**
-   - The clean way is to take the **already-resolved version from the previous `combine`** for every conflicted file: `git checkout <old-combine-ref> -- <file>` then `git add` + commit. (Keep a ref/branch of the prior combine before `branch -f` overwrites it.) This works because the prior combine encodes all the correct unions.
-   - If resolving from scratch instead: glue + #1132 conflicts are **unions** — glue adds end-position/progress/public-API, #1132 adds the analysis; keep BOTH. The redundant-nested conflict: take **#1132's** marker files (RedundantInternal/Fileprivate/Public, shared helpers) — nested's are older; keep only nested's genuinely-new umbrella mutator + flags. For `treeswift-assignonly-retention`, the merged `DeclarationSyntaxVisitor`/`Declaration` must have BOTH `isLetBinding` (#1132) AND the `endPosition`/`location(from:to:)` glue code.
-   - The hard rule that survives all of it: **end positions stay EXCLUDED from `Location` equality/hash** (else ~58 parameter-lookup tests fail).
+3. **Build + full test**: `swift build && swift test`. Self-scan gate: `./.build/debug/periphery scan --quiet --clean-build --strict` → "No unused code detected". Lint: `mise exec -- swiftformat --quiet --strict . && mise exec -- swiftlint lint --quiet --strict`.
 
-3. **Build + full test**: `swift build && swift test`. Then run the upstream self-scan gate: `./.build/debug/periphery scan --quiet --clean-build --strict` → "No unused code detected". Lint: `mise exec -- swiftformat --quiet --strict . && mise exec -- swiftlint lint --quiet --strict`.
+4. **Re-prove convergence** (the real acceptance test) — see [periphery-operation-status.md](periphery-operation-status.md) for the forceRemoveAll→rebuild probe against the four Prodcore baselines (R5/R4/R-May/R3). Each must rebuild with **zero build errors** after a full unused-code removal.
 
-4. **Re-prove convergence** (the real acceptance test) — see [periphery-operation-status.md](periphery-operation-status.md) for the forceRemoveAll→rebuild probe against the four Prodcore baselines (R5/R4/R-May/R3). Each must rebuild with **zero build errors** after a full unused-code removal. This is what validates that combine's recall-tuned analysis is still safe.
-
-5. **Push** (force, since `combine` is rewritten). Keep the old combine as a fallback ref first:
+5. **Push** (force, since `combine` is rewritten):
    ```sh
-   git branch -f combine-prev origin/combine   # fallback to the previous combine, just in case
    git push -f origin combine
+   git branch -D combine-prev   # once you're satisfied
    ```
 
 6. **Update the subtree** in Treeswift — see [periphery-subtree-maintenance.md](periphery-subtree-maintenance.md).
 
-## Why so manual
+## As upstream merges the PRs
 
-Combine deliberately carries fixes that are correct for Treeswift's aggressive cleanup but wrong (or moot) for upstream — so they can't all become upstream PRs that would eventually flow back automatically. Until/unless upstream adopts equivalents, this rebuild keeps them layered on each new upstream. As upstream merges the PR'd subset (#1132/#1133/#1134/#1136/#1137), drop those branches from the merge list — `combine` shrinks toward glue + the Treeswift-only retainers.
+When ileitch merges #1132/#1133/#1134/#1136/#1137, those fixes become part of the new upstream base — so drop the corresponding ingredient branch from the merge list (and from `treeswift-extras`, for the parts it carries). Over time `combine` shrinks toward just `treeswift-extras` (glue + the genuinely-Treeswift-only retainers) on top of upstream.

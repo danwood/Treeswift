@@ -29,7 +29,7 @@ When resolving a subtree-pull conflict: **take the incoming `combine` version fo
 
 ## Modification Categories (the glue)
 
-These are the library-integration changes. They originate from the `treeswift-glue` branch in the fork (and are part of `combine`). ~17 files.
+These are the library-integration changes (the "glue"). In the fork they live inside the `treeswift-extras` branch — the single branch that bundles all Treeswift-only code — and reach the subtree via `combine`. ~17 files.
 
 ### 1. Package structure — `Package.swift`
 
