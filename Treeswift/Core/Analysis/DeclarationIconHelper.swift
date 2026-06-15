@@ -16,7 +16,7 @@ enum DeclarationIconHelper {
 		} else if conformsToView(declaration) {
 			.emoji("🖼️")
 		} else if declaration.kind == .class,
-		          declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.hasPrefix("NS") == true }) {
+		          declaration.immediateInheritedTypeReferences.contains(where: { $0.name.hasPrefix("NS") }) {
 			.emoji("🟤")
 		} else {
 			.emoji(declaration.kind.icon)
@@ -38,11 +38,7 @@ enum DeclarationIconHelper {
 		]
 
 		let hasViewConformance = declaration.immediateInheritedTypeReferences.contains(where: { ref in
-			if let n = ref.name {
-				let isViewType = hardcodedViewTypes.contains(n)
-				return isViewType
-			}
-			return false
+			hardcodedViewTypes.contains(ref.name)
 		})
 
 		return hasViewConformance
@@ -50,12 +46,12 @@ enum DeclarationIconHelper {
 
 	nonisolated static func isMainApp(_ declaration: Declaration) -> Bool {
 		if declaration.attributes.map(\.description).contains("main"),
-		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
+		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name.contains("App") }) {
 			return true
 		}
 
 		if declaration.name.hasSuffix("App"),
-		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("App") == true }) {
+		   declaration.immediateInheritedTypeReferences.contains(where: { $0.name.contains("App") }) {
 			return true
 		}
 

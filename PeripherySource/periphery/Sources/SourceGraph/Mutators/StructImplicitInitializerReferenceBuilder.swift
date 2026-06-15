@@ -15,9 +15,7 @@ final class StructImplicitInitializerReferenceBuilder: SourceGraphMutator {
             let implicitInitDecls = structDecl.declarations.filter { $0.kind == .functionConstructor && $0.isImplicit }
 
             for implicitInitDecl in implicitInitDecls {
-                let name = implicitInitDecl.name
-
-                let propertyNames = name
+                let propertyNames = implicitInitDecl.name
                     .dropFirst("init(".count)
                     .dropLast(")".count)
                     .split(separator: ":")
@@ -37,12 +35,12 @@ final class StructImplicitInitializerReferenceBuilder: SourceGraphMutator {
                     for decl in [propertyDecl, setterDecl] {
                         for usr in decl.usrs {
                             let ref = Reference(
+                                name: decl.name,
                                 kind: .normal,
                                 declarationKind: decl.kind,
                                 usr: usr,
                                 location: implicitInitDecl.location
                             )
-                            ref.name = decl.name
                             ref.parent = implicitInitDecl
                             graph.add(ref, from: implicitInitDecl)
                         }

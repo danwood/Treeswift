@@ -3,7 +3,7 @@ import Logger
 import Synchronization
 
 private final class ShellProcessStore: Sendable {
-    let processes = Mutex<Set<Process>>([])
+    private let processes = Mutex<Set<Process>>([])
 
     func interruptRunning() {
         processes.withLock { processes in

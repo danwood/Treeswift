@@ -2,38 +2,30 @@ import Foundation
 import SourceGraph
 
 public struct ScanResult {
-    public
-    enum Annotation {
+    public enum Annotation {
         case unused
         case assignOnlyProperty
         case redundantProtocol(references: Set<Reference>, inherited: Set<String>)
         case redundantPublicAccessibility(modules: Set<String>)
         case redundantInternalAccessibility(suggestedAccessibility: Accessibility?)
         case redundantFilePrivateAccessibility(containingTypeName: String?)
-        case superfluousIgnoreCommand
         case redundantAccessibility(files: Set<SourceFile>)
+        case superfluousIgnoreCommand
     }
 
-    public
-    let declaration: Declaration
-    public
-    let annotation: Annotation
+    public let declaration: Declaration
+    public let annotation: Annotation
 
-    // 🌲 Explicit public init so external modules (Treeswift) can construct ScanResult.
+    // Explicit public init so external modules can construct ScanResult.
     public init(declaration: Declaration, annotation: Annotation) {
         self.declaration = declaration
         self.annotation = annotation
     }
 
     public var usrs: Set<String> {
-        declaration.usrs
-    }
-
-    /// Indicates whether this result should be included in baselines.
-    /// Superfluous ignore command results are excluded since they're warnings
-    /// about unnecessary comments, not unused code.
-    public var includeInBaseline: Bool {
-        if case .superfluousIgnoreCommand = annotation { return false }
-        return true
+        if case .superfluousIgnoreCommand = annotation {
+            return declaration.usrs.mapSet { "superfluous-ignore-\($0)" }
+        }
+        return declaration.usrs
     }
 }

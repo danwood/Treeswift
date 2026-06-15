@@ -19,9 +19,9 @@ public struct IndexPipeline {
         self.swiftVersion = swiftVersion
     }
 
-    public func perform() throws {
+    public func perform() throws -> Int {
         try Task.checkCancellation()
-        try SwiftIndexer(
+        let scannedLOC = try SwiftIndexer(
             sourceFiles: plan.sourceFiles,
             graph: graph,
             logger: logger,
@@ -29,8 +29,8 @@ public struct IndexPipeline {
             swiftVersion: swiftVersion
         ).perform()
 
-        try Task.checkCancellation()
         if !plan.plistPaths.isEmpty {
+            try Task.checkCancellation()
             try InfoPlistIndexer(
                 infoPlistFiles: plan.plistPaths,
                 graph: graph,
@@ -39,8 +39,8 @@ public struct IndexPipeline {
             ).perform()
         }
 
-        try Task.checkCancellation()
         if !plan.xibPaths.isEmpty {
+            try Task.checkCancellation()
             try XibIndexer(
                 xibFiles: plan.xibPaths,
                 graph: graph,
@@ -49,8 +49,8 @@ public struct IndexPipeline {
             ).perform()
         }
 
-        try Task.checkCancellation()
         if !plan.xcDataModelPaths.isEmpty {
+            try Task.checkCancellation()
             try XCDataModelIndexer(
                 files: plan.xcDataModelPaths,
                 graph: graph,
@@ -59,8 +59,8 @@ public struct IndexPipeline {
             ).perform()
         }
 
-        try Task.checkCancellation()
         if !plan.xcMappingModelPaths.isEmpty {
+            try Task.checkCancellation()
             try XCMappingModelIndexer(
                 files: plan.xcMappingModelPaths,
                 graph: graph,
@@ -70,5 +70,6 @@ public struct IndexPipeline {
         }
 
         graph.withLock { $0.indexingComplete() }
+        return scannedLOC
     }
 }

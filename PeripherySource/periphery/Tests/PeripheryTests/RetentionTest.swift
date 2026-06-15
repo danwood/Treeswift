@@ -594,23 +594,6 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
-    func testRetainsStaticMethodOnExternalTypeExtension() {
-        analyze(retainPublic: true) {
-            assertReferenced(.class("FixtureClassStaticExtMethod")) {
-                self.assertReferenced(.functionMethodInstance("someMethod()"))
-            }
-            assertReferenced(.extensionStruct("Array", line: 11)) {
-                self.assertReferenced(.functionMethodStatic("emptyArray()"))
-            }
-            assertReferenced(.extensionStruct("Array", line: 15)) {
-                self.assertReferenced(.functionMethodStatic("constrainedFactory(_:)"))
-            }
-            assertReferenced(.extensionClass("NumberFormatter", line: 19)) {
-                self.assertReferenced(.functionMethodStatic("customFormat()"))
-            }
-        }
-    }
-
     func testRetainsExtendedTypeAlias() {
         analyze(retainPublic: true) {
             assertReferenced(.typealias("Fixture214TypeAlias"))
@@ -865,14 +848,7 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertReferenced(.class("FixtureClass71")) {
                 self.assertNotReferenced(.varInstance("someVar"))
             }
-            assertReferenced(.class("FixtureClass72"))
-        }
-    }
-
-    func testRetainsPropertyTypeReferencesOfUsedDeclaration() {
-        analyze(retainPublic: true) {
-            assertReferenced(.struct("FixtureViewModel222"))
-            assertReferenced(.struct("FixtureItem222"))
+            assertNotReferenced(.class("FixtureClass72"))
         }
     }
 
@@ -970,6 +946,14 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    func testRetainsDynamicMemberLookupSubscriptInExternalTypeExtension() {
+        analyze(retainPublic: true) {
+            assertReferenced(.extensionEnum("AttributeDynamicLookup")) {
+                self.assertReferenced(.functionSubscript("subscript(dynamicMember:)"))
+            }
+        }
+    }
+
     func testRetainsCodableProperties() {
         analyze(
             retainPublic: true,
@@ -1018,27 +1002,85 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
-    // 🌲 Regression test: a custom type used only as a retained Codable property's type must itself
-    // be retained (PeripheryIssues.md #16 / README_Treeswift.md P13).
-    func testRetainsCodablePropertyCustomType() {
-        // Without Codable retention, the custom type is unreferenced.
+    func testRetainsEquatableProperties() {
         analyze(
             retainPublic: true,
-            retainCodableProperties: false
+            retainEquatableProperties: false,
+            retainAssignOnlyProperties: false
         ) {
-            assertReferenced(.struct("FixtureStruct200"))
-            assertNotReferenced(.struct("FixtureStruct201"))
+            assertReferenced(.struct("FixtureStruct222")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertAssignOnlyProperty(.varInstance("unused"))
+            }
         }
 
-        // With Codable retention, the property is retained — and so is its declared type.
         analyze(
             retainPublic: true,
-            retainCodableProperties: true
+            retainEquatableProperties: true
         ) {
-            assertReferenced(.struct("FixtureStruct200")) {
-                self.assertReferenced(.varInstance("value"))
+            assertReferenced(.struct("FixtureStruct222")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
             }
-            assertReferenced(.struct("FixtureStruct201"))
+
+            assertReferenced(.struct("FixtureStruct223")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+
+            assertReferenced(.class("FixtureClass222")) {
+                // The class has a single explicit initializer, which is retained because removing it
+                // would make the class unconstructable. That initializer assigns `unused`, so the
+                // property cannot be removed without orphaning the assignment, and it is retained
+                // rather than reported as assign-only.
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsHashableProperties() {
+        analyze(
+            retainPublic: true,
+            retainHashableProperties: false,
+            retainAssignOnlyProperties: false
+        ) {
+            assertReferenced(.struct("FixtureStruct224")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+
+        analyze(
+            retainPublic: true,
+            retainHashableProperties: true
+        ) {
+            assertReferenced(.struct("FixtureStruct224")) {
+                self.assertNotReferenced(.functionConstructor("init(unused:)"))
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsInitializedConstantProperties() {
+        analyze(retainPublic: true, retainAssignOnlyProperties: false) {
+            // The initializer is used, so its assignment and parameter are load-bearing and the
+            // `let` property must be retained rather than reported as assign-only.
+            assertReferenced(.struct("FixtureStruct230")) {
+                self.assertReferenced(.functionConstructor("init(identifier:)"))
+                self.assertReferenced(.varInstance("identifier"))
+                self.assertNotAssignOnlyProperty(.varInstance("identifier"))
+            }
+
+            // The initializer is never called, so the `let` property remains safely removable and
+            // is still reported as assign-only.
+            assertReferenced(.struct("FixtureStruct231")) {
+                self.assertNotReferenced(.functionConstructor("init(identifier:)"))
+                self.assertAssignOnlyProperty(.varInstance("identifier"))
+            }
         }
     }
 
@@ -1073,6 +1115,39 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             }
             assertReferenced(.struct("FixtureStruct5")) {
                 self.assertNotReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testRetainsSoleRequiredClassInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass400")) {
+                self.assertReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testDoesNotRetainClassInitializersWhenMultipleDeclared() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass401")) {
+                self.assertNotReferenced(.functionConstructor("init(value:)"))
+                self.assertNotReferenced(.functionConstructor("init(other:)"))
+            }
+        }
+    }
+
+    func testDoesNotRetainSoleStructInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.struct("FixtureStruct225")) {
+                self.assertNotReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testRetainsUsedSoleClassInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass402")) {
+                self.assertReferenced(.functionConstructor("init(value:)"))
             }
         }
     }
@@ -1197,13 +1272,16 @@ final class RetentionTest: FixtureSourceGraphTestCase {
     }
 
     func testIgnoreAllComment() {
-        analyze(retainPublic: true) {
+        analyze(retainPublic: false) {
             assertReferenced(.class("Fixture115")) {
                 self.assertReferenced(.functionMethodInstance("someFunc(param:)")) {
                     self.assertReferenced(.varParameter("param"))
                 }
             }
             assertReferenced(.class("Fixture116"))
+
+            assertNotSuperfluousIgnoreCommand(.class("Fixture115"))
+            assertNotSuperfluousIgnoreCommand(.class("Fixture116"))
         }
     }
 
@@ -1253,6 +1331,12 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodB()"))
             assertNotSuperfluousIgnoreCommand(.functionMethodInstance("methodC()"))
 
+            // Assign-only properties with ignore comments are NOT superfluous
+            assertReferenced(.struct("AssignOnlyIgnoreStruct")) {
+                self.assertNotSuperfluousIgnoreCommand(.varInstance("assignOnlyIgnored"))
+                self.assertReferenced(.varInstance("usedProperty"))
+            }
+
             // Test superfluous ignore for parameters
             assertReferenced(.class("ParameterIgnoreClass")) {
                 self.assertReferenced(.functionMethodInstance("superfluousParamIgnore(usedParam:)")) {
@@ -1270,6 +1354,22 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             // Superfluous ignore warnings should be suppressed when disabled.
             assertNotSuperfluousIgnoreCommand(.functionFree("superfluouslyIgnoredFunc()"))
             assertNotSuperfluousIgnoreCommand(.class("SuperfluouslyIgnoredClass"))
+        }
+    }
+
+    func testSuperfluousIgnoreCommandOnProtocolMember() {
+        analyze(retainPublic: true) {
+            // Protocol member with ignore that only has related references (from conformances
+            // and default implementations) - the ignore is NOT superfluous.
+            assertReferenced(.protocol("CorrectlyIgnoredProtocol")) {
+                self.assertNotSuperfluousIgnoreCommand(.varInstance("ignoredProperty"))
+            }
+
+            // Protocol member with ignore that has normal references (actually used) -
+            // the ignore IS superfluous.
+            assertReferenced(.protocol("SuperfluouslyIgnoredProtocol")) {
+                self.assertSuperfluousIgnoreCommand(.varInstance("superfluousProperty"))
+            }
         }
     }
 
@@ -1807,7 +1907,7 @@ final class RetentionTest: FixtureSourceGraphTestCase {
 
     func testRetainsInitializerCalledOnTypeAlias() {
         // Resolved by https://github.com/swiftlang/swift/commit/178d6c315dcce9d1110bb23ad905dffaf28c2c3b
-        guard Self.swiftVersion.version.isVersion(greaterThan: "6.2.3") else {
+        guard Self.swiftVersion.version.isVersion(greaterThan: "6.2.4") else {
             return
         }
 

@@ -7,17 +7,14 @@ import ProjectDrivers
 import Shared
 import SourceGraph
 
-public
-final class Scan {
+public final class Scan {
     private let configuration: Configuration
     private let logger: Logger
     private let graph: SourceGraph
     private let swiftVersion: SwiftVersion
-    private
-    weak var progressDelegate: ScanProgressDelegate?
+    private weak var progressDelegate: ScanProgressDelegate?
 
-    public required init(configuration: Configuration, logger: Logger, swiftVersion: SwiftVersion
-                         , progressDelegate: ScanProgressDelegate? = nil) {
+    public required init(configuration: Configuration, logger: Logger, swiftVersion: SwiftVersion, progressDelegate: ScanProgressDelegate? = nil) {
         self.configuration = configuration
         self.logger = logger
         self.swiftVersion = swiftVersion
@@ -25,7 +22,13 @@ final class Scan {
         graph = SourceGraph(configuration: configuration, logger: logger)
     }
 
-    public func perform(project: Project) throws -> ([ScanResult], SourceGraph) { // 🌲 Return a duple
+    public struct Output {
+        public let results: [ScanResult]
+        public let loc: Int
+        public let graph: SourceGraph
+    }
+
+    public func perform(project: Project) throws -> Output {
         if !configuration.indexStorePath.isEmpty {
             logger.warn("When using the '--index-store-path' option please ensure that Xcode is not running. False-positives can occur if Xcode writes to the index store while Periphery is running.")
 
@@ -44,9 +47,9 @@ final class Scan {
         }
 
         try build(driver)
-        try index(driver)
+        let loc = try index(driver)
         try analyze()
-        return(buildResults(), graph) // 🌲 Return a duple
+        return Output(results: buildResults(), loc: loc, graph: graph)
     }
 
     // MARK: - Private
@@ -65,7 +68,7 @@ final class Scan {
         logger.endInterval(driverBuildInterval)
     }
 
-    private func index(_ driver: ProjectDriver) throws {
+    private func index(_ driver: ProjectDriver) throws -> Int {
         try Task.checkCancellation()
         progressDelegate?.didStartIndexing()
         let indexInterval = logger.beginInterval("index")
@@ -79,8 +82,9 @@ final class Scan {
         let plan = try driver.plan(logger: indexLogger)
         let graphMutex = SourceGraphMutex(graph: graph)
         let pipeline = IndexPipeline(plan: plan, graph: graphMutex, logger: indexLogger, configuration: configuration, swiftVersion: swiftVersion)
-        try pipeline.perform()
+        let loc = try pipeline.perform()
         logger.endInterval(indexInterval)
+        return loc
     }
 
     private func analyze() throws {

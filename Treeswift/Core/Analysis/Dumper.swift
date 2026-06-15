@@ -46,10 +46,7 @@ final class Dumper: Sendable {
 		}
 		// Check inheritance (covers e.g. property wrappers in protocols)
 		if declaration.immediateInheritedTypeReferences.contains(where: { (ref: Reference) in
-			if let n = ref.name {
-				return environmentAttributes.contains(where: { n.contains($0) })
-			}
-			return false
+			environmentAttributes.contains(where: { ref.name.contains($0) })
 		}) {
 			return true
 		}
@@ -79,11 +76,11 @@ final class Dumper: Sendable {
 			return true
 		}
 		// Protocol conformance (PreviewProvider)
-		if decl.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("PreviewProvider") == true }) {
+		if decl.immediateInheritedTypeReferences.contains(where: { $0.name.contains("PreviewProvider") }) {
 			return true
 		}
 		// Widget previews (WidgetProvider)
-		if decl.immediateInheritedTypeReferences.contains(where: { $0.name?.contains("WidgetProvider") == true }) {
+		if decl.immediateInheritedTypeReferences.contains(where: { $0.name.contains("WidgetProvider") }) {
 			return true
 		}
 		return false

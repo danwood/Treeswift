@@ -5,22 +5,19 @@ import ProjectDrivers
 import Shared
 import SystemPackage
 
-public
-final class Project {
-    public
-    let kind: ProjectKind
+public final class Project {
+    public let kind: ProjectKind
 
     private let configuration: Configuration
     private let shell: Shell
     private let logger: Logger
-    private weak var progressDelegate: ScanProgressDelegate? // 🌲 Found throughout file
+    private weak var progressDelegate: ScanProgressDelegate?
 
-    public
-    convenience init(
+    public convenience init(
         configuration: Configuration,
         shell: Shell,
-        logger: Logger
-        , progressDelegate: ScanProgressDelegate? = nil
+        logger: Logger,
+        progressDelegate: ScanProgressDelegate? = nil
     ) throws {
         progressDelegate?.didStartInspecting()
         var kind: ProjectKind?
@@ -39,17 +36,15 @@ final class Project {
             throw PeripheryError.usageError("Failed to identify project in the current directory. For Xcode projects use the '--project' option, and for SPM projects change to the directory containing the Package.swift.")
         }
 
-        self.init(kind: kind, configuration: configuration, shell: shell, logger: logger
-                  , progressDelegate: progressDelegate)
+        self.init(kind: kind, configuration: configuration, shell: shell, logger: logger, progressDelegate: progressDelegate)
     }
 
-    public
-    init(
+    public init(
         kind: ProjectKind,
         configuration: Configuration,
         shell: Shell,
-        logger: Logger
-        , progressDelegate: ScanProgressDelegate? = nil
+        logger: Logger,
+        progressDelegate: ScanProgressDelegate? = nil
     ) {
         self.kind = kind
         self.configuration = configuration
@@ -58,8 +53,7 @@ final class Project {
         self.progressDelegate = progressDelegate
     }
 
-    public
-    func driver() throws -> ProjectDriver {
+    public func driver() throws -> ProjectDriver {
         switch kind {
         case let .xcode(projectPath):
             #if canImport(XcodeSupport)
@@ -67,8 +61,8 @@ final class Project {
                     projectPath: projectPath,
                     configuration: configuration,
                     shell: shell,
-                    logger: logger
-                    , progressDelegate: progressDelegate
+                    logger: logger,
+                    progressDelegate: progressDelegate
                 )
             #else
                 fatalError("Xcode projects are not supported on this platform.")

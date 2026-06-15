@@ -14,7 +14,7 @@ final class XCTestRetainer: SourceGraphMutator {
     func mutate() {
         let immediateTestCaseClasses = graph.declarations(ofKind: .class).filter {
             $0.related.contains {
-                $0.declarationKind == .class && self.testCaseClassNames.contains($0.name ?? "")
+                $0.declarationKind == .class && self.testCaseClassNames.contains($0.name)
             }
         }
 

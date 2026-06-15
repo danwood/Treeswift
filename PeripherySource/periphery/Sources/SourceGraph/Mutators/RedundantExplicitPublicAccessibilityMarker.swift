@@ -37,12 +37,6 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
     private func validate(_ decl: Declaration) throws {
         // Check if the declaration is public, and is referenced cross module.
         if decl.accessibility.isExplicitly(.public) {
-            // Never strip public from protocol declarations. Conforming types in the same
-            // module require the protocol to be public for their conformances to compile.
-            // Stripping public from a protocol also strips it from its extensions, breaking
-            // the witness table for conformances like Identifiable.id.
-            guard decl.kind != .protocol else { return }
-
             if !graph.isRetained(decl),
                !isReferencedCrossModule(decl),
                !isExposedPubliclyByAnotherDeclaration(decl),
@@ -64,10 +58,6 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
 
     private func validateExtension(_ decl: Declaration) throws {
         if decl.accessibility.isExplicitly(.public) {
-            // Protocol extensions need `public` so their members can satisfy public protocol requirements.
-            // Removing `public` from a protocol extension would make its members internal, breaking conformance.
-            guard decl.kind != .extensionProtocol else { return }
-
             // If the extended kind is already marked as having redundant public accessibility, then this extension
             // must also have redundant accessibility.
             if let extendedDecl = try graph.extendedDeclaration(forExtension: decl),
@@ -90,6 +80,7 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
             // Skip members that implement public protocol requirements.
             // Stripping public from these causes conformance errors (protocol requires public member).
             guard !isProtocolRequirement(descDecl) else { continue }
+
             mark(descDecl)
         }
     }
@@ -167,7 +158,21 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
                 return nil
             }
 
-        return referenceDecls.contains { $0.accessibility.isAccessibleCrossModule }
+        return referenceDecls.contains {
+            if $0.accessibility.isAccessibleCrossModule {
+                return true
+            }
+
+            // Extensions may not have explicit public accessibility themselves, but their members
+            // can be public. Types used in an extension's generic constraints (e.g.,
+            // `extension SomeProtocol where Self == SomeType`) are effectively exposed publicly
+            // if the extension contains any public members.
+            if $0.kind.isExtensionKind {
+                return $0.declarations.contains { $0.accessibility.isAccessibleCrossModule }
+            }
+
+            return false
+        }
     }
 
     /// A public protocol that is not directly referenced cross-module may still be exposed by a public member declared

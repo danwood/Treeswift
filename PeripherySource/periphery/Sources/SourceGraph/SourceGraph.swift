@@ -123,12 +123,12 @@ public final class SourceGraph {
         if let parent = declaration.parent {
             for usr in declaration.usrs {
                 let reference = Reference(
+                    name: declaration.name,
                     kind: .retained,
                     declarationKind: declaration.kind,
                     usr: usr,
                     location: declaration.location
                 )
-                reference.name = declaration.name
                 reference.parent = parent
                 add(reference, from: parent)
             }
@@ -183,8 +183,14 @@ public final class SourceGraph {
                 Conflicting declaration: \(declaration), declared in modules: \(declaration.location.file.modules.sorted())
                 To resolve this warning, make sure all build modules are uniquely named.
                 """)
+                // Keep the declaration that sorts first to ensure deterministic results
+                // regardless of indexing order.
+                if declaration < existingDecl {
+                    allDeclarationsByUsr[usr] = declaration
+                }
+            } else {
+                allDeclarationsByUsr[usr] = declaration
             }
-            allDeclarationsByUsr[usr] = declaration
         }
     }
 
@@ -340,7 +346,9 @@ public final class SourceGraph {
             throw PeripheryError.sourceGraphIntegrityError(message: "Unknown extended reference kind for extension '\(extensionDeclaration.kind.rawValue)'")
         }
 
-        return extensionDeclaration.references.first(where: { $0.declarationKind == extendedKind && $0.name == extensionDeclaration.name })
+        return extensionDeclaration.references
+            .filter { $0.declarationKind == extendedKind && $0.name == extensionDeclaration.name }
+            .min()
     }
 
     func extendedDeclaration(forExtension extensionDeclaration: Declaration) throws -> Declaration? {
@@ -359,7 +367,7 @@ public final class SourceGraph {
         let overridenDecl = decl.related
             .filter { $0.declarationKind == decl.kind && $0.name == decl.name }
             .compactMap { declaration(withUsr: $0.usr) }
-            .first
+            .min()
 
         guard let overridenDecl else {
             return []
@@ -378,7 +386,7 @@ public final class SourceGraph {
                     $0.name == decl.name
             }
             .compactMap(\.parent)
-            .first
+            .min()
 
         guard let baseDecl else {
             // Base reference is external, return the current function as it's the closest.
@@ -403,9 +411,7 @@ public final class SourceGraph {
         let codableTypes = ["Codable", "Decodable", "Encodable"] + configuration.externalEncodableProtocols + configuration.externalCodableProtocols
 
         return inheritedTypeReferences(of: decl).contains {
-            guard let name = $0.name else { return false }
-
-            return [.protocol, .typealias].contains($0.declarationKind) && codableTypes.contains(name)
+            [.protocol, .typealias].contains($0.declarationKind) && codableTypes.contains($0.name)
         }
     }
 
@@ -413,9 +419,7 @@ public final class SourceGraph {
         let encodableTypes = ["Encodable"] + configuration.externalEncodableProtocols + configuration.externalCodableProtocols
 
         return inheritedTypeReferences(of: decl).contains {
-            guard let name = $0.name else { return false }
-
-            return [.protocol, .typealias].contains($0.declarationKind) && encodableTypes.contains(name)
+            [.protocol, .typealias].contains($0.declarationKind) && encodableTypes.contains($0.name)
         }
     }
 
@@ -423,8 +427,7 @@ public final class SourceGraph {
         let equatableTypes = ["Equatable", "Hashable"]
 
         return inheritedTypeReferences(of: decl).contains {
-            guard let name = $0.name else { return false }
-            return [.protocol, .typealias].contains($0.declarationKind) && equatableTypes.contains(name)
+            [.protocol, .typealias].contains($0.declarationKind) && equatableTypes.contains($0.name)
         }
     }
 

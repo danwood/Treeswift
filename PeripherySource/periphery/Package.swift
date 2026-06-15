@@ -1,18 +1,14 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// 🌲 MODIFIED VERSION FOR LOCAL PACKAGE USAGE
-// This Package.swift has been modified from the upstream Periphery package to enable
-// deep integration with Treeswift. All changes expose internal modules as library
-// products so they can be imported by external packages.
-
 var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-system", from: "1.0.0"),
     .package(url: "https://github.com/jpsim/Yams", from: "6.0.0"),
     .package(url: "https://github.com/tadija/AEXML", from: "4.0.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
-    .package(url: "https://github.com/kateinoigakukun/swift-indexstore", from: "0.4.0"),
-    .package(url: "https://github.com/apple/swift-syntax", from: "602.0.0"),
+    // Use tag once https://github.com/MobileNativeFoundation/swift-index-store/issues/27 is resolved.
+    .package(url: "https://github.com/ileitch/swift-index-store", revision: "ed1f232d33b8e03956af0f4206fbd30171a43138"),
+    .package(url: "https://github.com/apple/swift-syntax", from: "603.0.0"),
     .package(url: "https://github.com/ileitch/swift-filename-matcher", from: "2.0.0"),
 ]
 
@@ -36,9 +32,9 @@ var projectDriverDependencies: [PackageDescription.Target.Dependency] = [
 #endif
 
 var targets: [PackageDescription.Target] = [
-    // 🌲 MODIFICATION: Split Frontend into executable + library
-    // Original: Single executableTarget with all Frontend code
-    // Modified: Separated to allow FrontendLib to be imported by external packages
+    // Frontend is split into a thin executable target (main.swift only) and a
+    // FrontendLib library target containing the rest, so that external packages
+    // can import the scanning orchestration code (Project, Scan, etc.).
     .executableTarget(
         name: "Frontend",
         dependencies: [
@@ -58,8 +54,8 @@ var targets: [PackageDescription.Target] = [
             .target(name: "ProjectDrivers"),
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "FilenameMatcher", package: "swift-filename-matcher"),
-        ]
-        , path: "Sources/Frontend",
+        ],
+        path: "Sources/Frontend",
         exclude: ["main.swift"]
     ),
     .target(
@@ -91,7 +87,7 @@ var targets: [PackageDescription.Target] = [
             .product(name: "AEXML", package: "AEXML"),
             .product(name: "SwiftSyntax", package: "swift-syntax"),
             .product(name: "SwiftParser", package: "swift-syntax"),
-            .product(name: "SwiftIndexStore", package: "swift-indexstore"),
+            .product(name: "IndexStore", package: "swift-index-store"),
             .product(name: "FilenameMatcher", package: "swift-filename-matcher"),
         ]
     ),
@@ -100,7 +96,7 @@ var targets: [PackageDescription.Target] = [
         dependencies: [
             .target(name: "SyntaxAnalysis"),
             .target(name: "Shared"),
-            .product(name: "SwiftIndexStore", package: "swift-indexstore"),
+            .product(name: "IndexStore", package: "swift-index-store"),
             .product(name: "AEXML", package: "AEXML"),
         ]
     ),
@@ -200,9 +196,9 @@ let package = Package(
         .executable(name: "periphery", targets: ["Frontend"]),
         .library(name: "PeripheryKit", targets: ["PeripheryKit"]),
 
-        // 🌲 MODIFICATION: Additional library products exposed for external package integration
-        // These internal modules are exposed to allow Treeswift and other consumers
-        // to import and use Periphery's internals directly for deep integration
+        // Additional library products exposed for external package integration.
+        // These internal modules are exposed to allow Treeswift and other
+        // consumers to import and use Periphery's internals directly.
         .library(name: "Configuration", targets: ["Configuration"]),
         .library(name: "SourceGraph", targets: ["SourceGraph"]),
         .library(name: "Shared", targets: ["Shared"]),

@@ -97,7 +97,7 @@ enum SourceGraphSerializer {
 				isUsed: usedSet.contains(decl),
 				parentUSR: parentUSR,
 				modifiers: Array(decl.modifiers).sorted(),
-				attributeNames: Array(decl.attributes).map(\.name).sorted(),
+				attributeNames: Array(decl.attributes).map(\.description).sorted(),
 				accessibility: decl.accessibility.value.rawValue,
 				accessibilityIsExplicit: decl.accessibility.isExplicit
 			)
@@ -292,8 +292,13 @@ enum SourceGraphSerializer {
 							modules: []
 						)
 						let loc = Location(file: sourceFile, line: snap.line, column: snap.column)
-						let ref = Reference(kind: refKind, declarationKind: declKind, usr: snap.usr, location: loc)
-						ref.name = snap.name
+						let ref = Reference(
+							name: snap.name ?? "",
+							kind: refKind,
+							declarationKind: declKind,
+							usr: snap.usr,
+							location: loc
+						)
 						if let role = Reference.Role(rawValue: snap.role) {
 							ref.role = role
 						}

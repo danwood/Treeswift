@@ -41,11 +41,9 @@ final class InterfaceBuilderPropertyRetainer {
         let allDeclarations = declaration.declarations.union(descendentInheritedDeclarations)
 
         for decl in allDeclarations {
-            let declName = decl.name
-
             // Check IBOutlet properties
             if decl.attributes.contains(where: { ibOutletAttributes.contains($0.name) }) {
-                if referencedOutlets.contains(declName) {
+                if referencedOutlets.contains(decl.name) {
                     graph.markRetained(decl)
                 }
                 continue
@@ -53,7 +51,7 @@ final class InterfaceBuilderPropertyRetainer {
 
             // Check IBAction/IBSegueAction methods
             if decl.attributes.contains(where: { ibActionAttributes.contains($0.name) }) {
-                let selectorName = Self.swiftNameToSelector(declName)
+                let selectorName = Self.swiftNameToSelector(decl.name)
                 if referencedActions.contains(selectorName) {
                     graph.markRetained(decl)
                 }
@@ -62,7 +60,7 @@ final class InterfaceBuilderPropertyRetainer {
 
             // Check IBInspectable properties
             if decl.attributes.contains(where: { ibInspectableAttributes.contains($0.name) }) {
-                if referencedAttributes.contains(declName) {
+                if referencedAttributes.contains(decl.name) {
                     graph.markRetained(decl)
                 }
                 continue
@@ -101,7 +99,7 @@ final class InterfaceBuilderPropertyRetainer {
     /// - `func myMethod(for value: Any)` → `myMethodFor:` (preposition labels are just capitalized)
     /// - `func myMethod(_:secondParam:)` → `myMethod:secondParam:`
     /// - `func myMethod(firstParam:secondParam:)` → `myMethodWithFirstParam:secondParam:`
-    static private func swiftNameToSelector(_ swiftName: String) -> String {
+    static func swiftNameToSelector(_ swiftName: String) -> String {
         guard let parenStart = swiftName.firstIndex(of: "("),
               let parenEnd = swiftName.lastIndex(of: ")")
         else {

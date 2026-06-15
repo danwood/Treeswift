@@ -28,16 +28,12 @@ final class SwiftUIRetainer: SourceGraphMutator {
             names.append("PreviewProvider")
         }
 
-        let nameSet = Set(names)
         graph
             .declarations(ofKinds: [.class, .struct, .enum])
             .lazy
-            .filter { decl in
-                // Primary: check syntactically-captured inheritance clause names (works for external protocols)
-                if !decl.inheritedTypeNames.isDisjoint(with: nameSet) { return true }
-                // Fallback: check related references (works for locally-defined protocols)
-                return decl.related.contains {
-                    self.graph.isExternal($0) && $0.declarationKind == .protocol && nameSet.contains($0.name ?? "")
+            .filter {
+                $0.related.contains {
+                    self.graph.isExternal($0) && $0.declarationKind == .protocol && names.contains($0.name)
                 }
             }
             .forEach { graph.markRetained($0) }
@@ -48,33 +44,33 @@ final class SwiftUIRetainer: SourceGraphMutator {
         // the entry point), so mainAttributedDeclarations is empty for SwiftUI apps. Fall back to
         // searching all class/struct declarations when no @main-attributed type is found.
         let candidateParents: Set<Declaration> = graph.mainAttributedDeclarations.isEmpty
-            ? Set(graph.declarations(ofKinds: [.class, .struct]))
+            ? graph.declarations(ofKinds: [.class, .struct])
             : graph.mainAttributedDeclarations
-        candidateParents
-            .forEach { parent in
-                let adaptorProperties = parent.declarations
-                    .filter { $0.kind == .varInstance }
-                    .filter {
-                        $0.references.contains {
-                            ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name ?? "")
-                        }
+        for parent in candidateParents {
+            let adaptorProperties = parent.declarations
+                .filter { $0.kind == .varInstance }
+                .filter {
+                    $0.references.contains {
+                        ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name)
                     }
-                guard !adaptorProperties.isEmpty else { return }
-                graph.markRetained(parent)
-                adaptorProperties.forEach { property in
-                    graph.markRetained(property)
-                    // The delegate class (e.g. AppDelegate) is passed as a metatype argument
-                    // to the adaptor. It exists only within the same file, so Periphery may
-                    // suggest downgrading it to fileprivate — but doing so causes a compiler
-                    // error because the property referencing it must match its access level.
-                    // Unmark it from redundant-internal analysis so no suggestion is emitted.
-                    for ref in property.references where ref.declarationKind == .class {
-                        if let delegateDecl = graph.declaration(withUsr: ref.usr) {
-                            graph.unmarkRedundantInternalAccessibility(delegateDecl)
-                        }
+                }
+            guard !adaptorProperties.isEmpty else { continue }
+
+            graph.markRetained(parent)
+            for property in adaptorProperties {
+                graph.markRetained(property)
+                // The delegate class (e.g. AppDelegate) is passed as a metatype argument
+                // to the adaptor. It exists only within the same file, so Periphery may
+                // suggest downgrading it to fileprivate — but doing so causes a compiler
+                // error because the property referencing it must match its access level.
+                // Unmark it from redundant-internal analysis so no suggestion is emitted.
+                for ref in property.references where ref.declarationKind == .class {
+                    if let delegateDecl = graph.declaration(withUsr: ref.usr) {
+                        graph.unmarkRedundantInternalAccessibility(delegateDecl)
                     }
                 }
             }
+        }
     }
 
     private func unretainPreviewMacroExpansions() {

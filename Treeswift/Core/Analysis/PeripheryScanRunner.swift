@@ -347,12 +347,14 @@ final class PeripheryScanRunner: Sendable {
 		)
 
 		// Perform scan
-		let (results, graph) = try Scan(
+		let scanOutput = try Scan(
 			configuration: configuration,
 			logger: logger,
 			swiftVersion: swiftVersion,
 			progressDelegate: progressDelegate
 		).perform(project: project)
+		let results = scanOutput.results
+		let graph = scanOutput.graph
 
 		// Load baseline if specified (from ScanCommand.run():237-242)
 		var baseline: Baseline?

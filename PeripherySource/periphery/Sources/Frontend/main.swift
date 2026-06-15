@@ -1,5 +1,5 @@
-import ArgumentParser
 import Foundation
+import FrontendLib
 
 // When stdout is a pipe, enable line buffering so output is flushed after each
 // newline rather than block-buffered, ensuring timely output to the consumer.
@@ -11,21 +11,4 @@ if (info.st_mode & S_IFMT) == S_IFIFO {
     setlinebuf(stderr)
 }
 
-private struct PeripheryCommand: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "periphery",
-        subcommands: [
-            ScanCommand.self,
-            CheckUpdateCommand.self,
-            ClearCacheCommand.self,
-            VersionCommand.self,
-        ]
-    )
-}
-
-do {
-    var command = try PeripheryCommand.parseAsRoot()
-    try command.run()
-} catch {
-    PeripheryCommand.exit(withError: error)
-}
+runPeripheryCommandLine()

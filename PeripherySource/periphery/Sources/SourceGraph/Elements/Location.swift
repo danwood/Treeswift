@@ -1,40 +1,40 @@
 import Foundation
 import SystemPackage
 
-public class Location: @unchecked Sendable {
+public final class Location: @unchecked Sendable {
     public let file: SourceFile
     public let line: Int
     public let column: Int
+    // End-position metadata. Carried for richer output but deliberately excluded
+    // from equality and hashing so a location with end positions compares equal to
+    // the same start position without them. This keeps location-based lookups stable
+    // when end positions are applied to a declaration after indexing.
     public let endLine: Int?
     public let endColumn: Int?
 
     private let hashValueCache: Int
 
-    // 🌲 Updated to handle end location as well.
     public init(file: SourceFile, line: Int, column: Int, endLine: Int? = nil, endColumn: Int? = nil) {
         self.file = file
         self.line = line
         self.column = column
         self.endLine = endLine
         self.endColumn = endColumn
-        hashValueCache = [file.hashValue, line, column
-                          , endLine, endColumn].hashValue
+        hashValueCache = [file.hashValue, line, column].hashValue
     }
 
     func relativeTo(_ path: FilePath) -> Location {
         let newPath = file.path.relativeTo(path)
         let newFile = SourceFile(path: newPath, modules: file.modules)
         newFile.importStatements = file.importStatements
-        return Location(file: newFile, line: line, column: column
-                        , endLine: endLine, endColumn: endColumn)
+        return Location(file: newFile, line: line, column: column, endLine: endLine, endColumn: endColumn)
     }
 
     // MARK: - Private
 
     private func buildDescription(path: String) -> String {
-        // 🌲 Now includes end location
         var components = [path, line.description, column.description]
-        if let endLine = endLine, let endColumn = endColumn {
+        if let endLine, let endColumn {
             components.append(endLine.description)
             components.append(endColumn.description)
         }
@@ -49,7 +49,6 @@ public class Location: @unchecked Sendable {
 extension Location: Equatable {
     public static func == (lhs: Location, rhs: Location) -> Bool {
         lhs.file == rhs.file && lhs.line == rhs.line && lhs.column == rhs.column
-        && lhs.endLine == rhs.endLine && lhs.endColumn == rhs.endColumn
     }
 }
 

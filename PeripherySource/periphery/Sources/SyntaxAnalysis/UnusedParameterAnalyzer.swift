@@ -29,7 +29,7 @@ public final class UnusedParameterAnalyzer {
         }
     }
 
-    private func analyze(function: Function) -> Set<Parameter> {
+    func analyze(function: Function) -> Set<Parameter> {
         Set(unusedParams(in: function))
     }
 

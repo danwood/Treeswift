@@ -16,7 +16,7 @@ public final class SourceLocationBuilder {
                         line: location.line,
                         column: location.column)
     }
-    
+
     public func location(from startPosition: AbsolutePosition, to endPosition: AbsolutePosition) -> Location {
         let startLocation = locationConverter.location(for: startPosition)
         let endLocation = locationConverter.location(for: endPosition)

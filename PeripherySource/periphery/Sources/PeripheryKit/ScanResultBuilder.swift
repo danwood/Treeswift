@@ -26,25 +26,9 @@ public enum ScanResultBuilder {
                 for decl in decls {
                     let extensions = graph.extensions[decl, default: []]
                     for ext in extensions {
-                        // Skip conformance extensions (e.g., `extension Type: Protocol { ... }`).
-                        // Even when the concrete type is unused, the protocol conformance may be
-                        // required by callers that accept the protocol as a parameter or return type.
-                        // Removing a conformance extension silently breaks such call sites.
-                        let isConformanceExtension = ext.related.contains { $0.declarationKind == .protocol }
-                        guard !isConformanceExtension else { continue }
-
                         extensionResults.append(ScanResult(declaration: ext, annotation: .unused))
                     }
                 }
-            }
-
-            // Also skip when the removable declaration itself is a conformance extension.
-            // An empty `extension Type: Protocol {}` body has no members, so Periphery marks it
-            // unused. But removing it silently breaks callers that pass the type as the protocol.
-            if removableDeclaration.kind == .extension,
-               removableDeclaration.related.contains(where: { $0.declarationKind == .protocol })
-            {
-                return [ScanResult]()
             }
 
             return [ScanResult(declaration: removableDeclaration, annotation: .unused)] + extensionResults
@@ -70,8 +54,7 @@ public enum ScanResultBuilder {
         let annotatedSuperfluousIgnoreCommands: [ScanResult] = {
             guard configuration.superfluousIgnoreComments else { return [] }
 
-            // Detect superfluous ignore commands
-            // 1. Declarations with ignore comments that have references from non-ignored code
+            // Detect superfluous ignore commands.
             let superfluousDeclarations = graph.commandIgnoredDeclarations
                 .filter { _, kind in kind == .declaration }
                 .keys
@@ -98,7 +81,6 @@ public enum ScanResultBuilder {
             annotatedRedundantInternalAccessibility +
             annotatedRedundantFilePrivateAccessibility +
             annotatedSuperfluousIgnoreCommands +
-            annotatedRedundantFilePrivateAccessibility +
             annotatedRedundantAccessibility
 
         return allAnnotatedDeclarations
@@ -151,14 +133,19 @@ public enum ScanResultBuilder {
 
         for decl in graph.functionsWithIgnoredParameters {
             let ignoredParamNames = decl.commentCommands.ignoredParameterNames
-            let unusedParamNames = Set(decl.unusedParameters.map(\.name))
+            let unusedParamNames = Set(decl.unusedParameters.compactMap(\.name))
 
             for ignoredParamName in ignoredParamNames {
                 if !unusedParamNames.contains(ignoredParamName) {
                     // The ignored parameter is actually used - create a result for it
                     let parentUsrs = decl.usrs.sorted().joined(separator: "-")
                     let usr = "param-\(ignoredParamName)-\(decl.name)-\(parentUsrs)"
-                    let paramDecl = Declaration(name: ignoredParamName, kind: .varParameter, usrs: [usr], location: decl.location)
+                    let paramDecl = Declaration(
+                        name: ignoredParamName,
+                        kind: .varParameter,
+                        usrs: [usr],
+                        location: decl.location
+                    )
                     paramDecl.parent = decl
                     results.append(.init(declaration: paramDecl, annotation: .superfluousIgnoreCommand))
                 }
