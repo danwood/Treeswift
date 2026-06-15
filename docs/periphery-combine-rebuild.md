@@ -25,6 +25,20 @@ This one branch bundles all the Treeswift-specific code so the rest of the graph
 
 So `treeswift-extras` is the single home for everything that is correct for Treeswift's aggressive cleanup but wrong (or moot) for upstream. The clean upstream PRs (#1132/#1133/#1134/#1136/#1137) live on their own separate branches and are NOT folded in here.
 
+### KNOWN DUPLICATION (intentional)
+
+`treeswift-extras` **duplicates** code that also lives in three standalone PR branches:
+
+| duplicated content | lives in PR branch | also baked into extras because… |
+|---|---|---|
+| redundant internal/fileprivate analysis | `redundant-internal-fileprivate` (#1132) | extras is built on #1132 (the assign-only fix needs its `isLetBinding` plumbing) |
+| assign-only init retention | `fix-assignonly-init-retained` (#1136) | it's one of the Treeswift-only fixes bundled in extras |
+| the upstreamable used-marking walk | `fix-used-marking-propagation` (#1137) | extras carries the full 5-walk version; #1137 is just 1 of those walks |
+
+Why we accept the duplication: the PR branches must each fork off **bare upstream** to be clean pull requests; extras must be **one self-contained buildable unit** for combine. A branch can't be both, and trying to stack them (so extras "references" instead of "duplicates") reintroduces the dependency loops + per-file reconciliation that this 4-branch model was chosen to avoid. The duplicated copies are the SAME code (extras was built by merging those very branches), so they don't drift independently — they're re-derived together whenever combine is rebuilt.
+
+**This complexity is temporary.** As ileitch merges the PRs, each merged fix becomes part of the new upstream base → drop it from BOTH the standalone branch AND from extras. When #1132/#1136/#1137 are all upstream, extras shrinks to just glue + F1 + F3 + the 4 non-upstreamable walks, and the duplication disappears.
+
 ## Why a separate `treeswift-extras` instead of stacking everything
 
 Each upstream PR branch must sit on **bare upstream** so it's a clean pull request. But several Treeswift-only fixes depend on each other (the assign-only fix needs #1132). If those dependencies were drawn as independent branches that "secretly contain" each other, the graph became a tangle of loops. Folding all the Treeswift-only code into one branch (`treeswift-extras`) — which is allowed to carry #1132 because it never goes upstream — removes the loops entirely. The result: 4 simple ingredient branches, all off upstream, merged into combine.
