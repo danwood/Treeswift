@@ -34,7 +34,7 @@ Then:
 
 ## Current pin
 
-The fork tag **`treeswift-combine-2026-06-14`** (commit `055609f`) marks the combine commit the subtree currently equals. Tag new pin points when pulling a significant combine update, so there's always a named marker of "what the subtree is."
+The subtree currently equals fork `combine` at commit `055609f`. The squash-commit message from each `git subtree pull` records which combine commit was pulled, so "what the subtree is" is always recoverable from the Treeswift git log.
 
 ## Why subtree (not a remote Swift package)
 

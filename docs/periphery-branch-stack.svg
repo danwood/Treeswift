@@ -23,8 +23,8 @@
 
 <!-- COMBINE (full width) -->
 <rect x="30" y="128" width="760" height="52" rx="9" fill="#1976d2" stroke="#0d47a1" stroke-width="2"/>
-<text x="44" y="150" class="wlbl">combine  (origin/combine · tag treeswift-combine-2026-06-14)</text>
-<text x="44" y="169" class="sub" fill="#e3f2fd">merge of all the branches below · converges all 4 Prodcore baselines (0 errors)</text>
+<text x="44" y="150" class="wlbl">combine  (origin/combine)</text>
+<text x="44" y="169" class="sub" fill="#e3f2fd">a SERIES of merges of the branches below (some conflict → union-resolve) · converges all 4 Prodcore baselines (0 errors)</text>
 
 <!-- arrows into combine -->
 <g stroke="#90a4ae" stroke-width="1.3" fill="none">
@@ -112,14 +112,14 @@
 <!-- legend bottom -->
 <rect x="30" y="600" width="760" height="166" rx="8" fill="#fafafa" stroke="#ddd"/>
 <text x="44" y="621" class="sub" font-weight="700">Reading bottom→top (dependencies flow upward):</text>
-<text x="44" y="639" class="tiny">• Base = upstream. danwood/master mirrors it. Each branch forks off master; redundant-nested sits ON #1132.</text>
+<text x="44" y="639" class="tiny">• Base = upstream. Most branches fork INDEPENDENTLY off master (not stacked); redundant-nested depends on #1132, assignonly is stacked on #1132+glue.</text>
 <rect x="44" y="647" width="11" height="9" fill="#e8f5e9" stroke="#4caf50"/><rect x="57" y="647" width="11" height="9" fill="#fff8e1" stroke="#f9a825"/>
 <text x="74" y="655" class="tiny">green/yellow = open upstream PRs (#1132/#1133/#1134; #1136/#1137 cover parts of assignOnly + used-marking).</text>
 <rect x="44" y="663" width="11" height="9" fill="#fdeef0" stroke="#c2185b"/>
 <text x="74" y="671" class="tiny">pink = Treeswift-ONLY fixes. They make combine converge on Prodcore, but can't go upstream — they trade upstream's dead-code</text>
 <text x="74" y="684" class="tiny">precision for recall (catch everything safely). The 2 pink branches are independent of each other; both fork off upstream.</text>
 <text x="44" y="700" class="tiny">• treeswift-assignonly-retention is STACKED on #1132 + glue (it needs their plumbing), so it forks off #1132, not bare upstream.</text>
-<text x="44" y="716" class="tiny">• combine = all of the above merged. INTERNAL only, never pushed upstream. Tag treeswift-combine-&lt;date&gt; pins each rebuild.</text>
+<text x="44" y="716" class="tiny">• combine = the above merged in sequence (glue+#1132, redundant-nested, and assignonly conflict → resolve by union / take prior combine). INTERNAL only.</text>
 <text x="44" y="732" class="tiny">• Treeswift subtree = an exact copy of combine, vendored (self-contained build). Rebuild recipe: docs/periphery-combine-rebuild.md.</text>
 <text x="44" y="748" class="tiny">• As upstream merges the PR'd subset, drop those branches from combine → it shrinks toward glue + the pink Treeswift-only retainers.</text>
 </svg>

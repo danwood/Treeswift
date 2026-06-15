@@ -4,7 +4,7 @@ When a new upstream Periphery release comes out, `combine` (the branch the Trees
 
 ## What `combine` is made of
 
-`combine` = current `upstream/master` + four merged feature branches + a stack of glue/fix commits on top. Verified composition (as of tag `treeswift-combine-2026-06-14` = `055609f`):
+`combine` = current `upstream/master` + four merged feature branches + a stack of glue/fix commits on top. Verified composition (as of combine `055609f`):
 
 **Merged branches** (each based on `upstream/master`):
 | branch | what | upstream PR |
@@ -22,7 +22,7 @@ When a new upstream Periphery release comes out, `combine` (the branch the Trees
 | `treeswift-used-marking-walks` (branch) | the full 5 UsedDeclarationMarker propagation walks | only 1 walk upstreamable (#1137); the rest are recall-over-precision |
 | `treeswift-assignonly-retention` (branch, **stacked on #1132 + glue**) | retain initialized constant assign-only properties | entangled with glue + #1132's `isLetBinding` plumbing, so this branch is NOT based on bare upstream — it is built on `redundant-internal-fileprivate` (#1132) with `treeswift-glue` merged in, then the fix on top. (related upstream PR: #1136) |
 
-The whole thing is also pinned by tag `treeswift-combine-2026-06-14` → use it as the ultimate reference if a rebuild goes sideways.
+Before rebuilding, keep a ref to the current combine (e.g. `git branch combine-prev origin/combine`) — it's both the conflict-resolution source (step 2) and the fallback if a rebuild goes sideways.
 
 ## Rebuild procedure
 
@@ -42,32 +42,36 @@ git fetch origin
    ```
    Build each after rebasing (`DEVELOPER_DIR=/Applications/Xcode-26.5.0.app/Contents/Developer swift build`). Upstream API drift is the usual conflict source.
 
-2. **Recreate `combine`** off the new upstream and merge them in:
+2. **Recreate `combine`** off the new upstream and merge the branches in. Most branches fork independently off upstream, so this is a series of merges — NOT a clean fast-forward chain. Several conflict (the branches edit overlapping files); the verified resolution is below.
    ```sh
    git branch -f combine upstream/master
    git checkout combine
-   git merge treeswift-glue
-   git merge fix-unresolvable-subproject-refs
-   git merge fix-sole-class-init
-   git merge redundant-internal-fileprivate
-   git merge redundant-nested        # take #1132's marker files on conflict; nested is additive
-   git merge treeswift-observable-protocol-retainers
-   git merge treeswift-used-marking-walks
-   git merge treeswift-assignonly-retention   # already stacked on #1132+glue; merge AFTER those two are in
+   git merge treeswift-glue                    # clean
+   git merge fix-unresolvable-subproject-refs  # clean
+   git merge fix-sole-class-init               # clean
+   git merge redundant-internal-fileprivate    # CONFLICT ~2 files (Project.swift, main.swift) — glue vs #1132 public-API
+   git merge redundant-nested                  # CONFLICT ~19 files — redundant-nested carries an OLDER copy of the int/fileprivate feature
+   git merge treeswift-observable-protocol-retainers  # clean
+   git merge treeswift-used-marking-walks      # clean
+   git merge treeswift-assignonly-retention    # CONFLICT ~1 file (Declaration.swift) — stacked on #1132+glue, merge AFTER those
    ```
-   Conflict guidance: glue + #1132 overlap in ~8 files (Declaration, OutputFormatter, ScanResult, DeclarationSyntaxVisitor, SourceGraphMutatorRunner, etc.) — UNION both sides (glue adds end-position/progress/public-API, the features add analysis). Keep glue's decision that end positions are EXCLUDED from `Location` equality/hash (else ~58 parameter-lookup tests fail). For `treeswift-assignonly-retention`, the correct merged `DeclarationSyntaxVisitor`/`Declaration` has BOTH `isLetBinding` (from #1132) AND the `endPosition`/`location(from:to:)` glue code — that branch already carries the resolved versions, so prefer them on conflict.
+
+   **Conflict resolution (verified — this dry-run reproduces combine exactly):**
+   - The clean way is to take the **already-resolved version from the previous `combine`** for every conflicted file: `git checkout <old-combine-ref> -- <file>` then `git add` + commit. (Keep a ref/branch of the prior combine before `branch -f` overwrites it.) This works because the prior combine encodes all the correct unions.
+   - If resolving from scratch instead: glue + #1132 conflicts are **unions** — glue adds end-position/progress/public-API, #1132 adds the analysis; keep BOTH. The redundant-nested conflict: take **#1132's** marker files (RedundantInternal/Fileprivate/Public, shared helpers) — nested's are older; keep only nested's genuinely-new umbrella mutator + flags. For `treeswift-assignonly-retention`, the merged `DeclarationSyntaxVisitor`/`Declaration` must have BOTH `isLetBinding` (#1132) AND the `endPosition`/`location(from:to:)` glue code.
+   - The hard rule that survives all of it: **end positions stay EXCLUDED from `Location` equality/hash** (else ~58 parameter-lookup tests fail).
 
 3. **Build + full test**: `swift build && swift test`. Then run the upstream self-scan gate: `./.build/debug/periphery scan --quiet --clean-build --strict` → "No unused code detected". Lint: `mise exec -- swiftformat --quiet --strict . && mise exec -- swiftlint lint --quiet --strict`.
 
-5. **Re-prove convergence** (the real acceptance test) — see [periphery-operation-status.md](periphery-operation-status.md) for the forceRemoveAll→rebuild probe against the four Prodcore baselines (R5/R4/R-May/R3). Each must rebuild with **zero build errors** after a full unused-code removal. This is what validates that combine's recall-tuned analysis is still safe.
+4. **Re-prove convergence** (the real acceptance test) — see [periphery-operation-status.md](periphery-operation-status.md) for the forceRemoveAll→rebuild probe against the four Prodcore baselines (R5/R4/R-May/R3). Each must rebuild with **zero build errors** after a full unused-code removal. This is what validates that combine's recall-tuned analysis is still safe.
 
-6. **Push + re-tag**:
+5. **Push** (force, since `combine` is rewritten). Keep the old combine as a fallback ref first:
    ```sh
+   git branch -f combine-prev origin/combine   # fallback to the previous combine, just in case
    git push -f origin combine
-   git tag treeswift-combine-<YYYY-MM-DD> combine && git push origin treeswift-combine-<YYYY-MM-DD>
    ```
 
-7. **Update the subtree** in Treeswift — see [periphery-subtree-maintenance.md](periphery-subtree-maintenance.md).
+6. **Update the subtree** in Treeswift — see [periphery-subtree-maintenance.md](periphery-subtree-maintenance.md).
 
 ## Why so manual
 

@@ -12,7 +12,7 @@ This is the reference for **which** library-integration modifications live in th
 
 `PeripherySource/periphery/` is a **git subtree** that vendors the **`combine`** branch of the fork [danwood/periphery](https://github.com/danwood/periphery). Vendoring (rather than a remote package) keeps the Treeswift repo self-contained: a fresh clone builds with no network and no extra setup.
 
-`combine` = current upstream Periphery + this glue + the unmerged feature/fix branches + the Treeswift-only retainers. It is validated by a forceRemoveAll → rebuild probe against four historical Prodcore baselines (zero build errors each). Current pin: tag **`treeswift-combine-2026-06-14`** (commit `055609f`).
+`combine` = current upstream Periphery + this glue + the unmerged feature/fix branches + the Treeswift-only retainers. It is validated by a forceRemoveAll → rebuild probe against four historical Prodcore baselines (zero build errors each). The subtree currently equals combine at commit `055609f`.
 
 **Workflow docs (read these for anything operational):**
 - Update the subtree when combine advances → [`../../docs/periphery-subtree-maintenance.md`](../../docs/periphery-subtree-maintenance.md)
