@@ -88,6 +88,8 @@ Verified against current upstream master (post #1075 / #1126):
 
 **Fix applied:** `ObservableMacroRetainer` now suppresses `redundantInternalAccessibility` on all implicit backing storage properties (`_propName`), so those warnings are never emitted. The `insertAccessKeyword` guard (returns line unchanged when expected keyword not found) remains as a safety net for any edge cases not covered by the retainer.
 
+**Upstream-PR investigation (2026-06-15):** The **retention** half of ObservableMacroRetainer (retain a type used only as an @Observable property's type) is NOT a reproducible bug on any Periphery-supported Swift. Bisected the full installed range — 6.1.2 (Periphery's documented minimum), 6.2.x, 6.3.x — and on EVERY version the toolchain emits the direct property-type reference, so the type is already correctly retained without the retainer. A version-gated upstream fix was built + tested (branch `fix-observable-version-aware`, green) but the gate boundary lands at/below the supported floor, so the retainer is INERT on every supported toolchain — it would only matter on hypothetical sub-6.1.2 / non-Apple toolchains. Verdict: NOT worth an upstream PR (no reproducible defect to fix); branch discarded. The retainer stays in `treeswift-extras` as a harmless safety net. The OTHER half (the wrong-line-number `redundantInternalAccessibility` suppression) depends on #1132's machinery and is a separate concern.
+
 **Affected declaration kinds:** `varInstance` properties inside `@Observable` classes — specifically the synthesized storage (`_propName`) entries.
 
 ---
