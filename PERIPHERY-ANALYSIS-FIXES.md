@@ -708,6 +708,18 @@ NOT YET RUN: the decisive forceRemove→rebuild probe (would tell true-positive 
 2. ObservableMacroRetainer (F1) + ProtocolConformanceRetainer (F3) — whole mutators dropped. Dropped unused 638→468, redundantInternal 584→273.
 3. UsedDeclarationMarker propagation walks (F5/F7/F9/F11/F13) — accessor→property (covers property-wrapper `$foo` projected values for @State), member→type, child varType/returnType/parameterType, nested-type-by-name. This was the big one: fixed the 123 `$`-binding false positives + the PhraseStatus nested-type errors.
 
+### ROOT CAUSE of the `$foo` case + the proper upstream fix (2026-06-15)
+
+The `$foo`-binding false positive (the 123 errors above) was root-caused by direct index-store inspection, NOT guesswork:
+
+- It is a **real Periphery bug specific to the Xcode 27 / Swift 6.4 `@State` *macro* form.** The macro synthesizes sibling members `$foo` (a `SwiftUI.Binding`), `_foo`, `__foo`, all `implicit` and children of the view struct. A `$foo` read records a reference to the synthesized `$foo` Binding USR — never the user property's USR — so the user property gets zero incoming references and is falsely flagged unused.
+- **On Xcode 26.5 (Swift 6.3.2, property-wrapper form) the bug does NOT exist** — there the `$foo` read records a direct reference to the user property, which is retained normally. The synthesized `$foo`/`_foo`/`__foo` declarations don't even appear in that index.
+- Earlier "123 errors on 26.5" measurements were **toolchain-conflated**: Periphery ran under 26.5 but the Prodcore index was built by Xcode 27 (the `xcode-select` default). The clean controlled single-toolchain repro is the trustworthy evidence.
+
+**Proper fix = PR #1138** (`fix-state-projected-value`): a new `StateProjectedValueRetainer` mutator that, when a synthesized `$foo` is referenced at a non-implicit use site, retains the sibling user property — and only then (a never-read property keeps being flagged). Structure-based, no version gate: a no-op on 26.5, fixes the macro form on 27. Verified on both toolchains; LIVE upstream, CI-green except the pre-existing-on-master `main-snapshot` lanes.
+
+So the accessor→property walk above is **superseded by #1138** for the `$foo` case. The other walks (member→type, varType, nested-type-by-name) cover unrelated cases and stay until separately addressed (nested types → #1137). Full root-cause detail + the dual-Xcode-version index dumps are in `.claude/agent-notes/projected-value-rootcause.md`.
+
 **Key reframe:** assignOnlyProperty + redundantProtocol are NON-REMOVABLE by design (the experiment never removes them) — their scan COUNT is cosmetic, not a convergence gate. The 141 remaining reported assignOnly are the #1058 design category (memberwise-init properties read only via synthesized code: truly assign-only but unsafe to remove) — visible-but-not-removed, correct. The real criterion is unused→0 after removal with zero build errors.
 
 **RESULT — combine (origin/combine @ 055609f) converges ALL FOUR historical baselines:**

@@ -19,11 +19,11 @@ This one branch bundles all the Treeswift-specific code so the rest of the graph
 
 - the **glue** (library integration: Package.swift product split, end-position tracking, ScanProgressDelegate, task-cancellation, public API) — never upstream
 - **ObservableMacroRetainer (F1)** + **ProtocolConformanceRetainer (F3)** — Treeswift-only (F1 inert on current upstream toolchain, F3 conflicts with upstream's redundant-protocol diagnostic)
-- the full **UsedDeclarationMarker propagation walks (F5/F7/F9/F11/F13)** — only one walk is upstreamable (that's PR #1137, a *separate* `fix-used-marking-propagation` branch); the rest are recall-over-precision
+- the full **UsedDeclarationMarker propagation walks (F5/F7/F9/F11/F13)** — these were originally cast as "recall-over-precision" over-retention, but one of the cases they covered (the `$foo` projected-value reads) was root-caused as a **real Periphery bug** in the Xcode 27 / Swift 6.4 `@State` *macro* form: the macro synthesizes a `$foo` Binding and the index records the `$foo` read against it, never the user property, so the property is falsely flagged unused. The proper fix is **PR #1138** (`fix-state-projected-value`, a *separate* `StateProjectedValueRetainer` mutator), which is a no-op on Xcode 26.5 (property-wrapper form, no bug) and fixes the macro form. The nested-type case is PR #1137. See [`PERIPHERY-ANALYSIS-FIXES.md`](../PERIPHERY-ANALYSIS-FIXES.md) and the root-cause note in `.claude/agent-notes/projected-value-rootcause.md`.
 - the **assign-only retention** fix (related upstream PR: #1136, a *separate* `fix-assignonly-init-retained` branch)
 - and it carries **#1132** as its base.
 
-So `treeswift-extras` is the single home for everything that is correct for Treeswift's aggressive cleanup but wrong (or moot) for upstream. The clean upstream PRs (#1132/#1133/#1134/#1136/#1137) live on their own separate branches and are NOT folded in here.
+So `treeswift-extras` is the single home for everything that is correct for Treeswift's aggressive cleanup but wrong (or moot) for upstream. The clean upstream PRs (#1132/#1133/#1134/#1136/#1137/#1138) live on their own separate branches and are NOT folded in here.
 
 ### KNOWN DUPLICATION (intentional)
 
@@ -37,7 +37,7 @@ So `treeswift-extras` is the single home for everything that is correct for Tree
 
 Why we accept the duplication: the PR branches must each fork off **bare upstream** to be clean pull requests; extras must be **one self-contained buildable unit** for combine. A branch can't be both, and trying to stack them (so extras "references" instead of "duplicates") reintroduces the dependency loops + per-file reconciliation that this 4-branch model was chosen to avoid. The duplicated copies are the SAME code (extras was built by merging those very branches), so they don't drift independently — they're re-derived together whenever combine is rebuilt.
 
-**This complexity is temporary.** As ileitch merges the PRs, each merged fix becomes part of the new upstream base → drop it from BOTH the standalone branch AND from extras. When #1132/#1136/#1137 are all upstream, extras shrinks to just glue + F1 + F3 + the 4 non-upstreamable walks, and the duplication disappears.
+**This complexity is temporary.** As ileitch merges the PRs, each merged fix becomes part of the new upstream base → drop it from BOTH the standalone branch AND from extras. When #1132/#1136/#1137/#1138 are all upstream, extras shrinks toward just glue + F1 + F3 + the remaining non-upstreamable walks, and the duplication disappears. In particular, once **#1138** (the `$foo` projected-value fix) merges, the accessor→property walk it supersedes should be dropped from the extras walks as part of that rebuild — validated by the standard 4-baseline convergence probe.
 
 ## Why a separate `treeswift-extras` instead of stacking everything
 
@@ -86,4 +86,4 @@ git branch -f combine-prev origin/combine    # fallback + conflict-resolution so
 
 ## As upstream merges the PRs
 
-When ileitch merges #1132/#1133/#1134/#1136/#1137, those fixes become part of the new upstream base — so drop the corresponding ingredient branch from the merge list (and from `treeswift-extras`, for the parts it carries). Over time `combine` shrinks toward just `treeswift-extras` (glue + the genuinely-Treeswift-only retainers) on top of upstream.
+When ileitch merges #1132/#1133/#1134/#1136/#1137/#1138, those fixes become part of the new upstream base — so drop the corresponding ingredient branch from the merge list (and from `treeswift-extras`, for the parts it carries). Over time `combine` shrinks toward just `treeswift-extras` (glue + the genuinely-Treeswift-only retainers) on top of upstream.
