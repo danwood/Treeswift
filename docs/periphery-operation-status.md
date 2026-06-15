@@ -1,6 +1,6 @@
 # Periphery operation — status & roadmap
 
-**Living document.** Update when accomplishments land. Diagram: [periphery-branch-stack.svg](periphery-branch-stack.svg). Subtree upkeep: [periphery-subtree-maintenance.md](periphery-subtree-maintenance.md). Last updated: 2026-06-14.
+**Living document.** Update when accomplishments land. Diagram: [periphery-branch-stack.svg](periphery-branch-stack.svg). Subtree upkeep: [periphery-subtree-maintenance.md](periphery-subtree-maintenance.md). Rebuilding combine on new upstream: [periphery-combine-rebuild.md](periphery-combine-rebuild.md). Last updated: 2026-06-14.
 
 ## ✅ Accomplished
 

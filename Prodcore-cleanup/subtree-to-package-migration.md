@@ -1,3 +1,5 @@
+> **SUPERSEDED / HISTORICAL (2026-06-14):** This package migration was TRIED then REVERTED — the subtree was kept (self-contained clone-and-build outweighs drift-risk; the 1.7GB bloat rationale below was wrong — it was gitignored .build). Kept only as a record of the experiment. For current practice see [periphery-subtree-maintenance.md](../docs/periphery-subtree-maintenance.md) and [periphery-combine-rebuild.md](../docs/periphery-combine-rebuild.md).
+
 # Migration runbook: Periphery subtree → pinned Swift package
 
 **Status:** PLANNED, not executed. Written 2026-06-14. Do NOT run until the combine count-investigation (assignOnly 5→534, see PERIPHERY-ANALYSIS-FIXES.md "Regression-replay finding 2026-06-14") is resolved.
