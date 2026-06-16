@@ -12,11 +12,54 @@ Treeswift is a macOS SwiftUI GUI for the Periphery static analysis tool. It uses
 - **C — Cleanup process** (measured loop + supervisor): [CLEANUP-PROCESS.md](CLEANUP-PROCESS.md)
 - **D — Treeswift implementation**: [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md)
 
-## Build Command
+## Build, Run & Debug — READ THIS FIRST
+
+Treeswift is a **macOS** app (not iOS). There is one scheme, `Treeswift`. Always pass an explicit macOS destination.
+
+### Build (compile check)
 
 ```bash
-xcodebuild -project Treeswift.xcodeproj -scheme Treeswift build
+xcodebuild -project Treeswift.xcodeproj -scheme Treeswift -configuration Debug -destination 'platform=macOS' build
 ```
+
+To see only errors (build output is huge — never read it raw):
+
+```bash
+xcodebuild -project Treeswift.xcodeproj -scheme Treeswift -configuration Debug -destination 'platform=macOS' build 2>&1 \
+  | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
+```
+
+The built app lands in DerivedData; the build log prints the exact `.app` path (`.../Build/Products/Debug/Treeswift.app`).
+
+### Run
+
+```bash
+open -a "$(xcodebuild -project Treeswift.xcodeproj -scheme Treeswift -configuration Debug -destination 'platform=macOS' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}')/Treeswift.app"
+```
+
+Or just build first, then `open <path>/Treeswift.app` from the path the build printed.
+
+### Run with CLI args (headless analysis / automation)
+
+Treeswift accepts command-line arguments — launch the binary directly (not `open`) to pass them and see stdout:
+
+```bash
+"<BUILT_PRODUCTS_DIR>/Treeswift.app/Contents/MacOS/Treeswift" <args>
+```
+
+See README.md for the full CLI flag list.
+
+### Debug Treeswift's own analysis output
+
+When a scan inside the running app shows an error in the "Build / Scan Error" panel (or that panel is empty/useless), **do not rely on the GUI panel** — reproduce on the command line instead:
+
+- Build & run the **target project** (e.g. Prodcore) directly with the `xcodebuild … build 2>&1 | grep error:` recipe above to get the real compiler errors.
+- Treeswift's own console logging goes to stdout — launch the binary directly (not `open`) to watch it.
+- The scan cache lives at `~/Library/Application Support/Treeswift/ScanCache/scan-cache-<configUUID>.json`; delete a file there to force a fresh scan for that configuration.
+
+### Note for xcodebuild MCP
+
+`session_show_defaults` will show no project/scheme by default. For a quick compile check, the plain `xcodebuild … -destination 'platform=macOS' build` command above is the fastest path and needs no session setup.
 
 ## Command-Line Interface
 
@@ -88,6 +131,21 @@ Every such warning is evidence of one of two problems:
 - Ask the user if the correct course of action is unclear.
 - Never change the flagged code just to make the warning disappear.
 - A `periphery:ignore` suppression comment is acceptable only as a last resort, after confirming the analysis is a genuine false positive with no better fix available.
+
+## ALWAYS Sync Upstream Master Before Any Periphery Work — CRITICAL
+
+**Before fixing ANY Periphery bug or false positive, ALWAYS pull the latest `peripheryapp/periphery` master first.** There is no point fixing a bug that may already be fixed upstream.
+
+The Periphery fork lives at `/Users/dwood/code/periphery-dan-private` (remote `origin` = `danwood/periphery`, remote `upstream` = `peripheryapp/periphery`). The `combine` branch is the integration branch carrying our fixes on top of upstream master.
+
+**Mandatory first step of every Periphery-bug session:**
+
+1. `git fetch upstream` — get the newest upstream master.
+2. Confirm whether the bug still reproduces on the LATEST upstream master before writing any fix. If upstream already fixed it, stop — pull upstream into combine instead of re-fixing.
+3. Base all new fix branches on the latest `upstream/master`, and rebase `combine` onto the latest `upstream/master` so combine never drifts behind upstream.
+4. Open fix PRs against **`peripheryapp/periphery` master** (real upstream), based on the latest upstream version — not against a stale fork master and not as fork-only patches. The goal is to get fixes accepted upstream so they benefit everyone and so the fork does not diverge.
+
+Never start fixing a Periphery analysis bug without first verifying it is still present on current upstream master.
 
 ## Modifying PeripherySource/periphery Files
 
