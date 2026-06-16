@@ -43,6 +43,9 @@ numbered section below.
 | F18 | — | Files pinned via `PBXFileSystemSynchronizedBuildFileExceptionSet.membershipExceptions` deleted from disk → "Build input files cannot be found" | Treeswift `XcodeProjectFileChecker.parseSynchronizedMembershipExceptions` (also treat synchronized-group exceptions as explicit refs → shell, don't delete) | n/a (Treeswift) | ✅ E2E repro `fixtures/F18-synchronized-group-membership/` |
 | F19 | — | `redundantPublicAccessibility` downgrades a type but leaves `public init`/members in its **extensions** → "cannot declare a public initializer in an extension with internal requirements" | Treeswift `CodeModificationHelper.cascadePublicStripFromExtensions` (strip `public` from extension members of any type downgraded from public) | n/a (Treeswift) | ✅ E2E repro `fixtures/F19-public-extension-member/` |
 | F20 | — | Type narrowed to `fileprivate` but an **extension method / free function** returning it not cascaded → "method must be declared fileprivate because its result uses a fileprivate type" | Treeswift `CodeModificationHelper.cascadeFileprivateToReferencingFunctions` (file-wide cascade to funcs whose signature references a newly-fileprivate type) | n/a (Treeswift) | ✅ E2E repro `fixtures/F20-fileprivate-func-cascade/` |
+| F21 | — | `redundantPublicAccessibility` strips `public` from a protocol-extension default-impl member that witnesses an **external** public protocol (`StatusRepresentable.id` → stdlib `Identifiable`) → "property must be declared public because it matches a requirement in public protocol" | `RedundantExplicitPublicAccessibilityMarker.validateExtension` (exempt members witnessing external-protocol requirements) | ⬆️ PR #1139 | ✅ `RedundantPublicAccessibilityTest.testPublicProtocolWitnessForExternalProtocol` |
+| F22 | — | Nested enum used only as a stored-property type: the enum is retained but its **cases** are still removed, leaving an empty/invalid enum | `UsedDeclarationMarker` (mark enum cases of name-resolved types; enums only) | combine-only (recall>precision, see #1137) | ✅ `RetentionTest.testRetainsNestedTypeUsedAsSiblingStoredPropertyType` |
+| F23 | — | **Top-level / sibling** type used only as another type's stored-property declared type wrongly flagged unused → dangling type annotation (generalizes F13 beyond same-parent nesting; the old PriceValue/F16 case) | `UsedDeclarationMarker` (`typesByNameInLexicalScope` / `markUsedTypesNamedByStoredProperties`) | combine-only (recall>precision, see #1137) | ✅ `RetentionTest.testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType` |
 
 > The numbered sections below still carry their original "## N." headings (N == F-number). When you
 > add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
@@ -733,3 +736,78 @@ So the accessor→property walk above is **superseded by #1138** for the `$foo` 
 forceRemoveAll(unused) on each baseline → rebuild Prodcore → zero build errors = zero false positives. Combine's analysis is now proven correct against the full historical range, NOT just minimal fixtures. (F18/F19/F20 Treeswift removal-tool cascade fixes also exercised — the 17–24 insertions per baseline are their access-keyword rewrites, working.)
 
 **Still owed:** the restored fixes (Observable, Protocol, UsedDeclarationMarker walks) are in combine but only assignOnly (#1136) + sole-class-init (#1134) have upstream PRs. The others want individual upstream PRs with real-pattern-derived tests — DEFERRED, documented here.
+
+## F21 — `redundantPublicAccessibility` strips `public` from an external-protocol witness
+
+**Symptom (Prodcore develop, forceRemoveAll 2026-06-16):**
+
+```
+CoreData/Common/StatusProtocol.swift: error: property 'id' must be declared public
+because it matches a requirement in public protocol 'Identifiable'
+```
+
+`public protocol StatusRepresentable: …, Identifiable …` with the `id` witness supplied in a
+default-implementation `public extension StatusRepresentable { var id: String { rawValue } }`. The
+extension's `public` was flagged redundant; downgrading it broke the conforming public enums
+(`ProgramStatus`, `ProjectStatus`, `DealStatus`), because `id` witnesses the stdlib `Identifiable`
+requirement and must stay at least as accessible.
+
+**Root cause:** `RedundantExplicitPublicAccessibilityMarker.validateExtension` marks a `public
+extension` redundant whenever the extended type is itself redundant, without checking whether a
+member witnesses an **external** public protocol requirement. The witness link survives as a related
+reference whose USR resolves to no local declaration (the protocol — `Identifiable` — is external);
+the existing cross-module exemption only handled witnesses of *local* protocols.
+
+**Fix:** exempt an extension when any member is the witness for an external protocol requirement (a
+related reference of a protocol-member-conforming kind, matching name, unresolvable USR). General —
+no special-casing of `Identifiable`/`id`. **Upstream PR #1139** (`fix-public-protocol-witness`, off
+upstream/master, 42 accessibility tests pass).
+
+**Fixture:** `RedundantPublicAccessibilityTest.testPublicProtocolWitnessForExternalProtocol`.
+
+## F22 — Nested enum retained as a property type but its cases removed
+
+**Symptom (Prodcore develop):** a nested `enum PhraseStatus { case unknown }` used only as
+`private let status: PhraseStatus` in the same struct — the enum was correctly retained, but its
+case `unknown` was still flagged unused and removed, leaving an empty/invalid enum.
+
+**Root cause:** the combine nested-type-by-name resolution (the F13 family) marked the *type* used
+via `markUsed([nested])` but not its members. A type reached only by this name-based fallback has no
+reference occurrences for its members, so the enum cases stayed unmarked.
+
+**Fix (`UsedDeclarationMarker`):** when a name-resolved type is an enum, also mark its cases used. Do
+this for **enums only** — marking all descendants of class/struct types over-retains and regressed
+`testDoesNotRetainProtocolMethodInSubclassWithDefaultImplementation`. combine-only (the
+stored-property type-resolution family is the recall-over-precision tradeoff upstream rejects per
+#1137).
+
+**Fixture:** `RetentionTest.testRetainsNestedTypeUsedAsSiblingStoredPropertyType`.
+
+## F23 — Top-level / sibling type used only as a stored-property type removed
+
+**Symptom (Prodcore develop):** `enum ToolPlacement { … }` (top-level) used only as
+`let placement: ToolPlacement` on a sibling struct `ToolDescriptor` was flagged unused; removing it
+left the surviving property's type annotation dangling ("cannot find type 'ToolPlacement' in scope").
+This generalizes F13 (which covered only **same-parent** nesting) and the old PriceValue/F16 case to
+any sibling or enclosing-scope type.
+
+**Root cause:** the nested-by-name resolution only searched the owner's own `declarations` (nested
+types). A top-level/sibling type referenced only as a stored property's `declaredType` was never
+resolved, so it had no incoming reference.
+
+**Fix (`UsedDeclarationMarker`):** replace the nested-only lookup with `typesByNameInLexicalScope`
+(the owner's nested types, then each enclosing scope outward to the module root, inner scopes
+shadowing outer) + `markUsedTypesNamedByStoredProperties`. Resolution is bounded to the lexical scope
+chain — not the whole graph — to avoid retaining unrelated dead types that merely share a name.
+combine-only (recall>precision, see #1137).
+
+**Fixture:** `RetentionTest.testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType`.
+
+## Scan-cache fingerprint — hashed the wrong path (Treeswift, 2026-06-16)
+
+Not a Periphery false positive but found this session: `SourceFingerprint.compute` walked the
+configuration's `project` value (the `.xcodeproj` bundle or `Package.swift` file), which contains no
+`.swift` files, so every fingerprint was the SHA-256 of an empty list — a constant that never changed.
+Stale scan caches were never invalidated on relaunch (branch switch, version change). Fixed to resolve
+the enclosing source directory first (matching `FileSystemScanner`/`PeripheryScanRunner`). Verified on
+Prodcore develop: 862 source files, content-sensitive hash. Treeswift `SourceFingerprint.swift`.
