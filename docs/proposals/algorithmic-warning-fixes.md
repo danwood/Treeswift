@@ -1,8 +1,10 @@
 # Algorithmic Fixes for Currently-Unremovable Warnings
 
-**Status: design proposal.** Treeswift today refuses to auto-fix two Periphery annotation kinds —
-`assignOnlyProperty` and `redundantProtocol` — because `ScanResult.Annotation.canRemoveCode` returns
-`false` for both (`Treeswift/Core/Operations/PeripheryKit-extensions.swift`). This document analyzes
+**Status: design proposal.** Treeswift today refuses to auto-fix three categories of Periphery
+finding: two annotation kinds — `assignOnlyProperty` and `redundantProtocol` — because
+`ScanResult.Annotation.canRemoveCode` returns `false` for both, plus **unused function parameters**,
+which arrive with the `.unused` annotation but are gated out of removal by the missing-source-range
+check (all in `Treeswift/Core/Operations/PeripheryKit-extensions.swift`). This document analyzes
 how a **future Treeswift could fix them algorithmically (no LLM)**, using the real Prodcore cases and
 examples lifted from Periphery's own test suite. Where a purely algorithmic fix is unsafe or
 under-determined, that is called out explicitly as **"needs human/LLM judgment."**
@@ -151,6 +153,62 @@ redundant protocol with its inherited protocol(s), then delete the protocol decl
 
 ---
 
+## Part 3 — unused function parameters
+
+A parameter that the function body never reads is reported by Periphery with the **`.unused`**
+annotation (so it appears in the `unused` bucket of the scan summary, not a bucket of its own).
+Unlike an unused *declaration*, Treeswift does not remove it. The gate is **not** the annotation
+type — it is the source-range check shared by all `.unused` removals:
+
+```swift
+// PeripheryKit-extensions.swift
+case .unused:
+    hasFullRange || isImport
+// UnusedDependencyAnalyzer.swift
+let hasFullRange = location.endLine != nil && location.endColumn != nil
+```
+
+Periphery emits a parameter's location as a **point** (line/column of the parameter name, with no
+`endLine`/`endColumn`), so `hasFullRange` is `false`, `canRemoveCode` returns `false`, and
+`forceRemoveAll` reports the finding as **0 deletable**. This is why a Prodcore scan can show, say,
+47 `unused` findings of which `forceRemoveAll` removes zero — they are all parameters.
+
+### Why this is correct to refuse (today)
+
+Even given a full range, deleting a parameter is **not** a self-contained edit the way deleting a
+dead declaration is. A correct fix must also:
+
+1. Remove the corresponding **argument at every call site** (Periphery's reference graph records
+   calls to the function, not to the individual parameter, so the argument position must be
+   recovered from the signature + SwiftSyntax, not from a reference USR).
+2. Respect **signature-locked** contexts where the parameter cannot be removed at all and the only
+   valid fix is renaming it to `_`:
+   - **protocol witnesses** — the function satisfies a protocol requirement whose signature is fixed
+     (e.g. `init(from:)`, delegate methods);
+   - **overrides** — `override func` must match the superclass signature;
+   - **`@objc` / selector-referenced** methods, and functions passed as values where the full
+     parameter list is part of the type;
+   - **closures/handlers** assigned to a typed function value.
+
+So the taxonomy of fixes is:
+
+| Shape | Fix | Algorithmic? |
+|-------|-----|--------------|
+| `private`/`fileprivate` free function, param genuinely unused, few call sites | remove param + arguments, OR rename to `_` | ⚠️ Tractable for rename-to-`_`; argument removal needs call-site rewrites |
+| Protocol witness / `override` / `@objc` / typed-function-value | **rename to `_`** (only legal fix; never remove) | ✅ Safe single-token rewrite, no call-site changes |
+| Param actually used via a wrapper / KVO / reflection Periphery can't see | leave it | ❌ Needs human/LLM judgment |
+
+### Verdict for unused parameters
+
+The universally-safe fix is **rename to `_`** (or `_ name:`): it silences the warning, never touches
+an external signature, and requires no call-site edits. It is a single-token SwiftSyntax rewrite
+keyed off the parameter's declaration. *Removing* the parameter entirely is the involved case
+(call-site argument deletion) and must be refused outright for the signature-locked contexts above.
+Until that logic exists, unused parameters are presented to the user and left for review — exactly
+like `assignOnlyProperty`.
+
+---
+
 ## Prodcore evidence — the enumerated `assignOnlyProperty` cases (2026-06-11)
 
 > **`assignOnlyProperty` items are effectively invisible in Treeswift's current API/UI.** Because
@@ -240,5 +298,11 @@ straightforward but must not be skipped.
    tractable; residual *intent* questions are not — leave those to review.
 2. **`redundantProtocol`**: lower priority; mechanically tractable for the internal/simple case but
    high blast radius and entangled with API-design intent. Defer until `assignOnlyProperty` lands.
-3. Anything marked **❌ needs human/LLM judgment** above should remain non-auto-fixable and be
+3. **Unused parameters** (reported as `.unused`, gated out by the missing source range): implement
+   the *rename-to-`_`* fix as the safe default — a single-token rewrite that needs no call-site
+   changes and is the only legal fix for protocol-witness/override/`@objc`/typed-value contexts.
+   Outright *removal* of the parameter (with call-site argument deletion) is the involved case; defer
+   it and refuse the signature-locked shapes. This requires either supplying a full source range for
+   parameter findings or special-casing the parameter declaration kind in `canRemoveCode`.
+4. Anything marked **❌ needs human/LLM judgment** above should remain non-auto-fixable and be
    presented to the user, never silently removed — consistent with the zero-false-positive rule.

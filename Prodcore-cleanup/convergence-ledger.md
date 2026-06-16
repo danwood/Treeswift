@@ -58,6 +58,11 @@ A cycle is **regression-free** only if no previously-zero error reappears and no
 | 2026-06-10 | HEAD | 128 | 42 | 5 | 81 | 0 | 115 | 2 | 1 | 0/0 | Baseline after P1–P13 fixes + Issue 14 (nested type as sibling-prop type) + Issue 15 (sole class init). Remaining FP: `PriceValue` (top-level fileprivate struct used as property type in another type) removed while the property stays — Issue 14 only covers same-parent nesting, not top-level types used as property types elsewhere. → next target. |
 | 2026-06-10 | HEAD | — | — | — | — | — | 144 | ~90 | 29 | 0/0 | **REGRESSED ❌ (reverted).** Tried to generalize Issue 14 into a graph-wide "mark used any type used as any property's declaredType" sweep. Mass `markUsed` perturbed `ignoreUnusedDescendents`, surfacing many previously-ignored decls as removable → 144 removed, ~90 errors across 29 files, including a re-regression of the TuneTargetDisplayModels types Issue 14 had fixed. Lesson: broad `markUsed` sweeps are unsafe; keep Issue 14 narrow (same-parent only). |
 | 2026-06-10 | HEAD | 127 | 41 | 5 | 81 | 0 | 114 | **0** | **0** | 0/0 | **CONVERGING ✅.** Reverted the broad sweep; kept Issue 14 narrow. Fixed `PriceValue` precisely: `CodablePropertyRetainer` now also `markRetained`s the concrete type used as a retained Codable/Encodable property's `declaredType` (+ descendants). Full `forceRemoveAll` on all of Prodcore now **builds with zero errors.** Audit 0: `testRetainsCodableProperties`/`FixtureStruct14` uses a built-in (`Int`) property type — custom-type case NOT covered upstream → genuine gap, fix justified; owes a new Periphery test + fixture. Regression test written (`RetentionTest.testRetainsCodablePropertyCustomType` + `FixtureStruct200/201`); runs only on a standalone upstream checkout (subtree isn't `swift test`-buildable in-repo), verified in-repo by E2E. |
+| 2026-06-16 | develop@47a6d25de | 480 | 93 | 161 | 226 | 0 | 272 | **0** | **0** | 3/3 | **CONVERGING ✅ — fresh develop baseline (34 new commits since cb1fb2912).** Cold-cache scan (exact cache-file deleted by name, app relaunched). byAnnotation: unused=93, assignOnly=161, redundantAccessibility=156, redundantInternalAccessibility=61, redundantPublicAccessibility=9 (redunAcc column = sum of all 3 = 226). forceRemoveAll: 272 deleted across 50 files, **BUILD SUCCEEDED, 0 errors.** 1 benign ghost no-op (WorkspaceNavigatorToolbar.swift redundantPublicAccessibility, bad source location, F17 family). 23 nonDeletable items in 5 files (AppRootView=15, ToolDescriptor=5, CollaboratorsDataView=1, VenuesDataView=1, RouteMapView=1) — these are assignOnly or engine-conservative items, not false positives. Fixtures 3/3 (F18/F19/F20 E2E shapes present; F21/F22/F23 proven by build_errors=0). **F24 still open:** unused=93 pristine; prior session showed ~47 of these are Archive-coupled (0 deletable post-pass-1). The 34 new commits added ~10 new genuine unused decls on top of the 83 prior floor. redunAcc=226 is entirely new code from the 34 commits — should converge to 0 in multi-pass cleanup like prior sessions. |
+| 2026-06-16 | dead-code-cleanup-2026-06-16 (off develop@47a6d25de) | 480→217 | 93→47 | 161 | 226→9 | 0 | 272 | **0** | **0** | 3/3 | **CONVERGING ✅ — PASS 1 committed `0f27f608c`.** Cold-cache pre-removal scan confirmed baseline (480 total, unused=93, redunAcc=226). forceRemoveAll: 272 deleted across 50 files (2 whole-file deletes: ProductCard.swift, SessionTab.swift), BUILD SUCCEEDED, 0 errors. 1 benign ghost no-op (WorkspaceNavigatorToolbar.swift:78 redundantPublicAccessibility, F17 family). 23 nonDeletable. Archive-split: 0 of the 272 deletable were in Archive/ files. Cold rescan after commit: total=217, unused=47, assignOnly=161, redunAcc=9 (redundantAccessibility=2 + redundantInternalAccessibility=7), redunProto=0. The 47 residual unused are all Archive-coupled (0 deletable, 0 nonDeletable in unused-filter preview) — per policy, live decls outside Archive whose only use chains run through Archive are genuine dead code; removal engine conservatively gates them. redunAcc 226→9 still fixable. |
+| 2026-06-16 | dead-code-cleanup-2026-06-16 pass 2 | 217→208 | 47 | 161 | 9→**0** | 0 | 9 | **0** | **0** | 3/3 | **CONVERGING ✅ — PASS 2 committed `de0f6a64e`.** forceRemoveAll removed 9 redundant-accessibility items across 3 files (DebugMenuCommands.swift=4, AppRootView.swift=3, RouteMapView.swift=2), BUILD SUCCEEDED, 0 errors. Cold rescan after commit: total=208, unused=47, assignOnly=161, redunAcc=**0**, redunProto=0. forceRemoveAll preview now shows 0 deletable / 0 nonDeletable. **redunAcc reached 0.** Remaining non-zero fixable category: unused=47, all Archive-coupled (per F24 investigation — genuine dead code, removal-gate open question). assignOnly=161 is the design floor. |
+| 2026-06-16 | dead-code-cleanup-2026-06-16 pass 3 (Archive indexExclude probe) | 208→209 | 47→48 | 161 | 0 | 0 | 1 (attempted) | **1** | **1** | 3/3 | **REGRESSED ❌ — REVERTED. DO NOT COMMIT.** User added `**/Archive/**` to indexExclude. Cold scan: total went 208→209 (+1), unused 47→48 (+1). forceRemoveAll preview: 1 deletable (`TransportMethodDisplay.systemImage` in ProductionDayDisplayModel.swift). After removal, Prodcore BUILD FAILED: 3 errors in `Projects/Engagement/Views/Archive/LiveEngagementDaysList.swift:243/279/314` — `value of type 'TransportMethodDisplay' has no member 'systemImage'`. ROOT CAUSE: excluding Archive/ from indexExclude does NOT solve the Archive-coupling problem — it makes it WORSE. Periphery can no longer see Archive references, so members used only by Archive code look unused → removing them breaks Archive compilation. The Archive folder is compiled (it's a reference group in the Xcode project, just unedited), so its call-sites still link. indexExclude strips reference-resolution, not compilation. VERDICT: the `**/Archive/**` indexExclude must be REMOVED from the config. It introduces a NEW false-positive category (Archive-only references invisible to Periphery). Prodcore reverted. The 47 Archive-coupled unused decls remain unreachable by any safe automated strategy. |
+| 2026-06-16 | dead-code-cleanup-2026-06-16 pass 3 corrected (anchored `**/Prodcore/Archive/**` probe) | 208 | 47 | 161 | 0 | 0 | **0** | **0** | **0** | 3/3 | **FLAT ⚠️ — NO COMMIT (nothing to remove).** indexExclude set to anchored `**/Prodcore/Archive/**` (matches only the 15 uncompiled top-level Archive files, confirmed round-trip). Cold scan (ScanCache empty, relaunched, fresh scan-cache-UUID.json created): total=208, unused=47, assignOnly=161, redunAcc=0 — IDENTICAL to pass 2 floor. forceRemoveAll preview: 0 deletable, 0 nonDeletable. Build clean (trivially; no changes made). ROOT CAUSE OF FLATNESS: the 47 "unused" items are **unused function parameters** (all have `param-*` declarationUSR format — confirmed by inspecting scanResultSnapshots in cache). They are NOT Archive-coupled declarations. Examples: `context` param in `init(from:context:)`, `credential` in `handlePasswordCredential(_:)`, `party` in `handleContact(_:_:)`, scattered across 40+ active non-Archive files. The removal engine never removes unused parameters via forceRemoveAll (different annotation kind, requires explicit per-item review). The previous session's description of these as "Archive-coupled" was incorrect — they are unused parameters in the main codebase. The anchored Archive exclusion is irrelevant to them. CORRECTION: unused=47 are unused function parameters (genuine findings, not false positives, not Archive-coupled). assignOnly=161 is the design floor. BOTH categories are non-removable by forceRemoveAll by design. No false positives. |
 
 ### Git-history convergence experiment rows (baseline = `<ID>@<commit>`)
 
@@ -86,28 +91,28 @@ set), so historical package/API breakage never masquerades as a false positive. 
 | 2026-06-11 | R5@a1711d27 | 5 | 0 | 5 | **0** | 0 | 0 | **0** | **0** | n/a | **CONVERGED ✅ (cold rescan).** Passes 3→4 appeared stuck at redunAcc=5 with 5 no-op ghosts in StatusInfo/ProgramDisplayModel/TuneTargetDisplayModels — but that was a **stale Treeswift ScanCache** (the 153 MB `scan-cache-<UUID>.json` survived in-loop `rm` because the zsh glob errored after the cache rewrote; incremental cache re-served already-fixed access-control warnings against stale source positions). After killing the app + deleting the cache file by exact name and a COLD rescan: **unused=0, redunAcc=0, assignOnly=5** (floor). Total: unused 271→0, redunAcc 464→0, **776 decls removed**, build clean every pass, **0 false positives.** Finding: ScanCache invalidation is incomplete for in-place access-keyword rewrites (cache bug, not a removal/analysis bug). |
 | 2026-06-16 | develop@cb1fb2912 | 403 | 83 | 157 | 0 | 0 | 194 | **0** | **0** | 3/3 | **0 FALSE POSITIVES ✅.** Current develop. Surfaced 3 NEW false positives broken by forceRemoveAll: **F21** `public` on a protocol-extension default-impl member witnessing an EXTERNAL public protocol (`StatusRepresentable.id`→stdlib `Identifiable`) flagged redundant-public (fixed RedundantExplicitPublicAccessibilityMarker; upstream PR #1139); **F22** nested enum used only as a stored-property type — enum marked used but its CASES still removed, leaving empty enum; **F23** top-level/sibling type used only as a stored-property type wrongly flagged. F22+F23 fixed together in UsedDeclarationMarker (lexical-scope name resolution + enum-case marking, enums only — marking class/struct members regressed `testDoesNotRetainProtocolMethodInSubclassWithDefaultImplementation`); combine-only (stored-property type-resolution is the recall-over-precision family upstream rejects per #1137). After fixes (combine ced2550, subtree pulled into Treeswift 6e1ef42b): forceRemoveAll 194 decls / 43 files → Prodcore **builds clean, 0 errors.** 1 benign `redundantPublicAccessibility` ghost no-op (bad source location, no change applied, F17 family). Also fixed the scan-cache fingerprint (was SHA-256 of empty list → never invalidated; now hashes the source dir, verified 862 files / content-sensitive hash on develop). regression fixtures 3/3: `testPublicProtocolWitnessForExternalProtocol`, `testRetainsNestedTypeUsedAsSiblingStoredPropertyType`, `testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType`. |
 
-### Genuine-dead-code convergence run — 2026-06-16 (develop, committed on a cleanup branch)
+### Genuine-dead-code convergence run — 2026-06-16 (develop@47a6d25de, committed on dead-code-cleanup-2026-06-16)
 
-Real (committed) removals on `develop@79f0a7123` (pulled current), branch
-`dead-code-cleanup-2026-06-16`:
+Real (committed) removals on `develop@47a6d25de`, branch `dead-code-cleanup-2026-06-16`:
 
-| pass | scan unused | removed | build after | committed |
-|------|-------------|---------|-------------|-----------|
-| 1 | 93 | 46 (22 files) | ✅ clean | `3af600565` |
-| 2 | 47 | **0 deletable** | ✅ clean | — |
+| pass | scan total | scan unused | scan redunAcc | removed | build after | committed |
+|------|-----------|------------|--------------|---------|-------------|-----------|
+| 1 | 480 | 93 | 226 | 272 (50 files) | ✅ clean | `0f27f608c` |
+| 2 | 217 | 47 | 9 | 9 (3 files) | ✅ clean | `de0f6a64e` |
+| rescan | **208** | **47** | **0** | 0 deletable | — | floor |
 
-Pass 1 removed 46 genuine unused decls, build clean, committed (later DISCARDED with the branch per
-the user's decision — develop left untouched at 79f0a7123). Pass 2 rescan dropped unused 93→47, but
-`forceRemoveAll(unused)` then deleted **0** (preview: 0 deletable across 97 files). The residual 47 are
-**NOT false positives** — investigation (catalog F24) proved they are genuine dead code: their only use
-chains run through `Archive/`, a reference-only directory that is NOT compiled (README "Not built…", no
-`.o` in DerivedData). Periphery is correct to flag them. So convergence is NOT blocked by a false
-positive; the open item is purely a Treeswift **removal-gate** question — why genuinely-dead decls
-reachable only via an uncompiled folder report as "0 deletable." That, plus the Archive coupling, is
-why unused floors at 47 here. The autonomous loop correctly stopped rather than force-delete (which
-would still be safe — they're dead — but the engine's gate is conservative). Branch discarded; no net
-change to Prodcore. Lesson: a `grep` source hit ≠ a live reference; confirm the referencing file
-compiles before judging a finding.
+Pass 1 removed 272 genuine dead decls (all 226 redunAcc + all 46 unused that the engine would touch),
+build clean, committed. Pass 2 removed the 9 remaining redundant-accessibility items, build clean,
+committed. Cold rescan after pass 2: total=208, unused=47, assignOnly=161, redunAcc=0. redunAcc
+has reached 0. The residual 47 unused are Archive-coupled — genuine dead code per F24 investigation
+(their only use chains run through the uncompiled `Archive/` reference folder). Removal engine
+correctly declines to delete them (0 deletable, 0 nonDeletable in full preview). Per session policy,
+Archive-physical findings are excluded from scope; Archive-coupled live decls are in scope but blocked
+by the removal gate. This is a Treeswift removal-gate open question, not a false positive.
+
+**Prior discarded session note** (develop@79f0a7123, branch later discarded): Pass 1 removed 46
+unused decls via unused-only strategy (committed `3af600565`, later discarded). Lesson from that
+session: Archive-coupled decls floor at 47 and are genuinely dead; the gate is conservative.
 
 ### Genuine-dead-code convergence probe (second condition) — 2026-06-10
 
@@ -174,16 +179,26 @@ removal-gate question (genuinely-dead decls reported "0 deletable").
 
 ## Outstanding work (not false positives, but required to call this "done")
 
+- **unused=47 floor: unused function parameters, not Archive-coupled (corrected 2026-06-16 pass 3).**
+  Pass 3 corrected the previous misdiagnosis ("Archive-coupled"): the 47 remaining unused items are
+  ALL unused function parameters (declarationUSR format `param-<name>-<method>-<swift_mangled>`,
+  confirmed by inspecting the fresh cold-scan ScanCache). Examples: `context` in `init(from:context:)`,
+  `credential` in `handlePasswordCredential(_:)`, scattered across 40+ active non-Archive Swift files.
+  The anchored `**/Prodcore/Archive/**` indexExclude (the 15 top-level uncompiled Archive files) has
+  zero effect on these — they are independent. forceRemoveAll does NOT remove unused parameters by
+  design; each requires explicit review. These are genuine findings (real unused parameters) with no
+  automated removal path. The current `indexExclude` entry `**/Prodcore/Archive/**` may be removed
+  from the config (it is harmless but serves no purpose for removing the 47 unused params).
+  ACTION REQUIRED for unused→0: review each of the 47 unused parameters individually; either add
+  `_ = param` usage, rename to `_`, or remove the parameter from the signature if truly dead.
+  This is a Prodcore code-quality task, not a Treeswift/Periphery bug. The exact removal-gate
+  mechanism (parameters carry `.unused` but Periphery emits a point location, so
+  `hasFullRange`/`canRemoveCode` is false → `forceRemoveAll` skips them) and the safe `rename-to-_`
+  fix design are documented in `docs/proposals/algorithmic-warning-fixes.md` Part 3.
+  Config note: the temporary `**/Prodcore/Archive/**` indexExclude probe was REVERTED — the saved
+  Prodcore config's `indexExclude` is back to `['**/*?.build/**/*', '**/SourcePackages/checkouts/**']`.
 - **Regression fixtures: 0/0 — build them.** Need a `Prodcore-cleanup/fixtures/` corpus AND
   upstream Periphery tests for Issues 13/14/15 and the Codable-type-retention fix, mirroring
   `Tests/PeripheryTests/RetentionTest.swift` + `Tests/Fixtures/Sources/RetentionFixtures/`.
   Specifically the Codable fix owes a fixture extending `FixtureStruct14` with a custom-struct
   property type that would otherwise be unused.
-- **Genuine dead-code convergence floored at unused=47 by a removal-gate + Archive coupling (2026-06-16).**
-  Pass 1 removed 46 genuine unused decls (build clean); pass 2 stalled at unused=47 with 0 deletable.
-  F24 investigation proved these are NOT false positives — genuine dead code reachable only via the
-  uncompiled `Archive/` reference folder. To reach a true zero: (a) understand why Treeswift's removal
-  engine reports these genuinely-dead decls as "0 deletable" (removal-gate, not analysis), and (b)
-  decide policy for code reachable only from `Archive/` (delete it, or exclude `Archive/` from the
-  scan so it stops being counted). The pass-1 cleanup branch was DISCARDED per the user; develop is
-  untouched.
