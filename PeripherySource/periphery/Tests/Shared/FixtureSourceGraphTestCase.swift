@@ -1,5 +1,6 @@
 import Configuration
 @testable import PeripheryKit
+@testable import SourceGraph
 import SystemPackage
 import XCTest
 
@@ -29,6 +30,7 @@ class FixtureSourceGraphTestCase: SPMSourceGraphTestCase {
         additionalFilesToIndex: [FilePath] = [],
         externalTestCaseClasses: [String] = [],
         retainFiles: [String] = [],
+        afterIndexing: ((SourceGraph) -> Void)? = nil,
         testBlock: () throws -> Void
     ) rethrows -> [ScanResult] {
         let configuration = Configuration()
@@ -55,7 +57,7 @@ class FixtureSourceGraphTestCase: SPMSourceGraphTestCase {
             fatalError("\(testFixturePath.string) does not exist")
         }
 
-        Self.index(sourceFiles: [testFixturePath] + additionalFilesToIndex, configuration: configuration)
+        Self.index(sourceFiles: [testFixturePath] + additionalFilesToIndex, configuration: configuration, afterIndexing: afterIndexing)
         try testBlock()
         return Self.results
     }

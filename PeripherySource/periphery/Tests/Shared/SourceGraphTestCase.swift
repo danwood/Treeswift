@@ -43,7 +43,7 @@ open class SourceGraphTestCase: XCTestCase {
         Self.index(sourceFiles: sourceFiles, configuration: configuration)
     }
 
-    static func index(sourceFiles: [FilePath]? = nil, configuration: Configuration) {
+    static func index(sourceFiles: [FilePath]? = nil, configuration: Configuration, afterIndexing: ((SourceGraph) -> Void)? = nil) {
         var newPlan = plan!
 
         if let sourceFiles {
@@ -65,6 +65,8 @@ open class SourceGraphTestCase: XCTestCase {
             swiftVersion: swiftVersion
         )
         _ = try! pipeline.perform()
+
+        afterIndexing?(graph)
 
         allIndexedDeclarations = graph.allDeclarations
         try! SourceGraphMutatorRunner(

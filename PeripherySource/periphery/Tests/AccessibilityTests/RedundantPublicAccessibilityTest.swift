@@ -349,4 +349,14 @@ final class RedundantPublicAccessibilityTest: SPMSourceGraphTestCase {
 
         assertNotRedundantPublicAccessibility(.enum("PublicTypeUsedAsPublicFunctionThrowType"))
     }
+
+    func testPublicProtocolWitnessForExternalProtocol() {
+        index()
+
+        // The `id` witness is supplied in a protocol extension default implementation and satisfies
+        // the requirement of the external public `Identifiable` protocol, so it must remain public.
+        assertNotRedundantPublicAccessibility(.extensionProtocol("PublicProtocolWitnessForExternalProtocol")) {
+            self.assertNotRedundantPublicAccessibility(.varInstance("id"))
+        }
+    }
 }

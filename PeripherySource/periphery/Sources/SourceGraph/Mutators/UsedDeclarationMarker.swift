@@ -112,27 +112,86 @@ final class UsedDeclarationMarker: SourceGraphMutator {
                 }
             }
 
-            // When a type is marked used, check whether any of its stored-property children
-            // reference a sibling nested type by name. The Swift index store does not always emit a
-            // reference occurrence when a nested type is used as the type annotation of a stored
-            // property within the same parent scope (e.g. `private let status: PhraseStatus` where
-            // `PhraseStatus` is a nested enum in the same struct). Without this walk the nested type
-            // has no incoming references and is falsely flagged as unused.
-            let nestedTypesByName = declaration.declarations
-                .filter { Declaration.Kind.concreteTypeKinds.contains($0.kind) }
-                .reduce(into: [String: Declaration]()) { $0[$1.name] = $1 }
+            // When a type is marked used, check whether any of its stored-property children name a
+            // type in lexical scope as their declared type. The Swift index store does not always
+            // emit a reference occurrence when a type is used only as the type annotation of a stored
+            // property. This applies both to nested types declared within the same parent scope
+            // (e.g. `private let status: PhraseStatus` where `PhraseStatus` is a nested enum) and to
+            // sibling or enclosing-scope types referenced the same way (e.g. a top-level
+            // `let placement: ToolPlacement` where the `ToolPlacement` enum is a file-scope sibling
+            // of the property's owning struct). Without this the type has no incoming references and
+            // is falsely flagged as unused, producing a removal that leaves the surviving property's
+            // type annotation dangling. Resolution follows Swift's lexical lookup: the owning type's
+            // nested types first, then each enclosing scope outward to the module root.
+            markUsedTypesNamedByStoredProperties(of: declaration)
+        }
+    }
 
-            if !nestedTypesByName.isEmpty {
-                for childDecl in declaration.declarations where childDecl.kind.isVariableKind {
-                    guard let declaredType = childDecl.declaredType else { continue }
-                    let baseName = PropertyTypeSanitizer.sanitize(declaredType)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-                    if let nested = nestedTypesByName[baseName] {
-                        markUsed([nested])
-                    }
+    // Marks used any type named by the declared type of a stored property of `declaration`, resolved
+    // against the names visible in `declaration`'s lexical scope. Covers the cases where the index
+    // store omits the property's type reference, ensuring a kept stored property never leaves its
+    // type annotation referring to a declaration that is itself flagged unused.
+    private func markUsedTypesNamedByStoredProperties(of declaration: Declaration) {
+        let storedProperties = declaration.declarations.filter { $0.kind.isVariableKind && $0.declaredType != nil }
+        guard !storedProperties.isEmpty else { return }
+
+        let typesByNameInScope = typesByNameInLexicalScope(of: declaration)
+        guard !typesByNameInScope.isEmpty else { return }
+
+        for property in storedProperties {
+            guard let declaredType = property.declaredType else { continue }
+
+            let baseName = PropertyTypeSanitizer.sanitize(declaredType)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            if let resolved = typesByNameInScope[baseName] {
+                // Mark the resolved type used so the kept property's type annotation never dangles.
+                // For an enum, also mark its cases: an enum reached only by this name-based fallback
+                // has no reference occurrences for its cases, and the cases cannot be independently
+                // dead while the enum is used as a value type. Do NOT mark members of class/struct
+                // types — those have their own reachability, and over-retaining them would keep
+                // genuinely-dead methods and properties alive.
+                if resolved.kind == .enum {
+                    let cases = resolved.declarations.filter { $0.kind == .enumelement }
+                    markUsed(Set(cases).union([resolved]))
+                } else {
+                    markUsed([resolved])
                 }
             }
         }
+    }
+
+    // Builds a name-to-declaration map of the type declarations visible by simple name from within
+    // `declaration`: its own nested types, then the types declared in each enclosing scope outward to
+    // the module root. Inner scopes take precedence over outer ones so that a nested type shadows an
+    // enclosing type of the same name, matching Swift resolution. Restricting the search to the
+    // lexical scope chain (rather than every declaration in the graph) avoids retaining unrelated,
+    // genuinely-dead types that merely share a name in another scope.
+    private func typesByNameInLexicalScope(of declaration: Declaration) -> [String: Declaration] {
+        var typesByName: [String: Declaration] = [:]
+
+        func record(_ candidates: Set<Declaration>) {
+            for candidate in candidates where Declaration.Kind.concreteTypeKinds.contains(candidate.kind) {
+                // Inner scopes are recorded first; do not let an outer scope overwrite a closer match.
+                if typesByName[candidate.name] == nil {
+                    typesByName[candidate.name] = candidate
+                }
+            }
+        }
+
+        record(declaration.declarations)
+
+        var scope: Declaration? = declaration
+        while let current = scope {
+            if let parent = current.parent {
+                record(parent.declarations)
+                scope = parent
+            } else {
+                record(graph.rootDeclarations)
+                scope = nil
+            }
+        }
+
+        return typesByName
     }
 
     private func declarationsReferenced(by reference: Reference) -> Set<Declaration> {

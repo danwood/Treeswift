@@ -1,3 +1,4 @@
+@testable import SourceGraph
 import SystemPackage
 @testable import TestShared
 import XCTest
@@ -80,6 +81,33 @@ final class RetentionTest: FixtureSourceGraphTestCase {
     func testSelfReferencedProperty() {
         analyze {
             assertNotReferenced(.class("FixtureClass39"))
+        }
+    }
+
+    func testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType() {
+        // The Swift index store does not always emit a reference occurrence when a top-level type
+        // is used only as the type annotation of a stored property on a sibling type. To model that
+        // omission deterministically, strip every reference targeting the enum that originates within
+        // the struct after indexing. Retention must then rely on the property's `declaredType`
+        // annotation, ensuring the enum is not flagged unused while the property that uses it is kept.
+        analyze(retainPublic: true, afterIndexing: { graph in
+            guard let placement = graph.declarations(ofKind: .enum)
+                .first(where: { $0.name == "FixtureSiblingPlacement" }),
+                let descriptor = graph.declarations(ofKind: .struct)
+                .first(where: { $0.name == "FixtureSiblingDescriptor" })
+            else { return }
+
+            let descriptorMembers = descriptor.descendentDeclarations.union([descriptor])
+            for usr in placement.usrs {
+                for reference in graph.references(to: usr) where reference.parent.map({ descriptorMembers.contains($0) }) ?? false {
+                    graph.remove(reference)
+                }
+            }
+        }) {
+            assertReferenced(.struct("FixtureSiblingDescriptor")) {
+                self.assertReferenced(.varInstance("placement"))
+            }
+            assertReferenced(.enum("FixtureSiblingPlacement"))
         }
     }
 
@@ -802,6 +830,16 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertReferenced(.class("FixtureClass102")) {
                 self.assertReferenced(.functionMethodInstance("nested1()"))
                 self.assertReferenced(.functionMethodInstance("nested2()"))
+            }
+        }
+    }
+
+    func testRetainsNestedTypeUsedAsSiblingStoredPropertyType() {
+        analyze(retainPublic: true) {
+            assertReferenced(.struct("FixtureStruct240")) {
+                self.assertReferenced(.enum("FixtureEnum240")) {
+                    self.assertReferenced(.enumelement("unknown"))
+                }
             }
         }
     }
