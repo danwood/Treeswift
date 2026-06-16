@@ -86,6 +86,27 @@ set), so historical package/API breakage never masquerades as a false positive. 
 | 2026-06-11 | R5@a1711d27 | 5 | 0 | 5 | **0** | 0 | 0 | **0** | **0** | n/a | **CONVERGED ✅ (cold rescan).** Passes 3→4 appeared stuck at redunAcc=5 with 5 no-op ghosts in StatusInfo/ProgramDisplayModel/TuneTargetDisplayModels — but that was a **stale Treeswift ScanCache** (the 153 MB `scan-cache-<UUID>.json` survived in-loop `rm` because the zsh glob errored after the cache rewrote; incremental cache re-served already-fixed access-control warnings against stale source positions). After killing the app + deleting the cache file by exact name and a COLD rescan: **unused=0, redunAcc=0, assignOnly=5** (floor). Total: unused 271→0, redunAcc 464→0, **776 decls removed**, build clean every pass, **0 false positives.** Finding: ScanCache invalidation is incomplete for in-place access-keyword rewrites (cache bug, not a removal/analysis bug). |
 | 2026-06-16 | develop@cb1fb2912 | 403 | 83 | 157 | 0 | 0 | 194 | **0** | **0** | 3/3 | **0 FALSE POSITIVES ✅.** Current develop. Surfaced 3 NEW false positives broken by forceRemoveAll: **F21** `public` on a protocol-extension default-impl member witnessing an EXTERNAL public protocol (`StatusRepresentable.id`→stdlib `Identifiable`) flagged redundant-public (fixed RedundantExplicitPublicAccessibilityMarker; upstream PR #1139); **F22** nested enum used only as a stored-property type — enum marked used but its CASES still removed, leaving empty enum; **F23** top-level/sibling type used only as a stored-property type wrongly flagged. F22+F23 fixed together in UsedDeclarationMarker (lexical-scope name resolution + enum-case marking, enums only — marking class/struct members regressed `testDoesNotRetainProtocolMethodInSubclassWithDefaultImplementation`); combine-only (stored-property type-resolution is the recall-over-precision family upstream rejects per #1137). After fixes (combine ced2550, subtree pulled into Treeswift 6e1ef42b): forceRemoveAll 194 decls / 43 files → Prodcore **builds clean, 0 errors.** 1 benign `redundantPublicAccessibility` ghost no-op (bad source location, no change applied, F17 family). Also fixed the scan-cache fingerprint (was SHA-256 of empty list → never invalidated; now hashes the source dir, verified 862 files / content-sensitive hash on develop). regression fixtures 3/3: `testPublicProtocolWitnessForExternalProtocol`, `testRetainsNestedTypeUsedAsSiblingStoredPropertyType`, `testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType`. |
 
+### Genuine-dead-code convergence run — 2026-06-16 (develop, committed on a cleanup branch)
+
+Real (committed) removals on `develop@79f0a7123` (pulled current), branch
+`dead-code-cleanup-2026-06-16`:
+
+| pass | scan unused | removed | build after | committed |
+|------|-------------|---------|-------------|-----------|
+| 1 | 93 | 46 (22 files) | ✅ clean | `3af600565` |
+| 2 | 47 | **0 deletable** | ✅ clean | — |
+
+Pass 1 removed 46 genuine unused decls, build clean, committed. Pass 2 rescan dropped unused
+93→47, but `forceRemoveAll(unused)` then deleted **0** — the removal engine's safety gate refused
+all 47 (preview: 0 deletable / 0 non-deletable across 97 files). Investigating the residual showed
+they are **NOT removable dead code** — at least some are a **NEW false positive (F24)**: e.g.
+`DocumentCardView` is flagged unused yet is instantiated at `ProjectContentView.swift:223` (a real
+cross-file use). The removal engine correctly declined to delete them; the "0 deletable" is the gate
+working, NOT a convergence floor. **Genuine dead-code convergence is therefore BLOCKED on F24** — the
+residual 47 must be triaged (false positive vs. truly-non-in-place-deletable) before unused can reach
+a true zero. Loop stopped here; pass-1 commit kept (build-clean), no further removals (would break the
+build on the F24 false positives). See F24 below.
+
 ### Genuine-dead-code convergence probe (second condition) — 2026-06-10
 
 Multi-pass scan→remove→rescan on Prodcore (in-place, then reverted):
@@ -126,7 +147,12 @@ Both convergence conditions met: false positives = 0, genuine dead code → 0 wi
 
 Tracked live; each must end as a Periphery/Treeswift fix + regression fixture, NOT a "skip".
 
-**Currently: none.** A full `forceRemoveAll` of all Prodcore builds with zero errors (2026-06-10).
+**Currently: F24 (open).** A full `forceRemoveAll` still builds with zero errors — F24 is an
+over-*report*, not a destructive removal (the engine declines to delete the falsely-flagged views).
+But it blocks genuine-dead-code convergence: SwiftUI View structs (e.g. `DocumentCardView`, used at
+`ProjectContentView.swift:223`) flagged `unused` despite real cross-file instantiation. Not yet
+root-caused — see F24 in `PERIPHERY-ANALYSIS-FIXES.md`. F21/F22/F23 (this session) are fixed +
+fixtured.
 
 ### Resolved
 
@@ -152,6 +178,8 @@ Tracked live; each must end as a Periphery/Treeswift fix + regression fixture, N
   `Tests/PeripheryTests/RetentionTest.swift` + `Tests/Fixtures/Sources/RetentionFixtures/`.
   Specifically the Codable fix owes a fixture extending `FixtureStruct14` with a custom-struct
   property type that would otherwise be unused.
-- **Genuine dead-code convergence not yet proven.** build_errors is 0, but we have not yet shown
-  that committing real removals + rescanning drives the genuine `.unused` count to a stable zero.
-  That is the second convergence condition and is still open.
+- **Genuine dead-code convergence BLOCKED on F24 (2026-06-16).** Committed pass-1 on develop removed
+  46 genuine unused decls (build clean, branch `dead-code-cleanup-2026-06-16` commit `3af600565`), but
+  pass-2 stalled at unused=47 because those 47 are not in-place-deletable — at least some are the F24
+  false positive (SwiftUI Views flagged unused despite real cross-file use). Fix F24, then resume the
+  scan→remove→commit→rescan loop to drive unused to a true stable zero.

@@ -46,6 +46,7 @@ numbered section below.
 | F21 | — | `redundantPublicAccessibility` strips `public` from a protocol-extension default-impl member that witnesses an **external** public protocol (`StatusRepresentable.id` → stdlib `Identifiable`) → "property must be declared public because it matches a requirement in public protocol" | `RedundantExplicitPublicAccessibilityMarker.validateExtension` (exempt members witnessing external-protocol requirements) | ⬆️ PR #1139 | ✅ `RedundantPublicAccessibilityTest.testPublicProtocolWitnessForExternalProtocol` |
 | F22 | — | Nested enum used only as a stored-property type: the enum is retained but its **cases** are still removed, leaving an empty/invalid enum | `UsedDeclarationMarker` (mark enum cases of name-resolved types; enums only) | combine-only (recall>precision, see #1137) | ✅ `RetentionTest.testRetainsNestedTypeUsedAsSiblingStoredPropertyType` |
 | F23 | — | **Top-level / sibling** type used only as another type's stored-property declared type wrongly flagged unused → dangling type annotation (generalizes F13 beyond same-parent nesting; the old PriceValue/F16 case) | `UsedDeclarationMarker` (`typesByNameInLexicalScope` / `markUsedTypesNamedByStoredProperties`) | combine-only (recall>precision, see #1137) | ✅ `RetentionTest.testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType` |
+| F24 | — | **OPEN.** SwiftUI View struct flagged unused despite a real cross-file instantiation (`DocumentCardView` flagged unused but called at `ProjectContentView.swift:223`) | TBD — not yet root-caused | ❌ open | ❌ needs repro |
 
 > The numbered sections below still carry their original "## N." headings (N == F-number). When you
 > add a fix: append the next F#, add a row here, log the subtree change in `README_Treeswift.md`,
@@ -811,3 +812,25 @@ configuration's `project` value (the `.xcodeproj` bundle or `Package.swift` file
 Stale scan caches were never invalidated on relaunch (branch switch, version change). Fixed to resolve
 the enclosing source directory first (matching `FileSystemScanner`/`PeripheryScanRunner`). Verified on
 Prodcore develop: 862 source files, content-sensitive hash. Treeswift `SourceFingerprint.swift`.
+
+## F24 — SwiftUI View flagged unused despite a real cross-file instantiation (OPEN)
+
+**Symptom (found by the genuine-dead-code convergence run on Prodcore develop, 2026-06-16):** after
+pass-1 removal + rescan, 47 `unused` remained but `forceRemoveAll(unused)` deleted 0 of them (preview:
+0 deletable / 0 non-deletable across 97 files — the removal engine's safety gate refused all). Triage
+of the residual showed at least some are false positives, not dead code:
+
+- `DocumentCardView` (`Components/Cards/DocumentCardView.swift`) is flagged `unused`, yet it is
+  instantiated at `Projects/Shared/ProjectContentView.swift:223` (`DocumentCardView(displayData:…)`),
+  a genuine cross-file use.
+- `AboutSettingsView` and other SwiftUI view structs appear in the same residual set.
+
+**Status:** NOT YET ROOT-CAUSED. Hypotheses to investigate (do not assume): the call site is inside a
+SwiftUI `@ViewBuilder` / `body` where the index store may attribute the reference differently; or the
+view is reached only through a `some View` return whose reference isn't followed; or the type is used
+only by an `unused`-flagged parent and the marker doesn't propagate. Needs a minimal repro on current
+upstream before any fix. The removal engine correctly declined to delete these (build stayed clean),
+so this is an over-report, not a destructive removal.
+
+**Action owed:** reproduce, root-cause, fix (likely `UsedDeclarationMarker` or a SwiftUI-reference
+builder), add a fixture. Until then, genuine-dead-code convergence on Prodcore is blocked at unused=47.
