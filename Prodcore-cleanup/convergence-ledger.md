@@ -96,16 +96,18 @@ Real (committed) removals on `develop@79f0a7123` (pulled current), branch
 | 1 | 93 | 46 (22 files) | ✅ clean | `3af600565` |
 | 2 | 47 | **0 deletable** | ✅ clean | — |
 
-Pass 1 removed 46 genuine unused decls, build clean, committed. Pass 2 rescan dropped unused
-93→47, but `forceRemoveAll(unused)` then deleted **0** — the removal engine's safety gate refused
-all 47 (preview: 0 deletable / 0 non-deletable across 97 files). Investigating the residual showed
-they are **NOT removable dead code** — at least some are a **NEW false positive (F24)**: e.g.
-`DocumentCardView` is flagged unused yet is instantiated at `ProjectContentView.swift:223` (a real
-cross-file use). The removal engine correctly declined to delete them; the "0 deletable" is the gate
-working, NOT a convergence floor. **Genuine dead-code convergence is therefore BLOCKED on F24** — the
-residual 47 must be triaged (false positive vs. truly-non-in-place-deletable) before unused can reach
-a true zero. Loop stopped here; pass-1 commit kept (build-clean), no further removals (would break the
-build on the F24 false positives). See F24 below.
+Pass 1 removed 46 genuine unused decls, build clean, committed (later DISCARDED with the branch per
+the user's decision — develop left untouched at 79f0a7123). Pass 2 rescan dropped unused 93→47, but
+`forceRemoveAll(unused)` then deleted **0** (preview: 0 deletable across 97 files). The residual 47 are
+**NOT false positives** — investigation (catalog F24) proved they are genuine dead code: their only use
+chains run through `Archive/`, a reference-only directory that is NOT compiled (README "Not built…", no
+`.o` in DerivedData). Periphery is correct to flag them. So convergence is NOT blocked by a false
+positive; the open item is purely a Treeswift **removal-gate** question — why genuinely-dead decls
+reachable only via an uncompiled folder report as "0 deletable." That, plus the Archive coupling, is
+why unused floors at 47 here. The autonomous loop correctly stopped rather than force-delete (which
+would still be safe — they're dead — but the engine's gate is conservative). Branch discarded; no net
+change to Prodcore. Lesson: a `grep` source hit ≠ a live reference; confirm the referencing file
+compiles before judging a finding.
 
 ### Genuine-dead-code convergence probe (second condition) — 2026-06-10
 
@@ -147,12 +149,11 @@ Both convergence conditions met: false positives = 0, genuine dead code → 0 wi
 
 Tracked live; each must end as a Periphery/Treeswift fix + regression fixture, NOT a "skip".
 
-**Currently: F24 (open).** A full `forceRemoveAll` still builds with zero errors — F24 is an
-over-*report*, not a destructive removal (the engine declines to delete the falsely-flagged views).
-But it blocks genuine-dead-code convergence: SwiftUI View structs (e.g. `DocumentCardView`, used at
-`ProjectContentView.swift:223`) flagged `unused` despite real cross-file instantiation. Not yet
-root-caused — see F24 in `PERIPHERY-ANALYSIS-FIXES.md`. F21/F22/F23 (this session) are fixed +
-fixtured.
+**Currently: none.** A full `forceRemoveAll` of all Prodcore builds with zero errors. F21/F22/F23
+(this session) are fixed + fixtured. F24 was investigated and is **NOT a false positive** — the
+residual `unused` findings are genuine dead code reachable only through the uncompiled `Archive/`
+reference folder (see F24 in `PERIPHERY-ANALYSIS-FIXES.md`). Remaining non-FP item: a Treeswift
+removal-gate question (genuinely-dead decls reported "0 deletable").
 
 ### Resolved
 
@@ -178,8 +179,11 @@ fixtured.
   `Tests/PeripheryTests/RetentionTest.swift` + `Tests/Fixtures/Sources/RetentionFixtures/`.
   Specifically the Codable fix owes a fixture extending `FixtureStruct14` with a custom-struct
   property type that would otherwise be unused.
-- **Genuine dead-code convergence BLOCKED on F24 (2026-06-16).** Committed pass-1 on develop removed
-  46 genuine unused decls (build clean, branch `dead-code-cleanup-2026-06-16` commit `3af600565`), but
-  pass-2 stalled at unused=47 because those 47 are not in-place-deletable — at least some are the F24
-  false positive (SwiftUI Views flagged unused despite real cross-file use). Fix F24, then resume the
-  scan→remove→commit→rescan loop to drive unused to a true stable zero.
+- **Genuine dead-code convergence floored at unused=47 by a removal-gate + Archive coupling (2026-06-16).**
+  Pass 1 removed 46 genuine unused decls (build clean); pass 2 stalled at unused=47 with 0 deletable.
+  F24 investigation proved these are NOT false positives — genuine dead code reachable only via the
+  uncompiled `Archive/` reference folder. To reach a true zero: (a) understand why Treeswift's removal
+  engine reports these genuinely-dead decls as "0 deletable" (removal-gate, not analysis), and (b)
+  decide policy for code reachable only from `Archive/` (delete it, or exclude `Archive/` from the
+  scan so it stops being counted). The pass-1 cleanup branch was DISCARDED per the user; develop is
+  untouched.
