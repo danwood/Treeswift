@@ -18,7 +18,7 @@ enum SourceFingerprint {
 	 Returns nil if the path cannot be enumerated.
 	 */
 	nonisolated static func compute(for projectPath: String) -> String? {
-		let url = URL(fileURLWithPath: projectPath)
+		let url = sourceRoot(for: projectPath)
 		guard let enumerator = FileManager.default.enumerator(
 			at: url,
 			includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
@@ -45,5 +45,21 @@ enum SourceFingerprint {
 		}
 		let digest = hasher.finalize()
 		return digest.map { String(format: "%02x", $0) }.joined()
+	}
+
+	/**
+	 Resolves the directory containing the project's Swift sources from a configuration's
+	 `project` value, which points at the `.xcodeproj` bundle or the `Package.swift` file.
+	 Walking the project file or bundle itself finds no `.swift` files (yielding the SHA-256 of
+	 an empty list), so we walk the enclosing directory — matching how the rest of the app derives
+	 the project root (see FileSystemScanner and PeripheryScanRunner). A path that is already a
+	 plain directory is returned unchanged.
+	 */
+	private nonisolated static func sourceRoot(for projectPath: String) -> URL {
+		let url = URL(fileURLWithPath: projectPath)
+		var isDirectory: ObjCBool = false
+		let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+		let isPlainDirectory = exists && isDirectory.boolValue && url.pathExtension != "xcodeproj"
+		return isPlainDirectory ? url : url.deletingLastPathComponent()
 	}
 }
