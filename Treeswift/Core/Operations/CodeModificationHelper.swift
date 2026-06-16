@@ -151,6 +151,60 @@ struct CodeModificationHelper {
 	}
 
 	/**
+	 Renames an unused function-parameter binding to `_`, preserving the external argument label
+	 so call sites and protocol/override/@objc signatures are unchanged. Periphery reports a
+	 parameter at a point location (the column of its binding-name token); this rewrites that token.
+
+	 Three label forms are handled, distinguished by the token immediately left of the binding:
+	   `for production: T`  -> `for _: T`        (external label kept, binding blanked)
+	   `_ credential: T`    -> `_: T`            (already unlabelled — collapse `_ name` to `_`)
+	   `programID: T`       -> `programID _: T`  (label == name — keep as label, add `_` binding)
+	 Returns the original line unchanged if the token at `column` is not `bindingName` (treated as a
+	 no-op ghost by the caller), so a drifted location never corrupts the signature.
+	 */
+	private static func renameParameterBinding(
+		in line: String,
+		bindingName: String,
+		column: Int
+	) -> String {
+		let chars = Array(line)
+		let start = column - 1
+		guard start >= 0, start < chars.count else { return line }
+
+		// Read the identifier token at the column; it must match the reported binding name.
+		var end = start
+		let isIdent: (Character) -> Bool = { $0 == "_" || $0.isLetter || $0.isNumber }
+		while end < chars.count, isIdent(chars[end]) {
+			end += 1
+		}
+		guard String(chars[start ..< end]) == bindingName else { return line }
+
+		// Walk left over spaces, then read the preceding token (label identifier, `_`, or a delimiter).
+		var j = start
+		while j > 0, chars[j - 1] == " " {
+			j -= 1
+		}
+		var prevStart = j
+		while prevStart > 0, isIdent(chars[prevStart - 1]) {
+			prevStart -= 1
+		}
+		let prevToken = String(chars[prevStart ..< j])
+
+		let prefix = String(chars[0 ..< start])
+		let suffix = String(chars[end...])
+		if prevToken == "_" {
+			// `_ name` -> `_` : drop the binding and the wildcard's trailing space.
+			return String(chars[0 ..< prevStart]) + "_" + suffix
+		} else if prevToken.isEmpty {
+			// No label token before the binding: the name IS the label. Keep it, add `_` binding.
+			return prefix + bindingName + " _" + suffix
+		} else {
+			// External label present: keep it, blank the binding.
+			return prefix + "_" + suffix
+		}
+	}
+
+	/**
 	 Replaces or inserts an access keyword in a line, removing any setter-specific
 	 modifiers (e.g. `private(set)`, `internal(set)`) that would conflict.
 
@@ -1718,6 +1772,23 @@ struct CodeModificationHelper {
 
 				// Record source graph adjustment to apply after writing
 				sourceGraphAdjustments.append((afterLine: location.line, delta: -1))
+
+			} else if declaration.kind == .varParameter {
+				// Unused function parameter: rename its binding to `_` in place (keep the external
+				// label so call sites and protocol/override/@objc signatures are unchanged). The
+				// location points at the binding-name token; a single-line token rewrite, never a
+				// range delete. A no-op (drifted column) is rejected by applyAccessControlRewrite.
+				let lineIndex = location.line - 1
+				guard lineIndex >= 0, lineIndex < lines.count else { continue }
+				_ = applyAccessControlRewrite(
+					lineIndex: lineIndex,
+					newLine: renameParameterBinding(
+						in: lines[lineIndex],
+						bindingName: declaration.name,
+						column: location.column
+					),
+					action: "renamed unused parameter `\(declaration.name)` to `_`"
+				)
 
 			} else {
 				// Delete full declaration (struct, property, function, etc.)

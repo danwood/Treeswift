@@ -1,13 +1,15 @@
 # Algorithmic Fixes for Currently-Unremovable Warnings
 
-**Status: design proposal.** Treeswift today refuses to auto-fix three categories of Periphery
-finding: two annotation kinds — `assignOnlyProperty` and `redundantProtocol` — because
-`ScanResult.Annotation.canRemoveCode` returns `false` for both, plus **unused function parameters**,
-which arrive with the `.unused` annotation but are gated out of removal by the missing-source-range
-check (all in `Treeswift/Core/Operations/PeripheryKit-extensions.swift`). This document analyzes
-how a **future Treeswift could fix them algorithmically (no LLM)**, using the real Prodcore cases and
-examples lifted from Periphery's own test suite. Where a purely algorithmic fix is unsafe or
-under-determined, that is called out explicitly as **"needs human/LLM judgment."**
+**Status: design proposal**, except Part 3 (**unused function parameters**) which is now
+**implemented and shipped** — see its verdict. Treeswift still refuses to auto-fix two annotation
+kinds — `assignOnlyProperty` and `redundantProtocol` — because `ScanResult.Annotation.canRemoveCode`
+returns `false` for both (`Treeswift/Core/Operations/PeripheryKit-extensions.swift`). Unused function
+parameters (which arrive with the `.unused` annotation, kind `.varParameter`) were previously gated
+out of removal by the missing-source-range check; they are now fixed in place by renaming the binding
+to `_`. This document analyzes how a **future Treeswift could fix the remaining two algorithmically
+(no LLM)**, using the real Prodcore cases and examples lifted from Periphery's own test suite. Where a
+purely algorithmic fix is unsafe or under-determined, that is called out explicitly as **"needs
+human/LLM judgment."**
 
 This is Concern D (Treeswift implementation) design work. See
 [`../../TREESWIFT-PROJECT-MAP.md`](../../TREESWIFT-PROJECT-MAP.md).
@@ -198,14 +200,30 @@ So the taxonomy of fixes is:
 | Protocol witness / `override` / `@objc` / typed-function-value | **rename to `_`** (only legal fix; never remove) | ✅ Safe single-token rewrite, no call-site changes |
 | Param actually used via a wrapper / KVO / reflection Periphery can't see | leave it | ❌ Needs human/LLM judgment |
 
-### Verdict for unused parameters
+### Verdict for unused parameters — IMPLEMENTED
 
-The universally-safe fix is **rename to `_`** (or `_ name:`): it silences the warning, never touches
-an external signature, and requires no call-site edits. It is a single-token SwiftSyntax rewrite
-keyed off the parameter's declaration. *Removing* the parameter entirely is the involved case
-(call-site argument deletion) and must be refused outright for the signature-locked contexts above.
-Until that logic exists, unused parameters are presented to the user and left for review — exactly
-like `assignOnlyProperty`.
+The universally-safe fix is **rename to `_`**: it silences the warning, never touches an external
+signature, and requires no call-site edits. This is now shipped:
+
+- **Gate** — `ScanResult.Annotation.canRemoveCode` takes a `kind:` argument and returns `true` for
+  `.unused` + `.varParameter` (a point location is sufficient; no full range needed). All five call
+  sites pass `declaration.kind` (`PeripheryKit-extensions.swift`, plus `FileNode+CodeRemoval`,
+  `UnusedDependencyAnalyzer`, `PeripheryTreeView`, `DetailPeripheryWarningsSection`).
+- **Rewrite** — `CodeModificationHelper.renameParameterBinding(in:bindingName:column:)` is a
+  column-anchored, line-based token rewrite (house style — no SwiftSyntax). It reads the binding-name
+  token at the reported column, asserts it equals `declaration.name` (a drifted column → no-op ghost,
+  never a corrupted signature), and applies one of three forms by inspecting the token to its left:
+  `for name:` → `for _:`; `_ name:` → `_:`; `name:` (label == binding) → `name _:`. Wired as a
+  `declaration.kind == .varParameter` branch in `computeBatchModifications`, before the full-delete
+  `else`, committed through `applyAccessControlRewrite` (no-op rejection + undo tracking for free).
+- **Verified** — end-to-end on Prodcore as corpus: 47 `.varParameter` findings renamed across 30
+  files, Prodcore **builds clean**, `unused` count 47 → 0, all call sites intact, `assignOnlyProperty`
+  untouched. Algorithm self-check: `Prodcore-cleanup/fixtures/renameParameterBinding-selfcheck.swift`
+  (run with `swift`; covers all three forms + the no-op guard).
+
+*Removing* the parameter entirely (call-site argument deletion) remains the involved case and is NOT
+implemented — the rename-to-`_` fix is correct and sufficient for every signature-locked context
+(protocol witness / override / `@objc` / typed function value), so removal was not needed.
 
 ---
 

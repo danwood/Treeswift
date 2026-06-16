@@ -72,7 +72,12 @@ extension FileNode {
 			let location = ScanResultHelper.location(from: declaration)
 			let hasFullRange = location.endLine != nil && location.endColumn != nil
 			let isImport = declaration.kind == .module
-			return !result.annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport, location: location)
+			return !result.annotation.canRemoveCode(
+				hasFullRange: hasFullRange,
+				isImport: isImport,
+				location: location,
+				kind: declaration.kind
+			)
 		}
 		let nonDeletableCount = nonDeletableWarnings.count
 
@@ -95,7 +100,8 @@ extension FileNode {
 				guard scanResult.annotation.canRemoveCode(
 					hasFullRange: hasFullRange,
 					isImport: isImport,
-					location: location
+					location: location,
+					kind: declaration.kind
 				) else {
 					return nil
 				}

@@ -17,10 +17,22 @@ extension ScanResult.Annotation {
 	 This method evaluates whether a declaration with this annotation can be safely removed
 	 from source code based on the annotation type and available location information.
 	 */
-	func canRemoveCode(hasFullRange: Bool, isImport: Bool, location: Location? = nil) -> Bool {
+	func canRemoveCode(
+		hasFullRange: Bool,
+		isImport: Bool,
+		location: Location? = nil,
+		kind: Declaration.Kind? = nil
+	) -> Bool {
 		switch self {
 		case .unused:
-			hasFullRange || isImport
+			// An unused function parameter is fixed by renaming its binding to `_` (a single-token
+			// rewrite at the parameter's point location), not by deleting a source range — so it does
+			// not need a full range. All other `.unused` declarations are deleted as a range.
+			if kind == .varParameter {
+				true
+			} else {
+				hasFullRange || isImport
+			}
 		case .redundantPublicAccessibility,
 		     .redundantInternalAccessibility,
 		     .redundantFilePrivateAccessibility,

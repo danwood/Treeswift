@@ -854,7 +854,8 @@ struct PeripheryTreeView: View {
 			guard scanResult.annotation.canRemoveCode(
 				hasFullRange: hasFullRange,
 				isImport: isImport,
-				location: location
+				location: location,
+				kind: declaration.kind
 			) else {
 				return nil
 			}

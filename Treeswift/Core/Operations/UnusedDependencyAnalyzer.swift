@@ -116,7 +116,8 @@ enum UnusedDependencyAnalyzer {
 			guard scanResult.annotation.canRemoveCode(
 				hasFullRange: hasFullRange,
 				isImport: isImport,
-				location: location
+				location: location,
+				kind: declaration.kind
 			) else { continue }
 			result.insert(declaration)
 		}

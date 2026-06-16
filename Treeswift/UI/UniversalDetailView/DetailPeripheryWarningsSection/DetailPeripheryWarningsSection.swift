@@ -783,6 +783,7 @@ private struct PeripheryWarningRow: View {
 								annotation: scanResult.annotation,
 								hasFullRange: hasFullRange,
 								isImport: isImport,
+								kind: scanResult.declaration.kind,
 								warningID: warningID,
 								canDelete: canDelete,
 								canDeleteSuperfluousIgnore: canDeleteSuperfluousIgnore,
@@ -1022,6 +1023,7 @@ private struct WarningActionButtons: View {
 	let annotation: ScanResult.Annotation
 	let hasFullRange: Bool
 	let isImport: Bool
+	let kind: Declaration.Kind
 	let warningID: String
 	let canDelete: Bool
 	let canDeleteSuperfluousIgnore: Bool
@@ -1034,7 +1036,7 @@ private struct WarningActionButtons: View {
 
 	var body: some View {
 		HStack(spacing: 4) {
-			if annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport) {
+			if annotation.canRemoveCode(hasFullRange: hasFullRange, isImport: isImport, kind: kind) {
 				WarningDeleteButton(
 					annotation: annotation,
 					warningID: warningID,
