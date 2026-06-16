@@ -9,11 +9,11 @@ enum LocLimit {
     case unlimited
     case limited(Int)
 
-    init(rawValue: Int) {
+    fileprivate init(rawValue: Int) {
         self = rawValue <= 0 ? .unlimited : .limited(rawValue)
     }
 
-    var displayString: String {
+    fileprivate var displayString: String {
         switch self {
         case .unlimited:
             return "unlimited LOC"

@@ -14,12 +14,14 @@
         private let xcodebuild: Xcodebuild
         private let project: XcodeProjectlike
         private let schemes: Set<String>
+        private weak var progressDelegate: ScanProgressDelegate?
 
         public convenience init(
             projectPath: FilePath,
             configuration: Configuration,
             shell: Shell,
-            logger: Logger
+            logger: Logger,
+            progressDelegate: ScanProgressDelegate? = nil
         ) throws {
             if configuration.outputFormat.supportsAuxiliaryOutput {
                 let asterisk = logger.colorize("*", .boldGreen)
@@ -75,7 +77,8 @@
                 configuration: configuration,
                 xcodebuild: xcodebuild,
                 project: project,
-                schemes: schemes
+                schemes: schemes,
+                progressDelegate: progressDelegate
             )
         }
 
@@ -84,13 +87,15 @@
             configuration: Configuration,
             xcodebuild: Xcodebuild,
             project: XcodeProjectlike,
-            schemes: Set<String>
+            schemes: Set<String>,
+            progressDelegate: ScanProgressDelegate? = nil
         ) {
             self.logger = logger
             self.configuration = configuration
             self.xcodebuild = xcodebuild
             self.project = project
             self.schemes = schemes
+            self.progressDelegate = progressDelegate
         }
     }
 
@@ -103,6 +108,9 @@
             }
 
             for scheme in schemes {
+                try Task.checkCancellation()
+                progressDelegate?.didStartBuilding(scheme: scheme)
+
                 if configuration.outputFormat.supportsAuxiliaryOutput {
                     let asterisk = logger.colorize("*", .boldGreen)
                     logger.info("\(asterisk) Building \(scheme)...")
@@ -111,7 +119,8 @@
                 try xcodebuild.build(project: project,
                                      scheme: scheme,
                                      allSchemes: Array(schemes),
-                                     additionalArguments: configuration.buildArguments)
+                                     additionalArguments: configuration.buildArguments,
+                                     excludeTests: configuration.excludeTests)
             }
         }
 

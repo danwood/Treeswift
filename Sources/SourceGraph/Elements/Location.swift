@@ -1,17 +1,25 @@
 import Foundation
 import SystemPackage
 
-public final class Location {
+public final class Location: @unchecked Sendable {
     public let file: SourceFile
     public let line: Int
     public let column: Int
+    // End-position metadata. Carried for richer output but deliberately excluded
+    // from equality and hashing so a location with end positions compares equal to
+    // the same start position without them. This keeps location-based lookups stable
+    // when end positions are applied to a declaration after indexing.
+    public let endLine: Int?
+    public let endColumn: Int?
 
     private let hashValueCache: Int
 
-    public init(file: SourceFile, line: Int, column: Int) {
+    public init(file: SourceFile, line: Int, column: Int, endLine: Int? = nil, endColumn: Int? = nil) {
         self.file = file
         self.line = line
         self.column = column
+        self.endLine = endLine
+        self.endColumn = endColumn
         hashValueCache = [file.hashValue, line, column].hashValue
     }
 
@@ -19,13 +27,18 @@ public final class Location {
         let newPath = file.path.relativeTo(path)
         let newFile = SourceFile(path: newPath, modules: file.modules)
         newFile.importStatements = file.importStatements
-        return Location(file: newFile, line: line, column: column)
+        return Location(file: newFile, line: line, column: column, endLine: endLine, endColumn: endColumn)
     }
 
     // MARK: - Private
 
     private func buildDescription(path: String) -> String {
-        [path, line.description, column.description].joined(separator: ":")
+        var components = [path, line.description, column.description]
+        if let endLine, let endColumn {
+            components.append(endLine.description)
+            components.append(endColumn.description)
+        }
+        return components.joined(separator: ":")
     }
 
     private lazy var descriptionInternal: String = buildDescription(path: file.path.string)

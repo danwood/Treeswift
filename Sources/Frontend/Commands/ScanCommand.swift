@@ -118,10 +118,10 @@ struct ScanCommand: ParsableCommand {
     private var retainEncodableProperties: Bool = defaultConfiguration.$retainEncodableProperties.defaultValue
 
     @Flag(help: "Retain properties on Equatable types, including Hashable types")
-    var retainEquatableProperties: Bool = defaultConfiguration.$retainEquatableProperties.defaultValue
+    private var retainEquatableProperties: Bool = defaultConfiguration.$retainEquatableProperties.defaultValue
 
     @Flag(help: "Retain properties on Hashable types")
-    var retainHashableProperties: Bool = defaultConfiguration.$retainHashableProperties.defaultValue
+    private var retainHashableProperties: Bool = defaultConfiguration.$retainHashableProperties.defaultValue
 
     @Flag(help: "Clean existing build artifacts before building")
     private var cleanBuild: Bool = defaultConfiguration.$cleanBuild.defaultValue
@@ -175,13 +175,13 @@ struct ScanCommand: ParsableCommand {
     private var bazelFilter: String?
 
     @Option(help: "Query expression used for the Bazel top-level targets query. Overrides the default query and bypasses bazelFilter.")
-    var bazelQuery: String?
+    private var bazelQuery: String?
 
     @Option(help: "Path to a global index store populated by Bazel. If provided, will be used instead of individual module stores.")
     private var bazelIndexStore: FilePath?
 
     @Flag(help: "Enable Bazel visibility checking")
-    var bazelCheckVisibility: Bool = defaultConfiguration.$bazelCheckVisibility.defaultValue
+    private var bazelCheckVisibility: Bool = defaultConfiguration.$bazelCheckVisibility.defaultValue
 
     private static let defaultConfiguration = Configuration()
 

@@ -81,7 +81,6 @@ public enum ScanResultBuilder {
             annotatedRedundantInternalAccessibility +
             annotatedRedundantFilePrivateAccessibility +
             annotatedSuperfluousIgnoreCommands +
-            annotatedRedundantFilePrivateAccessibility +
             annotatedRedundantAccessibility
 
         return allAnnotatedDeclarations

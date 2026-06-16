@@ -97,12 +97,18 @@ extension OutputFormatter {
     }
 
     func locationDescription(_ location: Location) -> String {
-        [
+        var components = [
             outputPath(location).string,
             String(location.line),
             String(location.column),
         ]
-        .joined(separator: ":")
+
+        if let endLine = location.endLine, let endColumn = location.endColumn {
+            components.append(String(endLine))
+            components.append(String(endColumn))
+        }
+
+        return components.joined(separator: ":")
     }
 
     func declarationKind(from declaration: Declaration) -> String {

@@ -58,6 +58,11 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
 
     private func validateExtension(_ decl: Declaration) throws {
         if decl.accessibility.isExplicitly(.public) {
+            // A public member declared in this extension may be the witness for a requirement of an
+            // external public protocol (e.g. `Identifiable`). Such a witness must remain public,
+            // otherwise compilation fails, so the extension's public accessibility is not redundant.
+            guard !decl.declarations.contains(where: isWitnessForExternalProtocolRequirement) else { return }
+
             // If the extended kind is already marked as having redundant public accessibility, then this extension
             // must also have redundant accessibility.
             if let extendedDecl = try graph.extendedDeclaration(forExtension: decl),
@@ -65,6 +70,21 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
             {
                 mark(decl)
             }
+        }
+    }
+
+    /// A declaration is the witness for an external protocol requirement when it has a related
+    /// reference to a protocol member whose USR does not resolve to a declaration in the source
+    /// graph. The unresolved USR indicates the requirement belongs to an external protocol (such as
+    /// the standard library's `Identifiable`), which is necessarily public. A witness for a public
+    /// protocol requirement must be declared with matching public accessibility, so its explicit
+    /// public modifier is never redundant.
+    private func isWitnessForExternalProtocolRequirement(_ decl: Declaration) -> Bool {
+        decl.related.contains { reference in
+            reference.kind == .related &&
+                reference.declarationKind.isProtocolMemberConformingKind &&
+                reference.name == decl.name &&
+                graph.declaration(withUsr: reference.usr) == nil
         }
     }
 
@@ -77,8 +97,42 @@ final class RedundantExplicitPublicAccessibilityMarker: SourceGraphMutator {
 
     private func markExplicitPublicDescendentDeclarations(from decl: Declaration) {
         for descDecl in descendentPublicDeclarations(from: decl) {
+            // Skip members that implement public protocol requirements.
+            // Stripping public from these causes conformance errors (protocol requires public member).
+            guard !isProtocolRequirement(descDecl) else { continue }
+
             mark(descDecl)
         }
+    }
+
+    /// Checks if a declaration implements a protocol requirement.
+    private func isProtocolRequirement(_ decl: Declaration) -> Bool {
+        // Direct protocol member
+        if let parent = decl.parent, parent.kind == .protocol {
+            return true
+        }
+        // Conformance: has .related references pointing to protocol members
+        let relatedReferences = graph.references(to: decl).filter { $0.kind == .related }
+        for ref in relatedReferences {
+            if let protocolDecl = graph.declaration(withUsr: ref.usr),
+               protocolDecl.kind.isProtocolMemberKind || protocolDecl.kind == .associatedtype
+            {
+                return true
+            }
+        }
+        // External protocol conformance: .related refs FROM this decl to protocol members
+        for ref in decl.related where ref.declarationKind.isProtocolMemberConformingKind {
+            if let referencedDecl = graph.declaration(withUsr: ref.usr) {
+                if let referencedParent = referencedDecl.parent,
+                   referencedParent.kind == .protocol
+                {
+                    return true
+                }
+            } else if ref.name == decl.name {
+                return true
+            }
+        }
+        return false
     }
 
     private func isExposedPubliclyByAnotherDeclaration(_ decl: Declaration) -> Bool {

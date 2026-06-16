@@ -51,7 +51,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -63,7 +64,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -74,7 +76,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             trivia: node.commentCommandTrivia,
             inheritanceClause: node.inheritanceClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -86,7 +89,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -98,7 +102,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -109,7 +114,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                 attributes: node.attributes,
                 trivia: node.leadingTrivia,
                 enumCaseParameterClause: element.parameterClause,
-                at: element.name.positionAfterSkippingLeadingTrivia
+                at: element.name.positionAfterSkippingLeadingTrivia,
+                endPosition: element.endPosition
             )
         }
     }
@@ -138,7 +144,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             trivia: node.commentCommandTrivia,
             inheritanceClause: node.inheritanceClause,
             genericWhereClause: node.genericWhereClause,
-            at: position
+            at: position,
+            endPosition: node.endPosition
         )
     }
 
@@ -152,7 +159,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             returnClause: node.signature.returnClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -165,7 +173,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             throwsClause: node.signature.effectSpecifiers?.throwsClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.initKeyword.positionAfterSkippingLeadingTrivia
+            at: node.initKeyword.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -174,7 +183,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             modifiers: node.modifiers,
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
-            at: node.deinitKeyword.positionAfterSkippingLeadingTrivia
+            at: node.deinitKeyword.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -187,12 +197,14 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             returnClause: node.returnClause,
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
-            at: node.subscriptKeyword.positionAfterSkippingLeadingTrivia
+            at: node.subscriptKeyword.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
     public func visitPost(_ node: VariableDeclSyntax) {
         let isLetBinding = node.bindingSpecifier.tokenKind == .keyword(.let)
+
         for binding in node.bindings {
             if binding.pattern.is(IdentifierPatternSyntax.self) {
                 let closureSignature = binding.initializer?.value.as(ClosureExprSyntax.self)?.signature
@@ -208,8 +220,28 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     variableInitFunctionCallExpr: functionCallExpr,
                     variableInitExpr: binding.initializer?.value,
                     isLetBinding: isLetBinding,
-                    at: binding.positionAfterSkippingLeadingTrivia
+                    at: binding.positionAfterSkippingLeadingTrivia,
+                    endPosition: binding.endPosition
                 )
+                // For bindings preceded by modifiers (e.g. `static let`), the index store may record
+                // the declaration at the modifier keyword rather than the binding identifier. Register
+                // a second result at the node position so such declarations still receive their
+                // syntax metadata, preventing spurious redundant accessibility results.
+                let nodePosition = node.positionAfterSkippingLeadingTrivia
+                if nodePosition != binding.positionAfterSkippingLeadingTrivia {
+                    parse(
+                        modifiers: node.modifiers,
+                        attributes: node.attributes,
+                        trivia: node.commentCommandTrivia,
+                        variableType: binding.typeAnnotation?.type,
+                        closureParameterClause: closureParameters,
+                        returnClause: closureSignature?.returnClause,
+                        variableInitFunctionCallExpr: functionCallExpr,
+                        variableInitExpr: binding.initializer?.value,
+                        isLetBinding: isLetBinding,
+                        at: nodePosition
+                    )
+                }
             } else if let tuplePatternSyntax = binding.pattern.as(TuplePatternSyntax.self) {
                 visitVariableTupleBinding(
                     node: node,
@@ -224,7 +256,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     attributes: node.attributes,
                     trivia: node.leadingTrivia.merging(node.trailingTrivia),
                     isLetBinding: isLetBinding,
-                    at: binding.positionAfterSkippingLeadingTrivia
+                    at: binding.positionAfterSkippingLeadingTrivia,
+                    endPosition: binding.endPosition
                 )
             }
         }
@@ -255,7 +288,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
                     variableType: type?.type,
                     variableInitFunctionCallExpr: initializer?.expression.as(FunctionCallExprSyntax.self),
                     isLetBinding: isLetBinding,
-                    at: element.positionAfterSkippingLeadingTrivia
+                    at: element.positionAfterSkippingLeadingTrivia,
+                    endPosition: element.endPosition
                 )
             }
         }
@@ -269,7 +303,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             genericParameterClause: node.genericParameterClause,
             genericWhereClause: node.genericWhereClause,
             typeInitializerClause: node.initializer,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -281,7 +316,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             inheritanceClause: node.inheritanceClause,
             genericWhereClause: node.genericWhereClause,
             typeInitializerClause: node.initializer,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -290,7 +326,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             modifiers: nil,
             attributes: nil,
             trivia: node.commentCommandTrivia,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -299,7 +336,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             modifiers: node.modifiers,
             attributes: node.attributes,
             trivia: node.commentCommandTrivia,
-            at: node.name.positionAfterSkippingLeadingTrivia
+            at: node.name.positionAfterSkippingLeadingTrivia,
+            endPosition: node.endPosition
         )
     }
 
@@ -322,7 +360,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         variableInitExpr: ExprSyntax? = nil,
         typeInitializerClause: TypeInitializerClauseSyntax? = nil,
         isLetBinding: Bool = false,
-        at position: AbsolutePosition
+        at position: AbsolutePosition,
+        endPosition: AbsolutePosition? = nil
     ) {
         let modifierNames: [String] = modifiers?.map { modifier in
             let name = modifier.name.text
@@ -346,7 +385,11 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             }
         }
 
-        let location = sourceLocationBuilder.location(at: position)
+        let location = if let endPosition {
+            sourceLocationBuilder.location(from: position, to: endPosition)
+        } else {
+            sourceLocationBuilder.location(at: position)
+        }
         let returnClauseTypeLocations = typeNameLocations(for: returnClause)
         let parameterClauseTypes = parameterClause?.parameters.map(\.type) ?? []
         let closureParameterClauseTypes = closureParameterClause?.parameters.compactMap(\.type) ?? []

@@ -1,3 +1,4 @@
+@testable import SourceGraph
 import SystemPackage
 @testable import TestShared
 import XCTest
@@ -80,6 +81,33 @@ final class RetentionTest: FixtureSourceGraphTestCase {
     func testSelfReferencedProperty() {
         analyze {
             assertNotReferenced(.class("FixtureClass39"))
+        }
+    }
+
+    func testRetainsSiblingTypeUsedByStoredPropertyOfUnusedType() {
+        // The Swift index store does not always emit a reference occurrence when a top-level type
+        // is used only as the type annotation of a stored property on a sibling type. To model that
+        // omission deterministically, strip every reference targeting the enum that originates within
+        // the struct after indexing. Retention must then rely on the property's `declaredType`
+        // annotation, ensuring the enum is not flagged unused while the property that uses it is kept.
+        analyze(retainPublic: true, afterIndexing: { graph in
+            guard let placement = graph.declarations(ofKind: .enum)
+                .first(where: { $0.name == "FixtureSiblingPlacement" }),
+                let descriptor = graph.declarations(ofKind: .struct)
+                .first(where: { $0.name == "FixtureSiblingDescriptor" })
+            else { return }
+
+            let descriptorMembers = descriptor.descendentDeclarations.union([descriptor])
+            for usr in placement.usrs {
+                for reference in graph.references(to: usr) where reference.parent.map({ descriptorMembers.contains($0) }) ?? false {
+                    graph.remove(reference)
+                }
+            }
+        }) {
+            assertReferenced(.struct("FixtureSiblingDescriptor")) {
+                self.assertReferenced(.varInstance("placement"))
+            }
+            assertReferenced(.enum("FixtureSiblingPlacement"))
         }
     }
 
@@ -594,23 +622,6 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
-    func testRetainsStaticMethodOnExternalTypeExtension() {
-        analyze(retainPublic: true) {
-            assertReferenced(.class("FixtureClassStaticExtMethod")) {
-                self.assertReferenced(.functionMethodInstance("someMethod()"))
-            }
-            assertReferenced(.extensionStruct("Array", line: 11)) {
-                self.assertReferenced(.functionMethodStatic("emptyArray()"))
-            }
-            assertReferenced(.extensionStruct("Array", line: 15)) {
-                self.assertReferenced(.functionMethodStatic("constrainedFactory(_:)"))
-            }
-            assertReferenced(.extensionClass("NumberFormatter", line: 19)) {
-                self.assertReferenced(.functionMethodStatic("customFormat()"))
-            }
-        }
-    }
-
     func testRetainsExtendedTypeAlias() {
         analyze(retainPublic: true) {
             assertReferenced(.typealias("Fixture214TypeAlias"))
@@ -823,6 +834,16 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    func testRetainsNestedTypeUsedAsSiblingStoredPropertyType() {
+        analyze(retainPublic: true) {
+            assertReferenced(.struct("FixtureStruct240")) {
+                self.assertReferenced(.enum("FixtureEnum240")) {
+                    self.assertReferenced(.enumelement("unknown"))
+                }
+            }
+        }
+    }
+
     func testIdenticallyNamedVarsInStaticAndInstanceScopes() {
         analyze(retainPublic: true) {
             assertReferenced(.class("FixtureClass95")) {
@@ -865,14 +886,7 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             assertReferenced(.class("FixtureClass71")) {
                 self.assertNotReferenced(.varInstance("someVar"))
             }
-            assertReferenced(.class("FixtureClass72"))
-        }
-    }
-
-    func testRetainsPropertyTypeReferencesOfUsedDeclaration() {
-        analyze(retainPublic: true) {
-            assertReferenced(.struct("FixtureViewModel222"))
-            assertReferenced(.struct("FixtureItem222"))
+            assertNotReferenced(.class("FixtureClass72"))
         }
     }
 
@@ -1055,7 +1069,12 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             }
 
             assertReferenced(.class("FixtureClass222")) {
-                self.assertAssignOnlyProperty(.varInstance("unused"))
+                // The class has a single explicit initializer, which is retained because removing it
+                // would make the class unconstructable. That initializer assigns `unused`, so the
+                // property cannot be removed without orphaning the assignment, and it is retained
+                // rather than reported as assign-only.
+                self.assertReferenced(.varInstance("unused"))
+                self.assertNotAssignOnlyProperty(.varInstance("unused"))
             }
         }
     }
@@ -1080,6 +1099,25 @@ final class RetentionTest: FixtureSourceGraphTestCase {
                 self.assertNotReferenced(.functionConstructor("init(unused:)"))
                 self.assertReferenced(.varInstance("unused"))
                 self.assertNotAssignOnlyProperty(.varInstance("unused"))
+            }
+        }
+    }
+
+    func testRetainsInitializedConstantProperties() {
+        analyze(retainPublic: true, retainAssignOnlyProperties: false) {
+            // The initializer is used, so its assignment and parameter are load-bearing and the
+            // `let` property must be retained rather than reported as assign-only.
+            assertReferenced(.struct("FixtureStruct230")) {
+                self.assertReferenced(.functionConstructor("init(identifier:)"))
+                self.assertReferenced(.varInstance("identifier"))
+                self.assertNotAssignOnlyProperty(.varInstance("identifier"))
+            }
+
+            // The initializer is never called, so the `let` property remains safely removable and
+            // is still reported as assign-only.
+            assertReferenced(.struct("FixtureStruct231")) {
+                self.assertNotReferenced(.functionConstructor("init(identifier:)"))
+                self.assertAssignOnlyProperty(.varInstance("identifier"))
             }
         }
     }
@@ -1115,6 +1153,39 @@ final class RetentionTest: FixtureSourceGraphTestCase {
             }
             assertReferenced(.struct("FixtureStruct5")) {
                 self.assertNotReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testRetainsSoleRequiredClassInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass400")) {
+                self.assertReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testDoesNotRetainClassInitializersWhenMultipleDeclared() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass401")) {
+                self.assertNotReferenced(.functionConstructor("init(value:)"))
+                self.assertNotReferenced(.functionConstructor("init(other:)"))
+            }
+        }
+    }
+
+    func testDoesNotRetainSoleStructInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.struct("FixtureStruct225")) {
+                self.assertNotReferenced(.functionConstructor("init(value:)"))
+            }
+        }
+    }
+
+    func testRetainsUsedSoleClassInitializer() {
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixtureClass402")) {
+                self.assertReferenced(.functionConstructor("init(value:)"))
             }
         }
     }

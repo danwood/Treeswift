@@ -1,6 +1,6 @@
 import Foundation
 
-public final class Declaration {
+public final class Declaration: @unchecked Sendable {
     public enum Kind: String, RawRepresentable, CaseIterable {
         case `associatedtype`
         case `class`
@@ -218,7 +218,7 @@ public final class Declaration {
         }
     }
 
-    public let location: Location
+    public var location: Location
     public var attributes: Set<DeclarationAttribute> = []
     public var modifiers: Set<String> = []
     public var accessibility: DeclarationAccessibility = .init(value: .internal, isExplicit: false)
@@ -236,6 +236,7 @@ public final class Declaration {
     public var isImplicit: Bool = false
     public var isObjcAccessible: Bool = false
     public var isLetBinding: Bool = false
+    public var referencedFiles: Set<SourceFile>
 
     private let hashValueCache: Int
 
@@ -301,6 +302,7 @@ public final class Declaration {
         self.kind = kind
         self.usrs = usrs
         self.location = location
+        self.referencedFiles = [location.file]
         hashValueCache = usrs.hashValue
     }
 

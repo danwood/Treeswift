@@ -2,7 +2,7 @@ import Foundation
 import SourceGraph
 
 public struct ScanResult {
-    enum Annotation {
+    public enum Annotation {
         case unused
         case assignOnlyProperty
         case redundantProtocol(references: Set<Reference>, inherited: Set<String>)
@@ -13,8 +13,14 @@ public struct ScanResult {
         case superfluousIgnoreCommand
     }
 
-    let declaration: Declaration
-    let annotation: Annotation
+    public let declaration: Declaration
+    public let annotation: Annotation
+
+    // Explicit public init so external modules can construct ScanResult.
+    public init(declaration: Declaration, annotation: Annotation) {
+        self.declaration = declaration
+        self.annotation = annotation
+    }
 
     public var usrs: Set<String> {
         if case .superfluousIgnoreCommand = annotation {

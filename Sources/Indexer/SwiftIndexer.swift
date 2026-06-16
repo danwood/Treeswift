@@ -406,6 +406,17 @@ final class SwiftIndexer: Indexer {
 
         private func applyDeclarationMetadata(to decl: Declaration, with result: DeclarationSyntaxVisitor.Result) {
             graph.withLock { _ in
+                // Update location with end positions captured by the syntax visitor.
+                if let endLine = result.location.endLine, let endColumn = result.location.endColumn {
+                    decl.location = Location(
+                        file: decl.location.file,
+                        line: decl.location.line,
+                        column: decl.location.column,
+                        endLine: endLine,
+                        endColumn: endColumn
+                    )
+                }
+
                 if let accessibility = result.accessibility {
                     decl.accessibility = .init(value: accessibility, isExplicit: true)
                 }
@@ -414,9 +425,9 @@ final class SwiftIndexer: Indexer {
                 decl.modifiers = Set(result.modifiers)
                 decl.commentCommands = Set(result.commentCommands)
                 decl.declaredType = result.variableType
+                decl.isLetBinding = result.isLetBinding
 
                 decl.hasGenericFunctionReturnedMetatypeParameters = result.hasGenericFunctionReturnedMetatypeParameters
-                decl.isLetBinding = result.isLetBinding
 
                 for ref in decl.references.union(decl.related) {
                     if result.inheritedTypeLocations.contains(ref.location) {

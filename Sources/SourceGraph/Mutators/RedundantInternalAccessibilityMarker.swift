@@ -280,10 +280,8 @@ final class RedundantInternalAccessibilityMarker: SourceGraphMutator {
         let implicitInits = parent.declarations.filter { $0.kind == .functionConstructor && $0.isImplicit }
 
         for implicitInit in implicitInits {
-            let initName = implicitInit.name
             let propertyName = decl.name
-
-            let parameterNames = initName
+            let parameterNames = implicitInit.name
                 .dropFirst("init(".count)
                 .dropLast(")".count)
                 .split(separator: ":")

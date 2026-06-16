@@ -35,6 +35,8 @@ _ = NotRedundantPublicTestableImportClass().testableProperty
 
 ProtocolIndirectlyReferencedCrossModuleByExtensionMemberImpl().somePublicFunc()
 
+PublicProtocolWitnessForExternalProtocolRetainer().retain()
+
 // Properties
 _ = PublicTypeUsedAsPublicPropertyTypeRetainer().retain
 _ = PublicTypeUsedAsPublicPropertyInitializer().retain

@@ -5,18 +5,21 @@ import ProjectDrivers
 import Shared
 import SystemPackage
 
-final class Project {
-    private let kind: ProjectKind
+public final class Project {
+    public let kind: ProjectKind
 
     private let configuration: Configuration
     private let shell: Shell
     private let logger: Logger
+    private weak var progressDelegate: ScanProgressDelegate?
 
-    convenience init(
+    public convenience init(
         configuration: Configuration,
         shell: Shell,
-        logger: Logger
+        logger: Logger,
+        progressDelegate: ScanProgressDelegate? = nil
     ) throws {
+        progressDelegate?.didStartInspecting()
         var kind: ProjectKind?
 
         if let path = configuration.project {
@@ -33,22 +36,24 @@ final class Project {
             throw PeripheryError.usageError("Failed to identify project in the current directory. For Xcode projects use the '--project' option, and for SPM projects change to the directory containing the Package.swift.")
         }
 
-        self.init(kind: kind, configuration: configuration, shell: shell, logger: logger)
+        self.init(kind: kind, configuration: configuration, shell: shell, logger: logger, progressDelegate: progressDelegate)
     }
 
-    init(
+    public init(
         kind: ProjectKind,
         configuration: Configuration,
         shell: Shell,
-        logger: Logger
+        logger: Logger,
+        progressDelegate: ScanProgressDelegate? = nil
     ) {
         self.kind = kind
         self.configuration = configuration
         self.shell = shell
         self.logger = logger
+        self.progressDelegate = progressDelegate
     }
 
-    func driver() throws -> ProjectDriver {
+    public func driver() throws -> ProjectDriver {
         switch kind {
         case let .xcode(projectPath):
             #if canImport(XcodeSupport)
@@ -56,7 +61,8 @@ final class Project {
                     projectPath: projectPath,
                     configuration: configuration,
                     shell: shell,
-                    logger: logger
+                    logger: logger,
+                    progressDelegate: progressDelegate
                 )
             #else
                 fatalError("Xcode projects are not supported on this platform.")

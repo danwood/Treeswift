@@ -32,8 +32,20 @@ var projectDriverDependencies: [PackageDescription.Target.Dependency] = [
 #endif
 
 var targets: [PackageDescription.Target] = [
+    // Frontend is split into a thin executable target (main.swift only) and a
+    // FrontendLib library target containing the rest, so that external packages
+    // can import the scanning orchestration code (Project, Scan, etc.).
     .executableTarget(
         name: "Frontend",
+        dependencies: [
+            .target(name: "FrontendLib"),
+            .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        ],
+        path: "Sources/Frontend",
+        sources: ["main.swift"]
+    ),
+    .target(
+        name: "FrontendLib",
         dependencies: [
             .target(name: "Shared"),
             .target(name: "Configuration"),
@@ -42,7 +54,9 @@ var targets: [PackageDescription.Target] = [
             .target(name: "ProjectDrivers"),
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "FilenameMatcher", package: "swift-filename-matcher"),
-        ]
+        ],
+        path: "Sources/Frontend",
+        exclude: ["main.swift"]
     ),
     .target(
         name: "Configuration",
@@ -181,6 +195,20 @@ let package = Package(
     products: [
         .executable(name: "periphery", targets: ["Frontend"]),
         .library(name: "PeripheryKit", targets: ["PeripheryKit"]),
+
+        // Additional library products exposed for external package integration.
+        // These internal modules are exposed to allow Treeswift and other
+        // consumers to import and use Periphery's internals directly.
+        .library(name: "Configuration", targets: ["Configuration"]),
+        .library(name: "SourceGraph", targets: ["SourceGraph"]),
+        .library(name: "Shared", targets: ["Shared"]),
+        .library(name: "Logger", targets: ["Logger"]),
+        .library(name: "Extensions", targets: ["Extensions"]),
+        .library(name: "Indexer", targets: ["Indexer"]),
+        .library(name: "ProjectDrivers", targets: ["ProjectDrivers"]),
+        .library(name: "SyntaxAnalysis", targets: ["SyntaxAnalysis"]),
+        .library(name: "XcodeSupport", targets: ["XcodeSupport"]),
+        .library(name: "FrontendLib", targets: ["FrontendLib"]),
     ],
     dependencies: dependencies,
     targets: targets,

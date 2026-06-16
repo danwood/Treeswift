@@ -46,31 +46,31 @@ final class SwiftUIRetainer: SourceGraphMutator {
         let candidateParents: Set<Declaration> = graph.mainAttributedDeclarations.isEmpty
             ? graph.declarations(ofKinds: [.class, .struct])
             : graph.mainAttributedDeclarations
-        candidateParents
-            .forEach { parent in
-                let adaptorProperties = parent.declarations
-                    .filter { $0.kind == .varInstance }
-                    .filter {
-                        $0.references.contains {
-                            ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name)
-                        }
+        for parent in candidateParents {
+            let adaptorProperties = parent.declarations
+                .filter { $0.kind == .varInstance }
+                .filter {
+                    $0.references.contains {
+                        ($0.declarationKind == .struct || $0.declarationKind == .enum) && Self.applicationDelegateAdaptorStructNames.contains($0.name)
                     }
-                guard !adaptorProperties.isEmpty else { return }
-                graph.markRetained(parent)
-                adaptorProperties.forEach { property in
-                    graph.markRetained(property)
-                    // The delegate class (e.g. AppDelegate) is passed as a metatype argument
-                    // to the adaptor. It exists only within the same file, so Periphery may
-                    // suggest downgrading it to fileprivate — but doing so causes a compiler
-                    // error because the property referencing it must match its access level.
-                    // Unmark it from redundant-internal analysis so no suggestion is emitted.
-                    for ref in property.references where ref.declarationKind == .class {
-                        if let delegateDecl = graph.declaration(withUsr: ref.usr) {
-                            graph.unmarkRedundantInternalAccessibility(delegateDecl)
-                        }
+                }
+            guard !adaptorProperties.isEmpty else { continue }
+
+            graph.markRetained(parent)
+            for property in adaptorProperties {
+                graph.markRetained(property)
+                // The delegate class (e.g. AppDelegate) is passed as a metatype argument
+                // to the adaptor. It exists only within the same file, so Periphery may
+                // suggest downgrading it to fileprivate — but doing so causes a compiler
+                // error because the property referencing it must match its access level.
+                // Unmark it from redundant-internal analysis so no suggestion is emitted.
+                for ref in property.references where ref.declarationKind == .class {
+                    if let delegateDecl = graph.declaration(withUsr: ref.usr) {
+                        graph.unmarkRedundantInternalAccessibility(delegateDecl)
                     }
                 }
             }
+        }
     }
 
     private func unretainPreviewMacroExpansions() {
