@@ -201,34 +201,63 @@ enum UnusedDependencyAnalyzer {
 		// Use the full batch deletion set when available so that references
 		// between files in the same batch are not treated as external.
 		let deletionSet = batchDeletionSet ?? Set(operations.map(\.declaration))
+
+		// Non-.unused operations: ignore-comment removals pass through; redundantInternalAccessibility
+		// is always skipped in this strategy (downgrading internal → fileprivate/private can cascade to
+		// callers Periphery didn't flag). Only .unused operations participate in the reachability
+		// fixpoint below.
 		var kept: [FilteredOperations.Operation] = []
 		var skippedCount = 0
-
+		var unusedOps: [FilteredOperations.Operation] = []
 		for op in operations {
-			// Only apply skip logic to .unused annotations;
-			// ignore-comment removals are always safe.
-			// redundantInternalAccessibility is skipped in this strategy because downgrading
-			// internal → fileprivate/private can cascade: Swift requires any init/method using
-			// the downgraded type as a parameter or return type to also be fileprivate/private,
-			// which breaks callers in other files that Periphery didn't flag.
 			if case .redundantInternalAccessibility = op.scanResult.annotation {
 				skippedCount += 1
-				continue
-			}
-			guard case .unused = op.scanResult.annotation else {
-				kept.append(op)
-				continue
-			}
-
-			if hasExternalReferences(op.declaration, deletionSet: deletionSet, sourceGraph: sourceGraph)
-				|| isNestedTypeWithKeptParent(
-					op.declaration,
-					deletionSet: deletionSet,
-					sourceGraph: sourceGraph
-				) {
-				skippedCount += 1
+			} else if case .unused = op.scanResult.annotation {
+				unusedOps.append(op)
 			} else {
 				kept.append(op)
+			}
+		}
+
+		// Fixpoint: a candidate must be KEPT if it is referenced by anything that will SURVIVE — i.e.
+		// a referrer outside the CURRENT remove-set, not the original full candidate set. Deciding each
+		// op independently against the static set is wrong: when op E is kept (it has a surviving
+		// referrer), every decl E references becomes referenced-by-surviving-code and must be kept too.
+		// A single pass removes those, leaving E (kept) calling a deleted decl → "cannot find X".
+		// Iterate, moving ops from remove→keep, until stable. The remove-set only shrinks, so this
+		// terminates. (This is what surfaced as the R3 skipReferenced build break: processSamples kept,
+		// fastMapToVisualRange removed; toStatusInfo kept, displayName removed.)
+		var removeSet = Set(unusedOps.map(\.declaration))
+		var changed = true
+		while changed {
+			changed = false
+			// Files that contain a declaration still slated for removal this iteration. A type whose
+			// `referencedFiles` include a file NOT in this set is named by source that will survive —
+			// e.g. an `extension <Type>` in another folder, folded into the type by the analyzer but
+			// whose SOURCE is in a file outside a folder-scoped batch. Removing the type then leaves
+			// that extension dangling ("cannot find type"). This is the cross-folder-extension case
+			// that the reference-parent check alone misses (the extension was folded, so there is no
+			// `references(to: type)` edge whose parent is the extension).
+			let removeFiles = Set(removeSet.map { ScanResultHelper.location(from: $0).file })
+			for op in unusedOps where removeSet.contains(op.declaration) {
+				if hasExternalReferences(op.declaration, deletionSet: removeSet, sourceGraph: sourceGraph)
+					|| isNestedTypeWithKeptParent(
+						op.declaration,
+						deletionSet: removeSet,
+						sourceGraph: sourceGraph
+					)
+					|| isNamedBySurvivingFile(op.declaration, removeFiles: removeFiles) {
+					removeSet.remove(op.declaration)
+					changed = true
+				}
+			}
+		}
+
+		for op in unusedOps {
+			if removeSet.contains(op.declaration) {
+				kept.append(op)
+			} else {
+				skippedCount += 1
 			}
 		}
 
@@ -483,6 +512,26 @@ enum UnusedDependencyAnalyzer {
 		}
 		for child in parent.declarations {
 			if hasExternalReferences(child, deletionSet: deletionSet, sourceGraph: sourceGraph) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/**
+	 Returns true when a declaration's source is referenced from a file that contains NO declaration
+	 being removed this iteration (a surviving file). The analyzer folds an `extension <Type>` into the
+	 extended type and records the extension's source file in the type's `referencedFiles`; when that
+	 file is outside a folder-scoped removal batch, removing the type would leave the extension's source
+	 dangling. A type's own file always contains it, so it is excluded from "surviving".
+	 */
+	private static func isNamedBySurvivingFile(
+		_ declaration: Declaration,
+		removeFiles: Set<SourceFile>
+	) -> Bool {
+		let ownFile = declaration.location.file
+		for file in declaration.referencedFiles where file != ownFile {
+			if !removeFiles.contains(file) {
 				return true
 			}
 		}

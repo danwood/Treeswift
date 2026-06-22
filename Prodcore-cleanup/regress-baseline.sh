@@ -12,6 +12,9 @@
 set -uo pipefail
 
 ID_LABEL="$1"; COMMIT="$2"; SIGNOFF="${3:-1}"
+# Whole-project removal strategy to gate. Default forceRemoveAll (the original FP gate); set
+# STRATEGY=skipReferenced to gate the safe-default strategy (must build clean), or cascade.
+STRATEGY="${STRATEGY:-forceRemoveAll}"
 PRODCORE="$HOME/code/Prodcore"
 CFG="9E23EE49-A7B1-47BA-A5D6-DD150F7F15C7"
 PORT="${PORT:-21663}"
@@ -87,8 +90,8 @@ PY
 )
 say "parsed: total=$scan_total unused=$scan_unused assignOnly=$scan_assign redunAcc=$scan_redacc redunProto=$scan_redproto"
 
-say "forceRemoveAll preview"
-PREVIEW=$(curl -s -X POST "$BASE/configurations/$CFG/removal/preview" -H "Content-Type: application/json" -d '{"strategy":"forceRemoveAll"}')
+say "$STRATEGY preview"
+PREVIEW=$(curl -s -X POST "$BASE/configurations/$CFG/removal/preview" -H "Content-Type: application/json" -d "{\"strategy\":\"$STRATEGY\"}")
 read prev_del prev_nondel < <(python3 - "$PREVIEW" <<'PY'
 import sys, json
 d = json.loads(sys.argv[1] or "{}")
@@ -97,8 +100,8 @@ PY
 )
 say "preview: deletable=$prev_del nonDeletable=$prev_nondel"
 
-say "forceRemoveAll execute"
-EXEC=$(curl -s -X POST "$BASE/configurations/$CFG/removal/execute" -H "Content-Type: application/json" -d '{"strategy":"forceRemoveAll"}')
+say "$STRATEGY execute"
+EXEC=$(curl -s -X POST "$BASE/configurations/$CFG/removal/execute" -H "Content-Type: application/json" -d "{\"strategy\":\"$STRATEGY\"}")
 read exec_deleted exec_err < <(python3 - "$EXEC" <<'PY'
 import sys, json
 d = json.loads(sys.argv[1] or "{}")
