@@ -1,0 +1,37 @@
+{
+  "id": "R5",
+  "commit": "a1711d27",
+  "signoff": 1,
+  "before": {
+    "files": 829,
+    "loc": 168327,
+    "loc_nonblank": 148346,
+    "symbols": 27354,
+    "bytes": 6131039
+  },
+  "after": {
+    "files": 826,
+    "loc": 162806,
+    "loc_nonblank": 143601,
+    "symbols": 26219,
+    "bytes": 5941496
+  },
+  "scan": {
+    "total": 1233,
+    "unused": 374,
+    "assignOnly": 174,
+    "redunAcc": 685,
+    "redunProto": 0
+  },
+  "removal": {
+    "deletable": 1059,
+    "nonDeletable": 67,
+    "deleted": 1059,
+    "execErrors": 5
+  },
+  "build": {
+    "pristine_errs": 0,
+    "post_errs": 0,
+    "new_errs_false_positives": 0
+  }
+}

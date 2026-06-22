@@ -1,0 +1,37 @@
+{
+  "id": "R3",
+  "commit": "23ad2547",
+  "signoff": 1,
+  "before": {
+    "files": 775,
+    "loc": 145438,
+    "loc_nonblank": 127715,
+    "symbols": 24216,
+    "bytes": 5137956
+  },
+  "after": {
+    "files": 741,
+    "loc": 125215,
+    "loc_nonblank": 110202,
+    "symbols": 20149,
+    "bytes": 4429485
+  },
+  "scan": {
+    "total": 3619,
+    "unused": 1082,
+    "assignOnly": 128,
+    "redunAcc": 2393,
+    "redunProto": 0
+  },
+  "removal": {
+    "deletable": 3478,
+    "nonDeletable": 128,
+    "deleted": 3478,
+    "execErrors": 309
+  },
+  "build": {
+    "pristine_errs": 0,
+    "post_errs": 0,
+    "new_errs_false_positives": 0
+  }
+}

@@ -151,6 +151,33 @@ re-appear on rescan.
 have no automated removal logic by design — see `docs/proposals/algorithmic-warning-fixes.md`).
 Both convergence conditions met: false positives = 0, genuine dead code → 0 with no oscillation.
 
+### Regression replay 2026-06-22 (all baselines re-run vs current Treeswift) — F25 + F26 found & fixed
+
+Single-pass `forceRemoveAll` per baseline against the current Treeswift build, to re-prove the cleanup
+(no false positives / cleanup regressions / false negatives) and collect code-size statistics. Full
+report: `REGRESSION-REPORT.md`. Scripts: `measure-size.sh`, `regress-baseline.sh`, `build-report.py`.
+
+| baseline | scan total | deletable | deleted | LOC removed | build_errors (new FP) | verdict |
+|----------|-----------|-----------|---------|-------------|-----------------------|---------|
+| R3 `23ad2547` | 3619 | 3478 | 3478 | 20,223 | **0** (was 10 before F26) | ✅ after F26 |
+| R-May `96e372e4` | 2529 | 2366 | 2366 | 5,838 | **0** (was 1 before F25) | ✅ after F25 |
+| R4 `20fb9b87` | 1249 | 1074 | 1074 | 5,534 | **0** | ✅ |
+| R5 `a1711d27` | 1233 | 1059 | 1059 | 5,521 | **0** | ✅ |
+| devbase `47a6d25de` | 576 | 378 | 378 | 609 | **0** | ✅ |
+
+Counts use `topLevelOnly=false` (full tree) so they exceed the older top-level ledger rows; not
+directly comparable. The filter-independent truths: **size delta** + **0 false positives on all 5**.
+
+Two real Treeswift removal bugs surfaced (masked in June by split unused-first removal) and FIXED at
+root, both in `CodeModificationHelper`:
+- **F25** — `fileprivate` not cascaded to a member `init`'s parameter (R-May). Cascade now matches
+  `func`|`init`.
+- **F26** — empty-ancestor promotion deleted a type whose members were all flagged but which is still
+  referenced AS A TYPE by a surviving declaration (R3: `VideoFormat`, `PreviewSettings`). New
+  `isReferencedAsTypeBySurvivingDeclaration` guard in `findHighestEmptyAncestor`. Periphery analysis
+  was CORRECT in both R3 cases (it never flagged the struct, only its members) — NOT an upstream issue.
+No-regression confirmed: R4/R5/R-May/devbase deleted-counts unchanged after the F26 guard.
+
 ## Open False Positives (must reach empty)
 
 Tracked live; each must end as a Periphery/Treeswift fix + regression fixture, NOT a "skip".

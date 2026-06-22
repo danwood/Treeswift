@@ -841,3 +841,81 @@ actually compiles (`.o` in DerivedData / index store) before calling a Periphery
 false positive. The real remaining item is NOT analysis: it is why Treeswift's removal engine reports
 these genuinely-dead decls as "0 deletable" (a removal-gate question, see ledger), and that some are
 reachable only through an uncompiled reference folder.
+
+## F25 — `fileprivate` type not cascaded to a member `init`'s parameter (2026-06-22)
+
+**Symptom (found by the regression-replay run on baseline R-May `96e372e4`):** a full
+`forceRemoveAll` produced one new error against a clean pristine baseline:
+
+```
+Features/Business/Views/BusinessServices/Sheets/ServiceCatalogItemEditorView.swift:72:5:
+error: initializer must be declared fileprivate because its parameter uses a fileprivate type
+```
+
+Treeswift narrowed `struct ServiceCatalogItemData` to `fileprivate` (a
+`redundantInternalAccessibility → fileprivate` fix). It is the element type of the view's
+`init(…, onSave: (ServiceCatalogItemData) -> Void, …)` parameter. The implicitly-`internal` member
+`init` was not cascaded, so Swift demanded it be at most `fileprivate`.
+
+**Root cause:** the F20 fix (`cascadeFileprivateToReferencingFunctions`) matched **only `func`
+declaration lines** (`line.contains(\bfunc\b)`). A member/initializer `init(…)` carries no `func`
+keyword, so it was skipped and never cascaded. Same family as F17/F19/F20: when a type's access
+changes, every declaration constrained by it must change in lockstep — this variant is the `init`
+whose *parameter* uses the narrowed type.
+
+**Fix (`CodeModificationHelper.swift`, same function):** the keyword pattern now matches
+`\b(?:func|init)\b`, and `insertFileprivateBeforeFunc` → `insertFileprivateBeforeDecl` also inserts
+`fileprivate` ahead of an `init` (handling failable `init?`/`init!` and the `required`/`convenience`
+specifiers, plus an `init`-is-keyword-not-identifier guard so `initialData` etc. are never matched).
+Conservative as before — never lowers a decl that already carries an explicit access keyword.
+
+**Verified:** after the fix + a fresh Treeswift build, a full `forceRemoveAll` on R-May makes the
+`init` fileprivate and Prodcore builds clean (0 new errors). (Treeswift-side removal-logic fix.)
+
+**Fixture:** E2E build-clean on R-May (the regression-replay row). A minimal source shape — a
+`fileprivate` struct used only as a member `init`'s parameter type — should be added under
+`Prodcore-cleanup/fixtures/F25-fileprivate-init-param/` mirroring the F20 fixture.
+
+## F26 — empty-ancestor promotion deletes a type still referenced as a type (2026-06-22)
+
+**Symptom (found by the regression-replay run on baseline R3 `23ad2547`):** a full `forceRemoveAll`
+produced 10 build errors against a clean pristine baseline, clustered on two types:
+
+```
+Shared/CoreData/Media/MediaCompositeTypes.swift: cannot find type 'VideoFormat' in scope
+  (+ 'MediaFormat' does not conform to Decodable/Encodable/Equatable)
+Features/Products/Import/Services/ProductImportProcessor.swift: cannot find type 'PreviewSettings'
+Shared/Services/AudioAssetImporter.swift: extra arguments / missing 'from:' / contextual '.m4a'
+```
+
+**Periphery is CORRECT — this is NOT an analysis false positive.** Inspection of the R3 scan cache
+(`scanResultSnapshots`) shows neither `struct VideoFormat` nor `struct PreviewSettings` is flagged
+`unused`. Only their MEMBERS are flagged: every stored property → `redundantInternalAccessibility`,
+and one initializer → `unused` (the others → redundant-acc). The struct itself carries no annotation.
+
+**Root cause (Treeswift removal logic):** applying all the member-level changes (privatize every
+stored property + delete the one unused init) empties the type, and
+`CodeModificationHelper.findHighestEmptyAncestor` then promotes the deletion up to the WHOLE type —
+without checking the type is still referenced **as a type** by a surviving declaration
+(`MediaFormat.video: VideoFormat?`; `settings: PreviewSettings` parameter + a `PreviewSettings(...)`
+construction). The struct is deleted while the references that name it survive → "cannot find type",
+and `MediaFormat` loses its synthesized Codable/Equatable. The AudioAssetImporter errors are a pure
+knock-on of the VideoFormat/MediaFormat removal. Same family as F18/F19/F20/F25 (Treeswift removal,
+not Periphery) and the empty-ancestor / `shouldCheckEmptyAncestor` logic.
+
+**Fix (`CodeModificationHelper.swift`):** new guard `isReferencedAsTypeBySurvivingDeclaration` called
+inside `findHighestEmptyAncestor`. Before promoting to a parent type, it queries
+`sourceGraph.references(to: parent)` for any reference with a type-usage `role`
+(`varType`/`parameterType`/`returnType`/`initializerType`/… — mirrors `Reference.Role`'s
+exposable set) whose owning declaration is NOT itself being deleted in this batch. If such a live
+type-reference exists, the upward walk stops and the type survives. Members are still handled
+individually; only the erroneous whole-type deletion is prevented. Conservative — genuinely-dead
+types (no live type-reference) still collapse, so the other baselines are unaffected. (Also removed
+stray leftover `DEBUG fputs` lines in the function.)
+
+**Verified:** after the fix + a fresh Treeswift build, `forceRemoveAll` on R3 keeps both structs and
+Prodcore builds clean (0 new errors); R4/R5/R-May/devbase remain clean with unchanged deletion counts.
+
+**Fixture:** `Prodcore-cleanup/fixtures/F26-empty-ancestor-referenced-type/Fixture.swift` (a struct
+whose members are all flagged, still named by a sibling type's stored property). In-repo proof is the
+E2E build-clean on R3.

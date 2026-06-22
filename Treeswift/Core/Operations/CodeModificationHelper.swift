@@ -65,10 +65,21 @@ struct CodeModificationHelper {
 			// If the parent is explicitly retained by a mutator (e.g., ObservableMacroRetainer),
 			// do not promote — the parent must stay even if all its explicit children are flagged.
 			if let sourceGraph, sourceGraph.isRetained(parent) {
-				fputs(
-					"DEBUG findHighestEmptyAncestor: parent \(parent.name) is retained — not promoting \(declaration.name)\n",
-					stderr
-				)
+				break
+			}
+
+			// Do not promote-and-delete a type that is still referenced AS A TYPE by a declaration
+			// that survives this batch. A type whose members are all flagged (e.g. every stored
+			// property narrowed by a redundant-accessibility fix plus one unused init) would
+			// otherwise be deleted whole even though a kept property/parameter/return still names it
+			// (e.g. `var video: VideoFormat?`, `settings: PreviewSettings`), leaving a dangling type
+			// annotation: "cannot find type 'X' in scope". Members are still handled individually;
+			// only the erroneous whole-type deletion is prevented.
+			if isReferencedAsTypeBySurvivingDeclaration(
+				parent,
+				allDeletingUSRs: allDeletingUSRs,
+				sourceGraph: sourceGraph
+			) {
 				break
 			}
 
@@ -83,17 +94,49 @@ struct CodeModificationHelper {
 			let allChildrenDeleted = parent.declarations.allSatisfy { sibling in
 				sibling.usrs.contains { allDeletingUSRs.contains($0) }
 			}
-			if allChildrenDeleted {
-				fputs(
-					"DEBUG findHighestEmptyAncestor: ALL children of \(parent.name) in allDeletingUSRs — promoting \(declaration.name) → \(parent.name)\n",
-					stderr
-				)
-			}
 			guard allChildrenDeleted else { break }
 			current = parent
 		}
 
 		return current
+	}
+
+	/**
+	 Whether `declaration` (a type) is still referenced as a type by a declaration that is NOT being
+	 deleted in this batch. "As a type" means a type-usage reference role (property type, parameter
+	 type, return type, generic argument, constructed type, etc.) — not a plain call. Used to stop
+	 empty-ancestor promotion from deleting a type whose members are all flagged but whose name is
+	 still written in surviving code.
+	 */
+	private static func isReferencedAsTypeBySurvivingDeclaration(
+		_ declaration: Declaration,
+		allDeletingUSRs: Set<String>,
+		sourceGraph: (any SourceGraphProtocol)?
+	) -> Bool {
+		guard let sourceGraph else { return false }
+
+		// Type-usage reference roles (mirrors Reference.Role.isPubliclyExposable, which is not public).
+		let typeRoles: Set<Reference.Role> = [
+			.varType, .returnType, .parameterType, .throwType,
+			.genericParameterType, .genericRequirementType, .inheritedType,
+			.refinedProtocolType, .conformedType, .initializerType,
+			.variableInitFunctionCall, .functionCallMetatypeArgument
+		]
+
+		for reference in sourceGraph.references(to: declaration) where typeRoles.contains(reference.role) {
+			// The referring declaration must itself survive this batch. A reference whose owner is
+			// also being deleted does not keep the type alive.
+			guard let referrer = reference.parent else {
+				// No owning declaration recorded (e.g. a file-scope reference) — treat as surviving.
+				return true
+			}
+			let referrerDeleted = referrer.usrs.contains { allDeletingUSRs.contains($0) }
+			if !referrerDeleted {
+				return true
+			}
+		}
+
+		return false
 	}
 
 	/**
@@ -1273,21 +1316,23 @@ struct CodeModificationHelper {
 		return newLine
 	}
 
-	// MARK: - Fileprivate Function Cascade
+	// MARK: - Fileprivate Function/Initializer Cascade
 
 	/**
-	 Inserts `fileprivate` on any `func` — extension method or free function — whose signature
-	 references a type that was just narrowed to `fileprivate`, when the func carries no explicit
-	 access keyword.
+	 Inserts `fileprivate` on any `func` or `init` — extension method, member initializer, or free
+	 function — whose signature references a type that was just narrowed to `fileprivate`, when the
+	 declaration carries no explicit access keyword.
 
-	 Swift requires a function whose parameter or return type is `fileprivate` to be at most
-	 `fileprivate` ("method must be declared fileprivate because its result uses a fileprivate
+	 Swift requires a function/initializer whose parameter or return type is `fileprivate` to be at
+	 most `fileprivate` ("method must be declared fileprivate because its result uses a fileprivate
+	 type"; "initializer must be declared fileprivate because its parameter uses a fileprivate
 	 type"). The same-scope sibling cascade only patches inits/funcs inside the type's own parent
-	 body; it does not reach `extension <Other> { func … -> [FileprivateType] }` or top-level free
-	 functions. This pass closes that gap file-wide.
+	 body; it does not reach `extension <Other> { func … -> [FileprivateType] }`, top-level free
+	 functions, or a struct's member `init(_: FileprivateType)`. This pass closes that gap file-wide.
 
-	 Conservative: only patches a `func` line that has no leading access keyword (so it can't lower
-	 an intentionally-public API), and only when the type name appears in the collected signature.
+	 Conservative: only patches a `func`/`init` line that has no leading access keyword (so it can't
+	 lower an intentionally-public API), and only when the type name appears in the collected
+	 signature.
 	 */
 	private static func cascadeFileprivateToReferencingFunctions(
 		lines: [String],
@@ -1301,14 +1346,15 @@ struct CodeModificationHelper {
 			.joined(separator: "|")
 		guard !alternation.isEmpty,
 		      let typeRefPattern = try? Regex("\\b(?:\(alternation))\\b"),
-		      let funcKeywordPattern = try? Regex("\\bfunc\\b")
+		      // `init` whose parameter uses a fileprivate type triggers the same diagnostic as `func`.
+		      let declKeywordPattern = try? Regex("\\b(?:func|init)\\b")
 		else { return lines }
 
 		var idx = 0
 		while idx < lines.count {
 			let line = lines[idx]
-			// Must be a `func` declaration line with no explicit leading access modifier.
-			guard line.contains(funcKeywordPattern) else { idx += 1; continue }
+			// Must be a `func`/`init` declaration line with no explicit leading access modifier.
+			guard line.contains(declKeywordPattern) else { idx += 1; continue }
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
 			let hasLeadingAccess = ["public ", "internal ", "fileprivate ", "private ", "open "]
 				.contains { trimmed.hasPrefix($0) }
@@ -1328,14 +1374,14 @@ struct CodeModificationHelper {
 			// Only cascade when the signature references a fileprivate type.
 			guard signature.contains(typeRefPattern) else { idx = sigEnd + 1; continue }
 
-			// Insert `fileprivate` before `func` (or before a leading `static`/`class` specifier).
-			let newLine = insertFileprivateBeforeFunc(in: line)
+			// Insert `fileprivate` before `func`/`init` (or before a leading specifier).
+			let newLine = insertFileprivateBeforeDecl(in: line)
 			if newLine != line {
 				lines[idx] = newLine
 				pendingLogEntries.append(.init(
 					startLine: idx + 1,
 					endLine: idx + 1,
-					action: "inserted `fileprivate` (cascade: func references a fileprivate type)"
+					action: "inserted `fileprivate` (cascade: func/init references a fileprivate type)"
 				))
 			}
 			idx = sigEnd + 1
@@ -1344,15 +1390,19 @@ struct CodeModificationHelper {
 	}
 
 	/**
-	 Inserts `fileprivate ` before the `func` keyword on a declaration line, preserving leading
-	 whitespace and any `static`/`class`/`mutating`/`nonmutating` specifier that precedes `func`.
+	 Inserts `fileprivate ` before the `func`/`init` keyword on a declaration line, preserving
+	 leading whitespace and any specifier (`static`/`class`/`final`/`mutating`/`required`/
+	 `convenience`/…) that precedes the keyword. Handles failable inits (`init?`/`init!`).
 	 */
-	private static func insertFileprivateBeforeFunc(in line: String) -> String {
+	private static func insertFileprivateBeforeDecl(in line: String) -> String {
 		let leadingWhitespace = String(line.prefix { $0 == " " || $0 == "\t" })
 		var rest = Substring(line.dropFirst(leadingWhitespace.count))
-		// Keep specifiers like `static`/`class`/`final`/`mutating` ahead of the inserted keyword.
+		// Keep specifiers ahead of the inserted keyword (func + init forms both covered).
 		var prefixSpecifiers = ""
-		let movableSpecifiers = ["static ", "class ", "final ", "mutating ", "nonmutating ", "override "]
+		let movableSpecifiers = [
+			"static ", "class ", "final ", "mutating ", "nonmutating ", "override ",
+			"required ", "convenience "
+		]
 		var changed = true
 		while changed {
 			changed = false
@@ -1362,7 +1412,11 @@ struct CodeModificationHelper {
 				changed = true
 			}
 		}
-		guard rest.hasPrefix("func ") else { return line }
+		// `init` must be the keyword, not an identifier prefix like `initialData` — require the next
+		// char to be `(`, `?`, `!`, or whitespace (failable inits and spaced forms).
+		let isInitKeyword = rest.hasPrefix("init")
+			&& (rest.dropFirst(4).first.map { "(?! \t".contains($0) } ?? false)
+		guard rest.hasPrefix("func ") || isInitKeyword else { return line }
 		return leadingWhitespace + prefixSpecifiers + "fileprivate " + rest
 	}
 

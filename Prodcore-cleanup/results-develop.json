@@ -1,0 +1,12 @@
+{
+  "id": "develop",
+  "note": "Real committed cleanup on branch dead-code-cleanup-2026-06-16 + fix-unused-parameters-2026-06-16 (off develop@47a6d25de). Sizes measured from git at each committed checkpoint (the cleanup was committed for real, not reverted). Live forceRemoveAll regression run separately as baseline 'devbase'.",
+  "checkpoints": [
+    {"commit": "cb1fb2912", "label": "prev develop baseline (06-15)",        "files": 862, "loc": 170425, "loc_nonblank": 150862, "symbols": 27410, "bytes": 6338845},
+    {"commit": "47a6d25de", "label": "DIRTY baseline (pass-1 BEFORE)",        "files": 878, "loc": 173020, "loc_nonblank": 153271, "symbols": 27764, "bytes": 6446310},
+    {"commit": "0f27f608c", "label": "after dead-code pass 1 (272 decls)",    "files": 876, "loc": 172499, "loc_nonblank": 152817, "symbols": 27642, "bytes": 6427648},
+    {"commit": "de0f6a64e", "label": "after dead-code pass 2 (9 decls)",      "files": 876, "loc": 172499, "loc_nonblank": 152817, "symbols": 27642, "bytes": 6427708},
+    {"commit": "6169049ef", "label": "after most unused params (#339)",       "files": 876, "loc": 172474, "loc_nonblank": 152794, "symbols": 27642, "bytes": 6426815},
+    {"commit": "88a8c5f11", "label": "after 47 unused params -> _ (AFTER)",   "files": 876, "loc": 172471, "loc_nonblank": 152794, "symbols": 27642, "bytes": 6426705}
+  ]
+}

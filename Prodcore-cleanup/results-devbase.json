@@ -1,0 +1,37 @@
+{
+  "id": "devbase",
+  "commit": "47a6d25de",
+  "signoff": 0,
+  "before": {
+    "files": 878,
+    "loc": 173020,
+    "loc_nonblank": 153271,
+    "symbols": 27764,
+    "bytes": 6446310
+  },
+  "after": {
+    "files": 876,
+    "loc": 172411,
+    "loc_nonblank": 152744,
+    "symbols": 27621,
+    "bytes": 6425013
+  },
+  "scan": {
+    "total": 576,
+    "unused": 104,
+    "assignOnly": 198,
+    "redunAcc": 274,
+    "redunProto": 0
+  },
+  "removal": {
+    "deletable": 378,
+    "nonDeletable": 43,
+    "deleted": 378,
+    "execErrors": 1
+  },
+  "build": {
+    "pristine_errs": 0,
+    "post_errs": 0,
+    "new_errs_false_positives": 0
+  }
+}

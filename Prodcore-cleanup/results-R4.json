@@ -1,0 +1,37 @@
+{
+  "id": "R4",
+  "commit": "20fb9b87",
+  "signoff": 1,
+  "before": {
+    "files": 797,
+    "loc": 167407,
+    "loc_nonblank": 147523,
+    "symbols": 27020,
+    "bytes": 6099768
+  },
+  "after": {
+    "files": 794,
+    "loc": 161873,
+    "loc_nonblank": 142764,
+    "symbols": 25882,
+    "bytes": 5909704
+  },
+  "scan": {
+    "total": 1249,
+    "unused": 377,
+    "assignOnly": 175,
+    "redunAcc": 697,
+    "redunProto": 0
+  },
+  "removal": {
+    "deletable": 1074,
+    "nonDeletable": 67,
+    "deleted": 1074,
+    "execErrors": 5
+  },
+  "build": {
+    "pristine_errs": 0,
+    "post_errs": 0,
+    "new_errs_false_positives": 0
+  }
+}

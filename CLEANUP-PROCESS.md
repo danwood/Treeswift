@@ -163,12 +163,18 @@ These cost real time on the 2026-06-11 git-history experiment; following them av
    `{"strategy":"forceRemoveAll","annotationFilter":["unused"]}` builds clean on every baseline and
    proves the core claim in isolation; the access-control tail then surfaces as a much smaller,
    well-defined set. (This is how F19/F20 were isolated from the unused logic.)
-5. **Building OLD checkouts:** add `-disableAutomaticPackageResolution` (honor the baseline's pinned
-   `Package.resolved`, neutralizing `branch=main` drift) and, for pre-2026-06-01 commits, disable
-   code signing (`CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO`) — those
-   predate the root `Local.xcconfig` and fail provisioning, which is orthogonal to dead-code analysis
-   (a false positive is a COMPILE error, never a signing error). NEVER `git clean -fdx` (deletes the
-   gitignored `Local.xcconfig`).
+5. **Building OLD checkouts:** for pre-2026-06-01 commits disable code signing
+   (`CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO`) — those predate the root
+   `Local.xcconfig` and fail provisioning, which is orthogonal to dead-code analysis (a false positive
+   is a COMPILE error, never a signing error). NEVER `git clean -fdx` (deletes the gitignored
+   `Local.xcconfig`).
+   - ⚠️ **Do NOT add `-disableAutomaticPackageResolution` anymore.** It was added in June to honor a
+     baseline's pinned `Package.resolved`, but those pins have since gone stale: on the older baselines
+     (e.g. R-May `96e372e4`) resolution now FAILS with *"Could not resolve package dependencies"*,
+     which makes the **pristine** build never compile — masking the true compile baseline and hiding a
+     real false positive behind a bogus resolution error. Let `xcodebuild` resolve normally; it
+     succeeds on all four baselines and yields a real compile. (This is exactly how the 2026-06-22
+     regression replay surfaced **F25**.)
 
 ## Git-history replay (testing Treeswift against historical dirt)
 
@@ -189,3 +195,40 @@ were visible at clean HEAD). The full run + resume state lives in `Prodcore-clea
 
 - Prodcore repo: `~/code/Prodcore/` · config ID `9E23EE49-A7B1-47BA-A5D6-DD150F7F15C7` · port `21663`
 - Automation API reference: [`docs/automation-api.md`](docs/automation-api.md)
+
+## Regression replay + size statistics (repeatable health check)
+
+After changing Treeswift/Periphery, re-run the historical baselines to prove the analysis still finds
+the same dead code (no false **negatives**), removes it cleanly (no **cleanup regressions**), and
+breaks nothing (no false **positives**) — and to quantify how much code each cleanup removed. This is
+a lighter, single-pass-per-baseline version of the full git-history convergence run above, meant to
+be run repeatedly.
+
+Two reusable scripts in `Prodcore-cleanup/`:
+
+- **`measure-size.sh [root]`** — code-size metrics for a Prodcore checkout: file count, total LOC,
+  non-blank LOC, an approximate symbol count (lexical decl-keyword grep — consistent across refs, not
+  a real parser), and total bytes. Run it at any git ref to get a BEFORE/AFTER snapshot.
+- **`regress-baseline.sh <ID> <commit> <signoff:0|1>`** — one baseline's full live loop against the
+  already-built, already-running Treeswift: checkout pristine → measure BEFORE → pristine build
+  (record the historical error set) → cold-clear ScanCache + relaunch → scan → `forceRemoveAll`
+  preview+execute → build Prodcore (NEW errors = post − pristine = **false positives**) → measure
+  AFTER → restore pristine. Emits `results-<ID>.json`. Pass `signoff=1` for pre-2026-06-01 baselines
+  (R3/R4/R-May) to disable code signing; harmless for newer ones.
+
+**Procedure:**
+1. Build Treeswift, verify the dylib is fresh (§The Measured Loop step 1).
+2. Run `Prodcore-cleanup/fixtures/renameParameterBinding-selfcheck.swift` (`swift <file>`) — fast unit
+   proof of the param-rename helper.
+3. Launch Treeswift once with `--automation-port 21663`; confirm the config's project path.
+4. For each baseline `R5 a1711d27`, `R4 20fb9b87`, `R-May 96e372e4`, `R3 23ad2547` (and the dirty
+   develop baseline `47a6d25de`), run `regress-baseline.sh`. Each is single-pass: the decisive
+   signals are `new_errs_false_positives == 0` (no FP / no cleanup regression) and
+   `deletable > 0` matching the historical removal count (no false negative). Multi-pass-to-floor
+   convergence is already recorded in the ledger; this replay re-proves the FP/regression gate.
+5. Develop committed cleanups: measure size directly at the committed checkpoints
+   (`47a6d25de`→`de0f6a64e`→`88a8c5f11`) with `measure-size.sh` in a throwaway `git worktree`.
+6. Collect `results-*.json` into a report (see `Prodcore-cleanup/REGRESSION-REPORT.md`).
+
+The throwaway branches are named `ts-regress-<ID>-<hash>` (vs. the convergence run's `ts-converge-*`)
+so the two never collide. The driver always restores Prodcore pristine on exit; it never commits.

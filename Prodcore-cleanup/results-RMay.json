@@ -1,0 +1,37 @@
+{
+  "id": "RMay",
+  "commit": "96e372e4",
+  "signoff": 1,
+  "before": {
+    "files": 795,
+    "loc": 133723,
+    "loc_nonblank": 117423,
+    "symbols": 21486,
+    "bytes": 4753415
+  },
+  "after": {
+    "files": 782,
+    "loc": 127885,
+    "loc_nonblank": 112369,
+    "symbols": 20269,
+    "bytes": 4561345
+  },
+  "scan": {
+    "total": 2529,
+    "unused": 346,
+    "assignOnly": 163,
+    "redunAcc": 2020,
+    "redunProto": 0
+  },
+  "removal": {
+    "deletable": 2366,
+    "nonDeletable": 147,
+    "deleted": 2366,
+    "execErrors": 21
+  },
+  "build": {
+    "pristine_errs": 0,
+    "post_errs": 0,
+    "new_errs_false_positives": 0
+  }
+}
