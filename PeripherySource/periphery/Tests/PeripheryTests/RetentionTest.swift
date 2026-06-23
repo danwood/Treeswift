@@ -873,6 +873,19 @@ final class RetentionTest: FixtureSourceGraphTestCase {
         }
     }
 
+    func testRetainsProtocolWitnessOfReachableConformer() {
+        // A reachable conforming type's witness members must be retained even when nothing calls them
+        // via the protocol type — otherwise removing them breaks the declared conformance.
+        analyze(retainPublic: true) {
+            assertReferenced(.class("FixturePlayer310")) {
+                self.assertReferenced(.functionMethodInstance("play()"))
+                self.assertReferenced(.functionMethodInstance("pause()"))
+                self.assertReferenced(.varInstance("isPlaying"))
+            }
+            assertReferenced(.protocol("FixtureTransport310"))
+        }
+    }
+
     func testProtocolConformedByStaticMethodOutsideExtension() {
         analyze(retainPublic: true) {
             assertReferenced(.class("FixtureClass64")) // public
@@ -955,6 +968,15 @@ final class RetentionTest: FixtureSourceGraphTestCase {
                 self.assertReferenced(.functionMethodStatic("buildFinalResult(_:)"))
                 self.assertReferenced(.functionMethodStatic("buildLimitedAvailability(_:)"))
             }
+        }
+    }
+
+    func testRetainsViewReferencedFromViewBuilderHelper() {
+        analyze(retainPublic: true) {
+            assertReferenced(.struct("FixtureViewParent")) {
+                self.assertReferenced(.functionMethodInstance("helper(item:)"))
+            }
+            assertReferenced(.struct("FixtureViewChild"))
         }
     }
 

@@ -919,3 +919,58 @@ Prodcore builds clean (0 new errors); R4/R5/R-May/devbase remain clean with unch
 **Fixture:** `Prodcore-cleanup/fixtures/F26-empty-ancestor-referenced-type/Fixture.swift` (a struct
 whose members are all flagged, still named by a sibling type's stored property). In-repo proof is the
 E2E build-clean on R3.
+
+## F27 — `fileprivate` not cascaded to a stored property's type (2026-06-22)
+
+**Symptom (whole-tree `forceRemoveAll` on Prodcore `dan-cleanup-jun-22` @ bae06ab8e):**
+
+```
+Units/Playback/Recordings/Services/DirectFilePlaybackController.swift:65:
+error: property must be declared fileprivate because its type uses a fileprivate type
+```
+
+Treeswift narrowed `struct TrackSource` → `fileprivate` (a redundant-accessibility fix), but a
+more-visible sibling stored property `let tracks: [TrackSource]` on `struct PlaybackSource` was not
+cascaded. Same family as F20 (extension-method/free-func result) and F25 (member `init` parameter) —
+this is the **stored-property** variant.
+
+**Fix (`CodeModificationHelper.cascadeFileprivateToReferencingFunctions`, Treeswift-side):** the
+file-wide cascade now also fileprivate-izes a `var`/`let` stored-property declaration (no explicit
+access keyword) whose type annotation names a narrowed-fileprivate type, via the new
+`insertFileprivateBeforeProperty` (keeps leading attributes/specifiers/`private(set)` ahead of the
+inserted keyword). Conservative — never lowers a property carrying an explicit access keyword.
+
+**Verified:** the property error is gone on the Prodcore HEAD whole-tree probe (E2E build-clean).
+Note: the property branch is line-based; a local `let x: T` inside a function body could in theory be
+matched — did not occur on the real corpus; tighten if it ever does.
+
+## F28 — protocol witness members removed, breaking conformance (2026-06-22)
+
+**Symptom (same probe):**
+
+```
+Units/Playback/Recordings/Services/DirectFilePlaybackController.swift:20:
+error: type 'DirectFilePlaybackController' does not conform to protocol 'TransportPlaying'
+```
+
+`DirectFilePlaybackController` (a deprecated/migrating class, reachable but with no live caller of its
+transport methods) conforms to `TransportPlaying { var isPlaying; func play(); func pause() }`.
+Periphery flagged `play()`/`pause()` as `unused` (nothing calls them via the protocol type) and they
+were removed → the type no longer satisfies the protocol.
+
+**Root cause (Periphery ANALYSIS, fork/combine):** `ProtocolConformanceRetainer` retained the protocol
+declaration when it had a conformer, but NOT the conformer's **witness members**. A member witnessing
+a requirement of a protocol the (retained) type conforms to must itself be retained.
+
+**Fix (`ProtocolConformanceRetainer`, fork → combine → subtree pull):** for each reachable concrete
+conformer (retained or referenced by something other than the conformance), retain the members that
+witness a requirement of that protocol — matched via the inverted requirement→witness `.related` edge
+whose parent is one of the protocol's requirements. Precision-guarded: only concrete nominal conformers
+(not external-type extensions), skip typealias/associatedtype witnesses, only reachable conformers
+(so a wholly-dead conformer still collapses entirely). Combine-only (recall-over-precision F3 family);
+upstream master unchanged (f87c3f6), so not fixed upstream.
+
+**Verified:** unit test `RetentionTest.testRetainsProtocolWitnessOfReachableConformer` passes; full
+fork RetentionTest diff vs baseline adds zero new failures (`testDoesNotRetainProtocolMembersImplemented
+ByExternalType` and `testUnusedAssociatedType` stay green); E2E whole-tree `forceRemoveAll` on Prodcore
+HEAD builds clean (0 false positives) after subtree pull.
