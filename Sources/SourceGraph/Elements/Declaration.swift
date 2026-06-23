@@ -236,6 +236,9 @@ public final class Declaration: @unchecked Sendable {
     public var isImplicit: Bool = false
     public var isObjcAccessible: Bool = false
     public var isLetBinding: Bool = false
+    // Whether a stored property has a default-value initializer (`var x = …` / `let x = …`). Used to
+    // tell a required memberwise-init argument (no default) from an optional one (has default).
+    public var hasInitialValue: Bool = false
     public var referencedFiles: Set<SourceFile>
 
     private let hashValueCache: Int

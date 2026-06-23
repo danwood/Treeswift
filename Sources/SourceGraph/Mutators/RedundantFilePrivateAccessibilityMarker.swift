@@ -45,7 +45,8 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
             if !decl.shouldSkipAccessibilityAnalysis,
                !graph.isRetained(decl),
                !decl.isReferencedOutsideFileIncludingChildren(graph: graph),
-               !graph.isReferencedFromDifferentTypeInSameFile(decl)
+               !graph.isReferencedFromDifferentTypeInSameFile(decl),
+               !narrowingToPrivateWouldBreakMemberwiseInitializer(decl)
             {
                 mark(decl)
             }
@@ -69,6 +70,36 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
                 mark(decl)
             }
         }
+    }
+
+    /// Whether narrowing this declaration from `fileprivate` to `private` would lower the access of a
+    /// SYNTHESIZED memberwise initializer below what its callers need.
+    ///
+    /// A struct with no explicit initializer relies on the compiler-synthesized memberwise init, whose
+    /// access level is the most restrictive of its stored properties. Narrowing a stored property to
+    /// `private` therefore drops the memberwise init to `private`, breaking `Type(...)` calls made from
+    /// elsewhere in the file (e.g. a sibling type using the value). Such a property is NOT redundantly
+    /// `fileprivate` — its access constrains a used initializer, not just direct member access.
+    private func narrowingToPrivateWouldBreakMemberwiseInitializer(_ decl: Declaration) -> Bool {
+        guard decl.kind == .varInstance, !decl.isImplicit,
+              let parent = decl.parent, parent.kind == .struct
+        else { return false }
+
+        // A property with a default value is NOT a required memberwise-init argument, so the struct can
+        // still be built via a synthesized no-argument / defaulted init even after the property is
+        // narrowed. Only a property WITHOUT a default constrains construction.
+        guard !decl.hasInitialValue else { return false }
+
+        // Only matters when the struct is more visible than `private`: a `private` struct's memberwise
+        // init is already `private`, so narrowing a property changes nothing observable.
+        guard parent.accessibility.value > .private else { return false }
+
+        // If the struct declares its own initializer, the memberwise init is not synthesized and the
+        // property's access does not constrain construction.
+        let hasExplicitInitializer = parent.declarations.contains {
+            $0.kind == .functionConstructor && !$0.isImplicit
+        }
+        return !hasExplicitInitializer
     }
 
     private func mark(_ decl: Declaration) {
@@ -97,7 +128,8 @@ final class RedundantFilePrivateAccessibilityMarker: SourceGraphMutator {
             if !descDecl.shouldSkipAccessibilityAnalysis,
                !graph.isRetained(descDecl),
                !descDecl.isReferencedOutsideFileIncludingChildren(graph: graph),
-               !graph.isReferencedFromDifferentTypeInSameFile(descDecl)
+               !graph.isReferencedFromDifferentTypeInSameFile(descDecl),
+               !narrowingToPrivateWouldBreakMemberwiseInitializer(descDecl)
             {
                 mark(descDecl)
             }

@@ -55,4 +55,12 @@ final class RedundantFilePrivateAccessibilityTest: SPMSourceGraphTestCase {
             containingTypeName: "struct StructWithRedundantFilePrivateProperty"
         )
     }
+
+    // A fileprivate stored property of a struct with NO explicit init must NOT be flagged
+    // redundant-fileprivate: narrowing it to private would lower the synthesized memberwise
+    // initializer to private and break construction from another type in the same file.
+    func testNotRedundantFilePrivatePropertyFeedingMemberwiseInit() {
+        index()
+        assertNotRedundantFilePrivateAccessibility(.varInstance("density"))
+    }
 }

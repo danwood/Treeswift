@@ -426,6 +426,7 @@ final class SwiftIndexer: Indexer {
                 decl.commentCommands = Set(result.commentCommands)
                 decl.declaredType = result.variableType
                 decl.isLetBinding = result.isLetBinding
+                decl.hasInitialValue = result.hasInitialValue
 
                 decl.hasGenericFunctionReturnedMetatypeParameters = result.hasGenericFunctionReturnedMetatypeParameters
 

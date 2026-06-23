@@ -23,7 +23,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
         typeInitializerLocations: Set<Location>,
         variableInitExprLocations: Set<Location>,
         hasGenericFunctionReturnedMetatypeParameters: Bool,
-        isLetBinding: Bool
+        isLetBinding: Bool,
+        hasInitialValue: Bool
     )
 
     private let sourceLocationBuilder: SourceLocationBuilder
@@ -425,7 +426,8 @@ public final class DeclarationSyntaxVisitor: PeripherySyntaxVisitor {
             typeInitializerLocations: typeLocations(for: typeInitializerClause?.value),
             variableInitExprLocations: memberBaseLocations(for: variableInitExpr),
             hasGenericFunctionReturnedMetatypeParameters: hasGenericFunctionReturnedMetatypeParameters,
-            isLetBinding: isLetBinding
+            isLetBinding: isLetBinding,
+            hasInitialValue: variableInitExpr != nil
         ))
     }
 
