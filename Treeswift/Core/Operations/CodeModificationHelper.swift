@@ -1316,23 +1316,26 @@ struct CodeModificationHelper {
 		return newLine
 	}
 
-	// MARK: - Fileprivate Function/Initializer Cascade
+	// MARK: - Fileprivate Function/Initializer/Property Cascade
 
 	/**
-	 Inserts `fileprivate` on any `func` or `init` — extension method, member initializer, or free
-	 function — whose signature references a type that was just narrowed to `fileprivate`, when the
-	 declaration carries no explicit access keyword.
+	 Inserts `fileprivate` on any `func`, `init`, or stored property — extension method, member
+	 initializer, free function, or a `var`/`let` with a type annotation — whose signature/type
+	 references a type that was just narrowed to `fileprivate`, when the declaration carries no
+	 explicit access keyword.
 
-	 Swift requires a function/initializer whose parameter or return type is `fileprivate` to be at
-	 most `fileprivate` ("method must be declared fileprivate because its result uses a fileprivate
-	 type"; "initializer must be declared fileprivate because its parameter uses a fileprivate
-	 type"). The same-scope sibling cascade only patches inits/funcs inside the type's own parent
-	 body; it does not reach `extension <Other> { func … -> [FileprivateType] }`, top-level free
-	 functions, or a struct's member `init(_: FileprivateType)`. This pass closes that gap file-wide.
+	 Swift requires a function/initializer/property whose parameter, result, or declared type is
+	 `fileprivate` to be at most `fileprivate` ("method must be declared fileprivate because its
+	 result uses a fileprivate type"; "initializer must be declared fileprivate because its parameter
+	 uses a fileprivate type"; "property must be declared fileprivate because its type uses a
+	 fileprivate type"). The same-scope sibling cascade only patches inits/funcs inside the type's own
+	 parent body; it does not reach `extension <Other> { func … -> [FileprivateType] }`, top-level
+	 free functions, a struct's member `init(_: FileprivateType)`, or a stored property
+	 `let x: [FileprivateType]`. This pass closes that gap file-wide.
 
-	 Conservative: only patches a `func`/`init` line that has no leading access keyword (so it can't
-	 lower an intentionally-public API), and only when the type name appears in the collected
-	 signature.
+	 Conservative: only patches a `func`/`init`/property line that has no leading access keyword (so it
+	 can't lower an intentionally-public API), and only when the type name appears in the collected
+	 signature / type annotation.
 	 */
 	private static func cascadeFileprivateToReferencingFunctions(
 		lines: [String],
@@ -1347,17 +1350,40 @@ struct CodeModificationHelper {
 		guard !alternation.isEmpty,
 		      let typeRefPattern = try? Regex("\\b(?:\(alternation))\\b"),
 		      // `init` whose parameter uses a fileprivate type triggers the same diagnostic as `func`.
-		      let declKeywordPattern = try? Regex("\\b(?:func|init)\\b")
+		      let declKeywordPattern = try? Regex("\\b(?:func|init)\\b"),
+		      // A stored property `var`/`let` with a `: Type` annotation triggers the property variant.
+		      let propKeywordPattern = try? Regex("\\b(?:var|let)\\b")
 		else { return lines }
 
 		var idx = 0
 		while idx < lines.count {
 			let line = lines[idx]
-			// Must be a `func`/`init` declaration line with no explicit leading access modifier.
-			guard line.contains(declKeywordPattern) else { idx += 1; continue }
 			let trimmed = line.trimmingCharacters(in: .whitespaces)
 			let hasLeadingAccess = ["public ", "internal ", "fileprivate ", "private ", "open "]
 				.contains { trimmed.hasPrefix($0) }
+
+			// Stored-property variant: a `var`/`let` line (no func/init) with a type annotation that
+			// names a fileprivate type. Single-line declarations only — that is the diagnostic shape.
+			if !line.contains(declKeywordPattern), line.contains(propKeywordPattern) {
+				if !hasLeadingAccess,
+				   line.contains(":"), // has a type annotation
+				   line.contains(typeRefPattern) {
+					let newLine = insertFileprivateBeforeProperty(in: line)
+					if newLine != line {
+						lines[idx] = newLine
+						pendingLogEntries.append(.init(
+							startLine: idx + 1,
+							endLine: idx + 1,
+							action: "inserted `fileprivate` (cascade: property uses a fileprivate type)"
+						))
+					}
+				}
+				idx += 1
+				continue
+			}
+
+			// Must be a `func`/`init` declaration line with no explicit leading access modifier.
+			guard line.contains(declKeywordPattern) else { idx += 1; continue }
 			if hasLeadingAccess { idx += 1; continue }
 
 			// Collect the full signature: from this line through the line that closes the
@@ -1417,6 +1443,42 @@ struct CodeModificationHelper {
 		let isInitKeyword = rest.hasPrefix("init")
 			&& (rest.dropFirst(4).first.map { "(?! \t".contains($0) } ?? false)
 		guard rest.hasPrefix("func ") || isInitKeyword else { return line }
+		return leadingWhitespace + prefixSpecifiers + "fileprivate " + rest
+	}
+
+	/**
+	 Inserts `fileprivate ` before the `var`/`let` keyword on a stored-property line, preserving
+	 leading whitespace, any attribute (`@Published`, `@State`, …) and any specifier (`static`/`class`/
+	 `final`/`lazy`/`weak`/`unowned`/`private(set)`/…) that precedes the keyword.
+	 */
+	private static func insertFileprivateBeforeProperty(in line: String) -> String {
+		let leadingWhitespace = String(line.prefix { $0 == " " || $0 == "\t" })
+		var rest = Substring(line.dropFirst(leadingWhitespace.count))
+		var prefixSpecifiers = ""
+		// Keep attributes and specifiers ahead of the inserted keyword. `private(set)`/`internal(set)`
+		// set-only modifiers stay (they constrain the setter, not the getter visibility we're lowering).
+		let movableSpecifiers = [
+			"static ", "class ", "final ", "lazy ", "weak ", "unowned ", "override ",
+			"private(set) ", "internal(set) ", "fileprivate(set) ", "public(set) "
+		]
+		var changed = true
+		while changed {
+			changed = false
+			// Drop a leading attribute token like `@Published ` or `@State `.
+			if rest.hasPrefix("@") {
+				if let sp = rest.firstIndex(of: " ") {
+					prefixSpecifiers += String(rest[rest.startIndex ... sp])
+					rest = rest[rest.index(after: sp)...]
+					changed = true
+				}
+			}
+			for spec in movableSpecifiers where rest.hasPrefix(spec) {
+				prefixSpecifiers += spec
+				rest = rest.dropFirst(spec.count)
+				changed = true
+			}
+		}
+		guard rest.hasPrefix("var ") || rest.hasPrefix("let ") else { return line }
 		return leadingWhitespace + prefixSpecifiers + "fileprivate " + rest
 	}
 
