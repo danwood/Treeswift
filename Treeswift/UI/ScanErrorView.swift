@@ -55,11 +55,18 @@ struct ScanErrorView: View {
 			Divider()
 				.overlay(Color.red.opacity(0.3))
 
-			ScrollView([.vertical, .horizontal]) {
+			// Vertical scroll with wrapping. A horizontal ScrollView combined with
+			// `.frame(maxWidth: .infinity)` made the Text fail to lay out — a build error's xcodebuild
+			// command is a single ~50 KB line, and an unbounded width in an h-scroll renders nothing
+			// (the blank pink box). Wrapping long lines keeps the actual error visible without scrolling
+			// sideways. `lineLimit(nil)` + `fixedSize(vertical)` lets the Text grow to its full height.
+			ScrollView(.vertical) {
 				Text(bodyText)
 					.foregroundStyle(.primary)
 					.font(.system(.caption, design: .monospaced))
 					.textSelection(.enabled)
+					.lineLimit(nil)
+					.fixedSize(horizontal: false, vertical: true)
 					.frame(maxWidth: .infinity, alignment: .leading)
 					.padding(12)
 			}
