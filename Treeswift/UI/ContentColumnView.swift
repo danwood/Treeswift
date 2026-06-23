@@ -66,7 +66,7 @@ struct ContentColumnView: View {
 				}
 
 				if let error = scanState.errorMessage {
-					ScanErrorView(errorMessage: error)
+					ScanErrorView(errorMessage: error, logLines: scanState.scanLogBuffer)
 				}
 
 				if !scanState.isScanning, let toolchainInfo = scanState.toolchainInfo {

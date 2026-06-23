@@ -9,6 +9,34 @@ import SwiftUI
 
 struct ScanErrorView: View {
 	let errorMessage: String
+	// Full streamed build/scan log (toolchain, status lines, captured build output). Shown beneath the
+	// error so the build output and errors are always visible — even when the thrown error stringifies
+	// to little or nothing.
+	var logLines: [String] = []
+
+	private var trimmedError: String {
+		errorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+
+	private var logText: String {
+		logLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+
+	// What to render in the scrollable body: the error, then the log (de-duplicated if the error is
+	// already the log's tail), and a clear placeholder if somehow both are empty.
+	private var bodyText: String {
+		var parts: [String] = []
+		if !trimmedError.isEmpty {
+			parts.append(trimmedError)
+		}
+		if !logText.isEmpty, !trimmedError.contains(logText), logText != trimmedError {
+			parts.append("— Build / scan log —\n\(logText)")
+		}
+		if parts.isEmpty {
+			return "The build or scan failed but produced no output to display."
+		}
+		return parts.joined(separator: "\n\n")
+	}
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 0) {
@@ -28,7 +56,7 @@ struct ScanErrorView: View {
 				.overlay(Color.red.opacity(0.3))
 
 			ScrollView([.vertical, .horizontal]) {
-				Text(errorMessage)
+				Text(bodyText)
 					.foregroundStyle(.primary)
 					.font(.system(.caption, design: .monospaced))
 					.textSelection(.enabled)

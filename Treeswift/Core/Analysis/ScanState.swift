@@ -305,7 +305,12 @@ final class ScanState {
 				}
 				backgroundTasks.removeAll()
 
-				let fullError = String(describing: error)
+				let described = String(describing: error).trimmingCharacters(in: .whitespacesAndNewlines)
+				// Some errors stringify to nothing (e.g. an empty localizedDescription); never leave the
+				// error panel blank — fall back to the type and let the panel show the full scan log.
+				let fullError = described.isEmpty
+					? "Scan failed with an error that produced no message (\(type(of: error))). See the build/scan log below."
+					: described
 				print(fullError)
 				errorMessage = fullError
 				scanLogBuffer.append("* ✗ Error: \(fullError)")
