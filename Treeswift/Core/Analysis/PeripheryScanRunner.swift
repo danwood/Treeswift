@@ -87,7 +87,7 @@ private final class GUIShell: Shell {
 		return (process.terminationStatus, standardOutput, standardError)
 	}
 
-	required nonisolated init(logger: Logger) {
+	required nonisolated init(logger _: Logger) {
 		// GUI apps don't inherit the full PATH from the shell
 		// Add common locations for Xcode and developer tools
 		var path = ProcessInfo.processInfo.environment["PATH"] ?? ""

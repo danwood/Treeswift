@@ -185,7 +185,7 @@ enum UnusedDependencyAnalyzer {
 	private static func filterSkipReferenced(
 		operations: [FilteredOperations.Operation],
 		sourceGraph: (any SourceGraphProtocol)?,
-		allUnusedDeclarations: Set<Declaration>?,
+		allUnusedDeclarations _: Set<Declaration>?,
 		batchDeletionSet: Set<Declaration>?
 	) -> FilteredOperations {
 		guard let sourceGraph else {

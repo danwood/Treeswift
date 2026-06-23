@@ -14,23 +14,23 @@ import SourceGraph
  Used to carry filter settings into background tasks without needing the MainActor-isolated FilterState.
  */
 struct FilterSnapshot: Sendable {
-	let topLevelOnly: Bool
-	let showUnused: Bool
-	let showAssignOnly: Bool
-	let showRedundantProtocol: Bool
-	let showRedundantAccessControl: Bool
-	let showSuperfluousIgnoreCommand: Bool
-	let showClass: Bool
-	let showEnum: Bool
-	let showExtension: Bool
-	let showFunction: Bool
-	let showImport: Bool
-	let showInitializer: Bool
-	let showParameter: Bool
-	let showProperty: Bool
-	let showProtocol: Bool
-	let showStruct: Bool
-	let showTypealias: Bool
+	private let topLevelOnly: Bool
+	private let showUnused: Bool
+	private let showAssignOnly: Bool
+	private let showRedundantProtocol: Bool
+	private let showRedundantAccessControl: Bool
+	private let showSuperfluousIgnoreCommand: Bool
+	private let showClass: Bool
+	private let showEnum: Bool
+	private let showExtension: Bool
+	private let showFunction: Bool
+	private let showImport: Bool
+	private let showInitializer: Bool
+	private let showParameter: Bool
+	private let showProperty: Bool
+	private let showProtocol: Bool
+	private let showStruct: Bool
+	private let showTypealias: Bool
 
 	init(from filterState: FilterState) {
 		topLevelOnly = filterState.topLevelOnly

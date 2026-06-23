@@ -671,7 +671,9 @@ struct PeripheryTreeView: View {
 	}
 
 	private func removeUnusedCodeMenuLabel(for node: TreeNode) -> String {
-		allWarningsAreVisibilityOnly(for: removalTarget(for: node))
+		// No ellipsis when there is no follow-up dialog: visibility-only targets and the whole-tree
+		// target both run immediately (the whole tree makes the per-scope strategy choice moot).
+		allWarningsAreVisibilityOnly(for: removalTarget(for: node)) || isWholeTreeTarget(node)
 			? "Remove Unused Code"
 			: "Remove Unused Code…"
 	}
@@ -681,6 +683,16 @@ struct PeripheryTreeView: View {
 		case let .file(file): .file(file)
 		case let .folder(folder): .folder(folder)
 		}
+	}
+
+	/**
+	 Whether the node is the entire tree — a root folder. Removing across the whole tree makes the
+	 skipReferenced/forceRemoveAll distinction moot (no out-of-scope referrers), so the strategy
+	 dialog is skipped and removal runs directly.
+	 */
+	private func isWholeTreeTarget(_ node: TreeNode) -> Bool {
+		guard case .folder = node else { return false }
+		return rootNodes.contains { $0.id == node.id }
 	}
 
 	/**
@@ -763,7 +775,11 @@ struct PeripheryTreeView: View {
 	private func requestRemoveUnusedCodeInFolder(folder: FolderNode) {
 		let target = RemovalTarget.folder(folder)
 		pendingRemovalTarget = target
-		if allWarningsAreVisibilityOnly(for: target) {
+		if isWholeTreeTarget(.folder(folder)) {
+			// Whole tree: the per-scope strategy choice is meaningless, so skip the dialog and run the
+			// full sweep directly (cascade removes the complete dead chain; no out-of-scope referrers).
+			executePendingRemoval(target: target, strategy: .cascade)
+		} else if allWarningsAreVisibilityOnly(for: target) {
 			executePendingRemoval(target: target, strategy: .skipReferenced)
 		} else {
 			pendingDependencyChains = buildChainsForTarget(target)

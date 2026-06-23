@@ -143,8 +143,8 @@ extension FileBrowserNodeResponse {
 // MARK: - Summary
 
 nonisolated struct ScanSummaryResponse: Codable, Sendable {
-	let totalCount: Int
-	let byAnnotation: [String: Int]
+	private let totalCount: Int
+	private let byAnnotation: [String: Int]
 }
 
 extension ScanSummaryResponse {

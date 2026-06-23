@@ -137,7 +137,7 @@ final class FileWarningAnalyzer: Sendable {
 	nonisolated func applyAnalysis(
 		_ precomputed: PrecomputedData,
 		to nodes: [FileBrowserNode],
-		sourceGraph: SourceGraph
+		sourceGraph _: SourceGraph
 	) -> [FileBrowserNode] {
 		applyAnalysisRecursive(precomputed, to: nodes)
 	}

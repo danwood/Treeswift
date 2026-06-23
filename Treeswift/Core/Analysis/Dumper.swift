@@ -215,56 +215,6 @@ final class Dumper: Sendable {
 			.sorted(by: { $0.location < $1.location }) // TEMP sort for reproducibility
 	}
 
-	/// Finds orphaned types with no references and removes them from the declarations array.
-	private nonisolated func extractOrphanedTypes(
-		from declarations: inout [Declaration],
-		sourceGraph: SourceGraph
-	) -> [Declaration] {
-		let (orphanedTypes, remaining) = declarations.partitioned { type in
-			!isMainApp(type) && sourceGraph.references(to: type).isEmpty
-		}
-		declarations = remaining
-		return orphanedTypes
-	}
-
-	/// Finds types whose only references are from getter:body and removes them from the declarations array.
-	private nonisolated func extractOnlyBodyGetterReferencedTypes(
-		from declarations: inout [Declaration],
-		sourceGraph: SourceGraph,
-		displayedTypes: Set<Declaration>
-	) -> [Declaration] {
-		let (onlyBodyGetterTypes, remaining) = declarations.partitioned { type in
-			guard !displayedTypes.contains(type), !isMainApp(type) else { return false }
-			let referencingDecls: [Declaration] = referencingDeclarations(for: type, in: sourceGraph)
-			return !isMainApp(type) &&
-				!referencingDecls.isEmpty &&
-				referencingDecls.allSatisfy { declaration in
-					declaration.kind == .functionAccessorGetter && declaration.name == "getter:body"
-				}
-		}
-		declarations = remaining
-		return onlyBodyGetterTypes
-	}
-
-	/// Extracts preview-only types and removes them from the declarations array.
-	private nonisolated func extractPreviewOnlyTypes(
-		from declarations: inout [Declaration],
-		sourceGraph: SourceGraph,
-		displayedTypes: Set<Declaration>
-	) -> [Declaration] {
-		let (previewOnlyTypes, remaining) = declarations.partitioned { type in
-			guard !displayedTypes.contains(type), !isMainApp(type) else { return false }
-			let referencingDecls: [Declaration] = referencingDeclarations(for: type, in: sourceGraph)
-			guard !referencingDecls.isEmpty else { return false }
-			// Check if all references come from static methods named exactly "makePreview()"
-			return referencingDecls.allSatisfy { declaration in
-				declaration.kind.rawValue.contains("static") && declaration.name == "makePreview()"
-			}
-		}
-		declarations = remaining
-		return previewOnlyTypes
-	}
-
 	/// Given a type and a graph, returns all declarations that reference this type.
 	private nonisolated func referencingDeclarations(
 		for type: Declaration,
@@ -446,17 +396,6 @@ final class Dumper: Sendable {
 				}
 			}
 		}
-	}
-
-	/// Finds types that are used but not attached to our types and not yet displayed.
-	private nonisolated func extractUsedButNotAttachedTypes(
-		from declarations: inout [Declaration],
-		displayedTypes: Set<Declaration>
-	) -> [Declaration] {
-		let (usedButNotAttached, remaining) = declarations
-			.partitioned { !displayedTypes.contains($0) && !isMainApp($0) }
-		declarations = remaining
-		return usedButNotAttached
 	}
 
 	/// Checks if a function embeds a ViewModifier by looking for the .modifier() pattern
@@ -1312,7 +1251,7 @@ final class Dumper: Sendable {
 		for declaration: Declaration,
 		relationToParent: RelationshipType?,
 		parentSourceFile: SourceFile?,
-		childrenLineCount: Int,
+		childrenLineCount _: Int,
 		projectRootPath: String?
 	) -> LocationInfo {
 		// let lineSpan = (declaration.location.endLine ?? 0) - declaration.location.line
@@ -1388,22 +1327,5 @@ private extension Declaration {
 	nonisolated var debugString: String {
 		let kind = kind.icon
 		return "\(kind) \(name) \(locString())"
-	}
-}
-
-private extension Sequence {
-	/// Returns two arrays: elements matching `predicate` and elements not matching.
-	/// Preserves the original order of elements.
-	nonisolated func partitioned(by predicate: (Element) throws -> Bool) rethrows -> ([Element], [Element]) {
-		var matches: [Element] = []
-		var nonMatches: [Element] = []
-		for element in self {
-			if try predicate(element) {
-				matches.append(element)
-			} else {
-				nonMatches.append(element)
-			}
-		}
-		return (matches, nonMatches)
 	}
 }

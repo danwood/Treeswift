@@ -381,7 +381,7 @@ enum SourceGraphSerializer {
 
 	private nonisolated static func restoreAnnotation(
 		_ snap: ScanResultSnapshot,
-		usrToDecl: [String: Declaration],
+		usrToDecl _: [String: Declaration],
 		allReferencesByUsr: [String: Set<Reference>]
 	) -> ScanResult.Annotation? {
 		switch snap.annotationKind {

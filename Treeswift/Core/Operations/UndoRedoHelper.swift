@@ -23,7 +23,7 @@ struct UndoRedoHelper {
 		originalContents: String,
 		modifiedContents: String,
 		filePath: String,
-		warningID: String,
+		warningID _: String,
 		adjustedUSRs: [String],
 		lineAdjustment: Int, // positive number (will be negated for undo)
 		sourceGraph: (any SourceGraphProtocol)?,
@@ -99,7 +99,7 @@ struct UndoRedoHelper {
 	static func registerModificationUndo(
 		undoManager: UndoManager?,
 		modification: CodeModificationHelper.ModificationResult,
-		warningID: String,
+		warningID _: String,
 		actionName: String,
 		onComplete: @escaping () -> Void,
 		onRestore: @escaping () -> Void
@@ -138,7 +138,7 @@ struct UndoRedoHelper {
 	static func registerModificationUndoWithLineAdjustment(
 		undoManager: UndoManager?,
 		modification: CodeModificationHelper.ModificationResult,
-		warningID: String,
+		warningID _: String,
 		adjustedUSRs: [String],
 		sourceGraph: (any SourceGraphProtocol)?,
 		actionName: String,

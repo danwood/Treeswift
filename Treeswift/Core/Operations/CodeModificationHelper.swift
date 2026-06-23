@@ -493,7 +493,7 @@ struct CodeModificationHelper {
 	 Optionally removes trailing blank line after the comment.
 	 */
 	static func removeSuperfluousIgnoreComment(
-		declaration: Declaration,
+		declaration _: Declaration,
 		location: Location
 	) -> Result<ModificationResult, Error> {
 		let filePath = location.file.path.string
@@ -753,7 +753,7 @@ struct CodeModificationHelper {
 	 */
 	@MainActor
 	static func executeSimpleDeclarationDeletion(
-		declaration: Declaration,
+		declaration _: Declaration,
 		location: Location,
 		sourceGraph: (any SourceGraphProtocol)?,
 		undoManager: UndoManager?,

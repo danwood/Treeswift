@@ -141,9 +141,4 @@ enum XcodeProjectFileChecker {
 
 		return filenames
 	}
-
-	/// Clears the cache. Call after modifying a project file.
-	static func clearCache() {
-		cache.removeAll()
-	}
 }
