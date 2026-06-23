@@ -974,3 +974,32 @@ upstream master unchanged (f87c3f6), so not fixed upstream.
 fork RetentionTest diff vs baseline adds zero new failures (`testDoesNotRetainProtocolMembersImplemented
 ByExternalType` and `testUnusedAssociatedType` stay green); E2E whole-tree `forceRemoveAll` on Prodcore
 HEAD builds clean (0 false positives) after subtree pull.
+
+## F29 — redundant-fileprivate narrowing breaks a synthesized memberwise init (2026-06-23)
+
+**Symptom (2nd cleanup pass on Prodcore `dan-cleanup-jun-22`; pass 1 committed `be03ac65c` builds
+clean, pass-2 forceRemoveAll → BUILD FAILED, 1 FP):**
+
+```
+Projects/Engagement/Archive/LiveEngagementDaysList.swift:129:
+error: 'ScheduleDayRows' initializer is inaccessible due to 'private' protection level
+```
+
+`fileprivate struct ScheduleDayRows` has NO explicit init — it uses the synthesized **memberwise**
+initializer, whose access = the most restrictive stored property. Periphery flagged
+`fileprivate let density` as `redundantFilePrivateAccessibility` ("could be `private`"); narrowing it
+dropped the memberwise init to `private`, breaking the same-file `ScheduleDayRows(days:density:…)`
+construction at :129. (Empirically confirmed with `swiftc`: a defaulted property narrows safely; a
+non-defaulted one breaks the memberwise init.)
+
+**Fix (`RedundantFilePrivateAccessibilityMarker`, Periphery analysis → fork combine `a22e919` →
+subtree pull):** a stored property is NOT redundantly fileprivate when (a) it has no default value
+(a required memberwise-init argument), (b) its struct is more visible than `private`, and (c) the
+struct declares no explicit initializer (so the memberwise init is synthesized). Detecting (a) needed
+a new `Declaration.hasInitialValue` flag, set from the binding's initializer expression in
+`DeclarationSyntaxVisitor`. A defaulted property stays flaggable (no-arg/defaulted init survives).
+
+**Verified:** unit test `testNotRedundantFilePrivatePropertyFeedingMemberwiseInit` (+ fixture); the
+existing `testTrulyRedundantFilePrivateProperty` (defaulted property) stays green; the 9 pre-existing
+combine accessibility failures are unchanged (zero new regressions). E2E: Prodcore pass-2 forceRemoveAll
+builds clean after the fix.
